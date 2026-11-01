@@ -1,4 +1,6 @@
 import type { Condition, DraftCategory, IntakeStage } from '../../api/generated/model'
+import { AiProgress } from '../../components/AiProgress'
+import { AI_EXPECTED_SECONDS } from '../aiLatency'
 import { CATEGORIES, CATEGORY_COLOR, CATEGORY_LABEL } from './categories'
 import { problemOf, useIntake, type EditableLine } from './useIntake'
 
@@ -93,11 +95,13 @@ export function IntakeScreen() {
         </div>
       )}
 
-      {uploading && <p className="mt-4 text-slate-700">사진을 올리는 중이에요…</p>}
-      {processing && (
-        <p role="status" className="mt-4 text-slate-700">
-          {draft.stage ? STAGE_TEXT[draft.stage] : '분석하는 중이에요…'}
-        </p>
+      {(uploading || processing) && (
+        <div className="mt-4">
+          <AiProgress
+            label={uploading ? '사진을 올리는 중이에요…' : STAGE_TEXT[draft?.stage ?? 'ESTIMATE']}
+            expectedSeconds={AI_EXPECTED_SECONDS.intake}
+          />
+        </div>
       )}
       {error && (
         <p role="alert" className="mt-4 rounded-lg bg-red-50 p-3 text-red-700">

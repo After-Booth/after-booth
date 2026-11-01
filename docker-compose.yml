@@ -26,6 +26,7 @@ services:
     # Pinned literal, not ${AI_MODE}. Live mode is opt-in through docker-compose.live.yml
     environment:
       AI_MODE: replay
+      AFTERBOOTH_DEMO_REFERENCE_DATE: "2026-10-31"
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/afterbooth
       SPRING_DATASOURCE_USERNAME: afterbooth
       SPRING_DATASOURCE_PASSWORD: local-only

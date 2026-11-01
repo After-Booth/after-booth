@@ -20,6 +20,7 @@ import javax.imageio.ImageIO;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 
@@ -47,7 +48,7 @@ class HandoverPhotoCounterTest {
     ArgumentCaptor<ChatRequest> request = ArgumentCaptor.forClass(ChatRequest.class);
     verify(gateway).chat(request.capture());
     assertThat(((ChatRequest.UserMessage) request.getValue().messages().get(1)).text())
-        .contains("STORAGE_BIN");
+        .isEqualTo("Count storage bins.");
     assertThat(request.getValue().reasoningEffort()).isEqualTo("medium");
   }
 
@@ -59,6 +60,22 @@ class HandoverPhotoCounterTest {
     assertThat(result.boxes()).isEmpty();
     assertThat(result.allSegmented()).isFalse();
     verify(gateway, never()).segment(any());
+  }
+
+  @ParameterizedTest
+  @CsvSource({
+    "DISPLAY_RACK,display racks",
+    "STORAGE_BIN,storage bins",
+    "FOLDING_TABLE,folding tables"
+  })
+  void describesEveryCategoryWithTheIntakeWording(ItemCategory category, String description)
+      throws Exception {
+    when(gateway.chat(any())).thenReturn(response(0));
+    counter.count(photo(), "image/png", category);
+    ArgumentCaptor<ChatRequest> request = ArgumentCaptor.forClass(ChatRequest.class);
+    verify(gateway).chat(request.capture());
+    assertThat(((ChatRequest.UserMessage) request.getValue().messages().get(1)).text())
+        .isEqualTo("Count " + description + ".");
   }
 
   @ParameterizedTest

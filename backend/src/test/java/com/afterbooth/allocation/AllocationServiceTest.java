@@ -154,6 +154,37 @@ class AllocationServiceTest {
   }
 
   @Test
+  void networkLossAfterALiveTurnRestartsOnTheRecordedConversation() throws Exception {
+    try (var support = new AllocationReplaySupport(fixtures)) {
+      var recorded = scenario(11L, 31L, NOW, support, false);
+      support.startReplay();
+      request(12L, NOW);
+      item(NOW);
+      when(holds.holdForAgent(any())).thenReturn(held(32L, 12L, NOW));
+      List<ChatRequest> sent = new ArrayList<>();
+      AiGateway ai = mock(AiGateway.class);
+      when(ai.chat(any()))
+          .thenAnswer(
+              invocation -> {
+                ChatRequest request = invocation.getArgument(0);
+                sent.add(request);
+                // A live first answer carries its own tool-call ID, so the next key has no
+                // recording
+                return sent.size() == 1
+                    ? tool("live-search", "searchCandidates", "{}")
+                    : support.replay(request);
+              });
+
+      assertThat(service(ai, NOW).run(12L).reservations())
+          .singleElement()
+          .satisfies(r -> assertThat(r.id()).isEqualTo(32L));
+      assertThat(sent).hasSize(5);
+      assertThat(sent.subList(2, 5)).containsExactlyElementsOf(recorded);
+      support.assertComplete(3);
+    }
+  }
+
+  @Test
   void databaseFailureBeforeAndAfterHoldPropagatesInsteadOfReturningSuccess() {
     for (boolean afterHold : List.of(false, true)) {
       request(11L, NOW);
@@ -171,6 +202,35 @@ class AllocationServiceTest {
       assertThatThrownBy(() -> service(ai, NOW).run(11L)).isSameAs(failure);
       reset(inventory);
     }
+  }
+
+  @Test
+  void searchWithoutCategoryDescribesRequestedInventory() {
+    assertSearchSummary("{}", "요청한 종류의 재고를 조회했어요.");
+  }
+
+  @Test
+  void searchWithRequestedCategoryDescribesRequestedInventory() {
+    assertSearchSummary("{\"category\":\"DISPLAY_RACK\"}", "요청한 종류의 재고를 조회했어요.");
+  }
+
+  @Test
+  void searchWithAnotherCategoryDescribesOtherInventory() {
+    assertSearchSummary("{\"category\":\"FOLDING_TABLE\"}", "다른 종류의 재고도 살펴봤어요.");
+  }
+
+  private void assertSearchSummary(String arguments, String summary) {
+    request(11L, NOW);
+    item(NOW);
+    AiGateway ai = mock(AiGateway.class);
+    when(ai.chat(any()))
+        .thenReturn(
+            tool("search", "searchCandidates", arguments),
+            new ChatResponse("재고를 확인했어요.", List.of(), "stop", null));
+
+    assertThat(service(ai, NOW).run(11L).toolCalls())
+        .singleElement()
+        .satisfies(trace -> assertThat(trace.summary()).isEqualTo(summary));
   }
 
   @Test

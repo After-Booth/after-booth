@@ -70,6 +70,32 @@ afterEach(() => {
 })
 afterAll(() => server.close())
 
+test('shows measured AI progress and prevents duplicate allocation while pending', async () => {
+  let calls = 0
+  let complete: (() => void) | undefined
+  server.use(
+    http.post('*/api/pickup-requests/1/allocation', async () => {
+      calls++
+      await new Promise<void>((resolve) => {
+        complete = resolve
+      })
+      return HttpResponse.json(result)
+    }),
+  )
+  render(<AllocationProposal request={request} />)
+  await waitFor(() => expect(screen.getByRole('button', { name: '배정 제안 받기' })).toBeEnabled())
+  await userEvent.dblClick(screen.getByRole('button', { name: '배정 제안 받기' }))
+  expect(
+    await screen.findByText('배정 에이전트가 재고와 차량 조건을 확인하고 있어요…'),
+  ).toBeInTheDocument()
+  expect(screen.getByRole('status')).toHaveTextContent('보통 약 10초 걸려요')
+  expect(screen.getByRole('button', { name: '배정 확인 중…' })).toBeDisabled()
+  await waitFor(() => expect(calls).toBe(1))
+  complete?.()
+  expect(await screen.findByText(result.explanation)).toBeInTheDocument()
+  expect(screen.queryByRole('progressbar')).not.toBeInTheDocument()
+})
+
 test('shows no match reasons and holds a human-selected alternative with one key', async () => {
   let holds = 0
   let sent: unknown
@@ -452,4 +478,58 @@ test('shows Korean server rejection for manual stock and resets recovery when th
   expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   await waitFor(() => expect(screen.getByRole('button', { name: '배정 제안 받기' })).toBeEnabled())
   expect(screen.queryByRole('button', { name: '접이식 테이블 추가 선택' })).not.toBeInTheDocument()
+})
+
+test('confirms a held reservation with one key so it can be handed over', async () => {
+  const keys: (string | null)[] = []
+  let confirmed = false
+  server.use(
+    http.get('*/api/reservations', () =>
+      HttpResponse.json([{ ...reservation, status: confirmed ? 'CONFIRMED' : 'HELD' }]),
+    ),
+    http.post('*/api/reservations/9/confirm', ({ request }) => {
+      keys.push(request.headers.get('Idempotency-Key'))
+      confirmed = true
+      return HttpResponse.json({ ...reservation, status: 'CONFIRMED' })
+    }),
+  )
+  render(<AllocationProposal request={request} />)
+  const confirm = await screen.findByRole('button', { name: '접이식 테이블 예약 확정하기' })
+  expect(screen.getByText(/확정하면 인계 화면에서/)).toBeInTheDocument()
+  await userEvent.dblClick(confirm)
+  expect(await screen.findByText('접이식 테이블 1개 · 예약 확정')).toBeInTheDocument()
+  expect(keys).toHaveLength(1)
+  expect(keys[0]).toBeTruthy()
+  expect(screen.queryByRole('button', { name: '접이식 테이블 예약 확정하기' })).toBeNull()
+})
+
+test('keeps the confirm key after an unknown outcome and refreshes an expired hold', async () => {
+  const keys: (string | null)[] = []
+  let expired = false
+  server.use(
+    http.get('*/api/reservations', () =>
+      HttpResponse.json([{ ...reservation, status: expired ? 'EXPIRED' : 'HELD' }]),
+    ),
+    http.post('*/api/reservations/9/confirm', ({ request }) => {
+      keys.push(request.headers.get('Idempotency-Key'))
+      if (keys.length === 1) return HttpResponse.error()
+      expired = true
+      return HttpResponse.json(
+        { code: 'HOLD_EXPIRED', message: '임시 확보 시간이 지나 재고로 돌아갔어요.' },
+        { status: 409 },
+      )
+    }),
+  )
+  render(<AllocationProposal request={request} />)
+  const user = userEvent.setup()
+  await user.click(await screen.findByRole('button', { name: '접이식 테이블 예약 확정하기' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    '예약 확정 결과를 확인하지 못했어요. 다시 시도해 주세요.',
+  )
+  await user.click(screen.getByRole('button', { name: '접이식 테이블 예약 확정하기' }))
+  expect(await screen.findByText('임시 확보 시간이 지나 재고로 돌아갔어요.')).toBeInTheDocument()
+  expect(keys).toEqual([keys[0], keys[0]])
+  await waitFor(() =>
+    expect(screen.queryByRole('button', { name: '접이식 테이블 예약 확정하기' })).toBeNull(),
+  )
 })

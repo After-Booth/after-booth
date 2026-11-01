@@ -83,8 +83,10 @@ Dependency order: #1 → (#3 and #4 in parallel) → #5·#6 (DY) / #7 → #8 →
 
 - [x] #11 Integrate, run everything with one `docker compose up` (DY)
 - [ ] #12 Playwright E2E demo scenario, two contexts requesting at once (WJ)
-- [ ] #13 Record → replay fallback, latency measurements, loading UX (DY)
+- [x] #13 Record → replay fallback, latency measurements, loading UX (DY)
 - [ ] #14 Self-score against the judging criteria + Muse Code review → fix the weakest area (DY, WJ)
+
+#13 recorded the demo scenario with key A (12 live calls, about $0.03, D-057/D-058) and verified it three ways on the real Docker stack through the built-in browser: replay from an empty database (intake, voice request, allocation, two-tab race within 5 ms, confirm, handover, statistics); live mode with an unroutable Meta base URL (the first Spark call waited the 8 s window, every step then completed from fixtures, including the stock-0 loser branch); and the record runs themselves. Codex wrote the first implementation but its sandbox could not run Gradle or vitest; four of its frontend tests failed locally and were rewritten, and the 60 s fallback cooldown was added after the network-loss run exposed per-turn waits. The recording confirmed the winner through the API; a "예약 확정하기" button for HELD reservations was then added to the allocation proposal in the same PR.
 
 ## Phase 3: Submission (target 11/4 morning)
 

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { setupServer } from 'msw/node'
@@ -56,6 +56,30 @@ async function selectReservation() {
   return user
 }
 const photo = () => new File(['photo'], 'handover.jpg', { type: 'image/jpeg' })
+
+test('limits handover photos to JPEG and PNG and shows the recount duration while busy', async () => {
+  let calls = 0
+  server.use(
+    http.post('*/api/reservations/7/handover', () => {
+      calls++
+      return HttpResponse.json(result(3, 'COMPLETED'))
+    }),
+  )
+  await selectReservation()
+  const input = screen.getByLabelText('인계 사진 촬영 또는 업로드')
+  expect(input).toHaveAttribute('accept', 'image/jpeg,image/png')
+  // Checked synchronously after the change, before the upload can answer
+  fireEvent.change(input, {
+    target: { files: [new File(['photo'], 'handover.png', { type: 'image/png' })] },
+  })
+  expect(screen.getByRole('status')).toHaveTextContent(
+    '물품 수량과 분할 결과를 확인하고 있어요. 잠시 기다려 주세요…',
+  )
+  expect(screen.getByRole('status')).toHaveTextContent('보통 약 4초 걸려요')
+  expect(input).toBeDisabled()
+  expect(await screen.findByText('인계를 완료했어요')).toBeInTheDocument()
+  expect(calls).toBe(1)
+})
 
 test('uploads a matching photo and refreshes category and event reuse totals', async () => {
   let completed = false

@@ -84,6 +84,10 @@ final class FixtureStore {
     return response.path("body");
   }
 
+  boolean exists(Capability capability, String key) {
+    return Files.isRegularFile(file(capability, key));
+  }
+
   void write(
       Capability capability,
       String key,

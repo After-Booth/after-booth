@@ -6,7 +6,15 @@ import java.nio.file.Path;
 import java.util.EnumMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.FutureTask;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.function.UnaryOperator;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
@@ -19,20 +27,20 @@ import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.databind.node.JsonNodeFactory;
 import tools.jackson.databind.node.ObjectNode;
 
-/**
- * The one place where {@code AI_MODE} acts. live sends the request; record sends it and saves the
- * 2xx exchange as a fixture; replay answers from the fixture and never builds an HTTP client.
- */
+/** Applies live fallback, incremental recording and replay at the shared exchange seam. */
 @Component
 class MetaExchange {
 
   private static final String METHOD = "POST";
   private static final int ERROR_BODY_LIMIT = 500;
+  private static final Logger log = LoggerFactory.getLogger(MetaExchange.class);
 
   private final AiProperties properties;
   private final JsonMapper json = JsonMapper.builder().build();
   private final FixtureStore fixtures;
   private final Map<Capability, RestClient> clients;
+  private final Map<String, CompletableFuture<JsonNode>> recordings = new ConcurrentHashMap<>();
+  private volatile long liveSkippedUntil = System.nanoTime();
 
   MetaExchange(AiProperties properties) {
     this.properties = properties;
@@ -74,22 +82,109 @@ class MetaExchange {
       JsonNode redactedBody,
       UnaryOperator<RestClient.RequestBodySpec> withBody) {
     String path = properties.paths().of(capability);
-    if (properties.mode() == AiMode.REPLAY) {
-      return fixtures.readResponseBody(capability, fixtures.key(METHOD, path, redactedBody));
-    }
-    HttpResult result = send(capability, path, withBody);
-    JsonNode responseBody = parse(capability, result);
-    if (properties.mode() == AiMode.RECORD) {
-      fixtures.write(
+    String key = fixtures.key(METHOD, path, redactedBody);
+    long started = System.nanoTime();
+    String outcome = "failed";
+    try {
+      if (properties.mode() == AiMode.REPLAY) {
+        JsonNode body = fixtures.readResponseBody(capability, key);
+        outcome = "replay";
+        return body;
+      }
+      if (properties.mode() == AiMode.RECORD) {
+        ExchangeResult result = record(capability, key, path, redactedBody, withBody);
+        outcome = result.outcome();
+        return result.body();
+      }
+      if (fixtures.exists(capability, key)) {
+        JsonNode fallback = fixtures.readResponseBody(capability, key);
+        // A multi-turn step must not wait one window per turn once the network is known to be down
+        if (System.nanoTime() - liveSkippedUntil < 0) {
+          outcome = "fallback";
+          return fallback;
+        }
+        FutureTask<JsonNode> call =
+            new FutureTask<>(() -> parse(capability, send(capability, path, withBody)));
+        Thread.startVirtualThread(call);
+        try {
+          JsonNode body =
+              call.get(properties.fallbackAfter().of(capability).toNanos(), TimeUnit.NANOSECONDS);
+          outcome = "live";
+          return body;
+        } catch (TimeoutException e) {
+          log.warn("AI fallback capability={} key={} reason=window expired", capability, key);
+        } catch (ExecutionException e) {
+          if (!(e.getCause() instanceof AiCallException failure)) throw propagate(e.getCause());
+          log.warn(
+              "AI fallback capability={} key={} reason={}",
+              capability,
+              key,
+              scrub(failure.getMessage()).replace('\r', ' ').replace('\n', ' '));
+        } catch (InterruptedException e) {
+          Thread.currentThread().interrupt();
+          throw new AiCallException(capability, null, "call interrupted", e);
+        } finally {
+          call.cancel(true);
+        }
+        liveSkippedUntil = System.nanoTime() + properties.fallbackCooldown().toNanos();
+        outcome = "fallback";
+        return fallback;
+      }
+      JsonNode body = parse(capability, send(capability, path, withBody));
+      outcome = "live";
+      return body;
+    } finally {
+      log.info(
+          "AI exchange capability={} mode={} outcome={} elapsedMs={}",
           capability,
-          fixtures.key(METHOD, path, redactedBody),
-          METHOD,
-          path,
-          redactedBody,
-          result.status(),
-          responseBody);
+          properties.mode(),
+          outcome,
+          TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started));
     }
-    return responseBody;
+  }
+
+  private ExchangeResult record(
+      Capability capability,
+      String key,
+      String path,
+      JsonNode redactedBody,
+      UnaryOperator<RestClient.RequestBodySpec> withBody) {
+    String flightKey = capability + ":" + key;
+    CompletableFuture<JsonNode> flight = new CompletableFuture<>();
+    CompletableFuture<JsonNode> existing = recordings.putIfAbsent(flightKey, flight);
+    if (existing != null) {
+      try {
+        return new ExchangeResult(existing.get().deepCopy(), "reused");
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+        throw new AiCallException(capability, null, "recording wait interrupted", e);
+      } catch (ExecutionException e) {
+        throw propagate(e.getCause());
+      }
+    }
+    try {
+      if (fixtures.exists(capability, key)) {
+        JsonNode body = fixtures.readResponseBody(capability, key);
+        flight.complete(body);
+        return new ExchangeResult(body.deepCopy(), "reused");
+      }
+      HttpResult result = send(capability, path, withBody);
+      JsonNode body = parse(capability, result);
+      fixtures.write(capability, key, METHOD, path, redactedBody, result.status(), body);
+      flight.complete(body);
+      return new ExchangeResult(body.deepCopy(), "recorded");
+    } catch (RuntimeException | Error e) {
+      flight.completeExceptionally(e);
+      throw e;
+    } finally {
+      recordings.remove(flightKey, flight);
+    }
+  }
+
+  private static RuntimeException propagate(Throwable cause) {
+    if (cause instanceof RuntimeException runtime) return runtime;
+    if (cause instanceof Error error) throw error;
+    return new IllegalStateException("AI exchange failed", cause);
   }
 
   private HttpResult send(
@@ -164,4 +259,6 @@ class MetaExchange {
   }
 
   private record HttpResult(int status, byte[] body) {}
+
+  private record ExchangeResult(JsonNode body, String outcome) {}
 }

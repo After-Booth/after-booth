@@ -28,6 +28,8 @@ import java.time.Clock;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,6 +37,7 @@ import tools.jackson.databind.json.JsonMapper;
 
 @Service
 public class AllocationService {
+  private static final Logger log = LoggerFactory.getLogger(AllocationService.class);
   private static final List<ChatRequest.Tool> TOOLS =
       List.of(
           new ChatRequest.Tool(
@@ -108,6 +111,7 @@ public class AllocationService {
     long deadline = System.nanoTime() + timeout.toNanos();
     String explanation = null;
     boolean finished = false;
+    boolean restarted = false;
     ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
     try {
       for (int turn = 0; turn < maxTurns && !finished; turn++) {
@@ -119,6 +123,20 @@ public class AllocationService {
         ChatResponse response;
         try {
           response = future.get(remaining, TimeUnit.NANOSECONDS);
+        } catch (ExecutionException error) {
+          // Live answers earlier in the conversation make every later recorded key miss, so a
+          // network loss mid-run restarts once from the first turn, which the gateway can replay
+          if (turn == 0 || restarted || !run.held.isEmpty() || !modelFailure(error)) throw error;
+          restarted = true;
+          log.info(
+              "Allocation restarts from the first turn requestId={} afterTurn={} cause={}",
+              requestId,
+              turn,
+              error.getCause().getClass().getSimpleName());
+          run.reset();
+          messages.subList(2, messages.size()).clear();
+          turn = -1;
+          continue;
         } finally {
           if (!future.isDone()) future.cancel(true);
         }
@@ -156,8 +174,7 @@ public class AllocationService {
       Thread.currentThread().interrupt();
       if (run.held.isEmpty()) throw new BusinessException(ErrorCode.AI_UNAVAILABLE);
     } catch (ExecutionException error) {
-      if (!(error.getCause() instanceof AiCallException)
-          && !(error.getCause() instanceof com.afterbooth.ai.MissingFixtureException)) {
+      if (!modelFailure(error)) {
         if (error.getCause() instanceof RuntimeException runtime) throw runtime;
         if (error.getCause() instanceof Error fatal) throw fatal;
         throw new IllegalStateException("Unexpected model executor failure", error.getCause());
@@ -193,7 +210,11 @@ public class AllocationService {
               .limit(100)
               .map(i -> AllocationModelData.Candidate.from(i, clock.instant()))
               .toList();
-      run.trace.add(new ToolTrace(name, args.values(), "OK", null, "요청한 종류의 재고를 조회했어요."));
+      String summary =
+          args.category() == null || args.category() == run.request.category()
+              ? "요청한 종류의 재고를 조회했어요."
+              : "다른 종류의 재고도 살펴봤어요.";
+      run.trace.add(new ToolTrace(name, args.values(), "OK", null, summary));
       return candidates;
     }
     Item item;
@@ -247,6 +268,11 @@ public class AllocationService {
     return rejection;
   }
 
+  private static boolean modelFailure(ExecutionException error) {
+    return error.getCause() instanceof AiCallException
+        || error.getCause() instanceof com.afterbooth.ai.MissingFixtureException;
+  }
+
   private static final class Run {
     private final PickupRequest request;
     private final List<ReservationResponse> held = new ArrayList<>();
@@ -257,6 +283,13 @@ public class AllocationService {
 
     private Run(PickupRequest request) {
       this.request = request;
+    }
+
+    private void reset() {
+      rejected.clear();
+      trace.clear();
+      callIds.clear();
+      failedCalls = 0;
     }
   }
 }

@@ -1,4 +1,6 @@
 import type { PickupRequest } from '../../api/generated/model'
+import { AiProgress } from '../../components/AiProgress'
+import { AI_EXPECTED_SECONDS } from '../aiLatency'
 import { useAllocation } from './useAllocation'
 
 const button =
@@ -29,6 +31,12 @@ function RequestAllocationProposal({ request }: { request: PickupRequest }) {
       >
         {allocation.pending ? '배정 확인 중…' : '배정 제안 받기'}
       </button>
+      {allocation.pending && (
+        <AiProgress
+          label="배정 에이전트가 재고와 차량 조건을 확인하고 있어요…"
+          expectedSeconds={AI_EXPECTED_SECONDS.allocation}
+        />
+      )}
       {allocation.message && (
         <p role="alert" className="text-red-700">
           {allocation.message}
@@ -101,14 +109,30 @@ function RequestAllocationProposal({ request }: { request: PickupRequest }) {
         </>
       )}
       {held.length > 0 && (
-        <ul className="space-y-2 text-sm">
+        <ul className="space-y-3 text-sm">
           {held.map((reservation) => (
-            <li key={reservation.id}>
-              {reservation.itemLabel} {reservation.quantity}개 ·{' '}
-              {reservation.status === 'HELD' ? '임시 확보' : '예약 확정'}
+            <li key={reservation.id} className="flex flex-wrap items-center gap-3">
+              <span>
+                {reservation.itemLabel} {reservation.quantity}개 ·{' '}
+                {reservation.status === 'HELD' ? '임시 확보' : '예약 확정'}
+              </span>
+              {reservation.status === 'HELD' && (
+                <button
+                  className={button}
+                  disabled={allocation.pending}
+                  onClick={() => void allocation.confirm(reservation)}
+                >
+                  {reservation.itemLabel} 예약 확정하기
+                </button>
+              )}
             </li>
           ))}
         </ul>
+      )}
+      {held.some((reservation) => reservation.status === 'HELD') && (
+        <p className="text-sm text-slate-600">
+          임시 확보는 시간이 지나면 풀려요. 확정하면 인계 화면에서 사진으로 넘겨받을 수 있어요.
+        </p>
       )}
       {allocation.manualSelection && (
         <section className="space-y-3" aria-labelledby="current-stock-heading">
