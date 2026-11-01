@@ -14,14 +14,30 @@ Built for the Meta Global AI Developer Hackathon (Indie track). Full write-up co
 
 AI only proposes. The server validates quantity, time and vehicle fit, and the agent can only create a HOLD.
 
-## Run locally
+## Run
+
+Requirements: Docker only. No JDK, Node or Meta API key is needed.
+
+```bash
+docker compose up --build
+```
+
+The first build takes several minutes. When the log shows `Started AfterboothApplication`, open http://localhost:8080 for the Korean UI; the API is on the same port under `/api`. `GET http://localhost:8080/api/health` answers `{"status":"UP","aiMode":"replay"}`. Seed data is loaded on first start.
+
+The compose file pins `AI_MODE=replay`, so this command never calls the Meta Model API and spends no credits, even when a local key file sets another mode. Replay answers from the recorded responses in `fixtures/`, which are baked into the image. Stop and delete the database with `docker compose down -v`.
+
+Live mode makes real, paid calls. A human opts in explicitly after the credit check in AGENTS.md (hard rule 6), with the key file filled in from `.env.example`:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.live.yml up --build
+```
+
+### Develop locally
 
 Requirements: Docker Desktop, JDK 21, Node 22+.
 
 ```bash
-cp .env.example .env          # fill META_API_KEY etc. (never commit)
-docker compose up -d postgres
-cd backend && ./gradlew bootRun
+cd backend && ./gradlew bootRun                  # starts the postgres service by itself
 cd frontend && npm install && npm run dev        # or npm run dev:mock without backend
 ```
 

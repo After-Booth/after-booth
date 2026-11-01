@@ -1,0 +1,9 @@
+# Opt-in live mode: real, paid Meta Model API calls (AGENTS.md hard rule 6, ask a human first).
+# docker compose -f docker-compose.yml -f docker-compose.live.yml up --build
+services:
+  app:
+    env_file:
+      - path: .env
+        required: true
+    environment:
+      AI_MODE: live
