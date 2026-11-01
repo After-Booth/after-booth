@@ -43,6 +43,8 @@ public class ReservationService {
       VehicleFitPolicy vehicles,
       Clock clock,
       @Value("${afterbooth.hold-ttl:PT15M}") Duration ttl) {
+    if (ttl.isZero() || ttl.isNegative())
+      throw new IllegalArgumentException("afterbooth.hold-ttl must be positive but was " + ttl);
     this.reservations = reservations;
     this.transitions = transitions;
     this.items = items;
