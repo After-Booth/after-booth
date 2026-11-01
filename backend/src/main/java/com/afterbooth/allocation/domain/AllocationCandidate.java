@@ -15,6 +15,10 @@ public final class AllocationCandidate {
   }
 
   public static String message(Item item, String code, String dimension) {
+    return item.label() + ": " + reason(item, code, dimension);
+  }
+
+  private static String reason(Item item, String code, String dimension) {
     if (code.equals("CATEGORY_MISMATCH")) return "요청한 종류의 물품만 자동 배정할 수 있어요.";
     if (!code.equals("VEHICLE_TOO_SMALL")) return ErrorCode.valueOf(code).message();
     if (dimension == null) return "제공자가 지정한 최소 차량 조건에 맞지 않아요.";

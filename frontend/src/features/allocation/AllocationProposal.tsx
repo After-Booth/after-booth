@@ -5,6 +5,10 @@ const button =
   'min-h-12 rounded-xl bg-emerald-800 px-5 py-3 font-semibold text-white disabled:opacity-40'
 
 export function AllocationProposal({ request }: { request: PickupRequest }) {
+  return <RequestAllocationProposal key={request.id} request={request} />
+}
+
+function RequestAllocationProposal({ request }: { request: PickupRequest }) {
   const allocation = useAllocation(request)
   const held = allocation.reservations.filter((r) => ['HELD', 'CONFIRMED'].includes(r.status))
   const quantity = held.reduce((sum, reservation) => sum + reservation.quantity, 0)
@@ -45,9 +49,7 @@ export function AllocationProposal({ request }: { request: PickupRequest }) {
           {allocation.result.rejections.length > 0 && (
             <ul className="space-y-2 text-sm text-amber-900">
               {allocation.result.rejections.map((rejection) => (
-                <li key={`${rejection.itemId}:${rejection.code}`}>
-                  물품 #{rejection.itemId}: {rejection.message}
-                </li>
+                <li key={`${rejection.itemId}:${rejection.code}`}>{rejection.message}</li>
               ))}
             </ul>
           )}
@@ -108,7 +110,7 @@ export function AllocationProposal({ request }: { request: PickupRequest }) {
           ))}
         </ul>
       )}
-      {allocation.recoveredPartial && (
+      {allocation.manualSelection && (
         <section className="space-y-3" aria-labelledby="current-stock-heading">
           <h3 id="current-stock-heading" className="font-semibold">
             추가로 선택할 수 있는 현재 재고
@@ -116,9 +118,13 @@ export function AllocationProposal({ request }: { request: PickupRequest }) {
           <p className="text-sm text-slate-600">
             선택하면 서버가 차량 크기와 픽업 마감, 남은 수량을 다시 확인해요.
           </p>
-          {allocation.currentStock.length === 0 && (
-            <p className="text-sm">현재 추가로 선택할 재고가 없어요.</p>
-          )}
+          {allocation.stockLoading && <p role="status">현재 재고를 확인하는 중이에요…</p>}
+          {allocation.stockMessage && <p role="alert">{allocation.stockMessage}</p>}
+          {!allocation.stockLoading &&
+            !allocation.stockMessage &&
+            allocation.currentStock.length === 0 && (
+              <p className="text-sm">현재 추가로 선택할 재고가 없어요.</p>
+            )}
           {allocation.currentStock
             .filter((item) => item.availableQty > 0)
             .map((item) => {

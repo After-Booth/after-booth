@@ -39,6 +39,10 @@ class AllocationIntegrationTest {
   @Autowired JdbcTemplate jdbc;
   @Autowired StubAi ai;
   @Autowired MockMvc mvc;
+
+  @org.springframework.test.context.bean.override.mockito.MockitoSpyBean
+  com.afterbooth.inventory.service.ItemService inventory;
+
   @Autowired tools.jackson.databind.json.JsonMapper json;
 
   @BeforeEach
@@ -48,6 +52,7 @@ class AllocationIntegrationTest {
     jdbc.update("delete from handover_log");
     jdbc.update("delete from reservation");
     jdbc.update("update item set available_qty=0");
+    org.mockito.Mockito.reset(inventory);
     ai.action = ignored -> done();
   }
 
@@ -253,6 +258,41 @@ class AllocationIntegrationTest {
     assertThat(result.rejections()).anyMatch(r -> r.code().equals("QTY_EXCEEDS_REQUEST"));
     assertThat(stock(first)).isZero();
     assertThat(stock(second)).isEqualTo(2);
+  }
+
+  @Test
+  void databaseFailureDuringToolExecutionRollsBackEvenAnEarlierHold() {
+    for (boolean afterHold : List.of(false, true)) {
+      long item = item("DISPLAY_RACK", 2, false, false);
+      long request = request(2);
+      var failure = new org.springframework.dao.DataAccessResourceFailureException("local failure");
+      org.mockito.Mockito.doThrow(failure).when(inventory).candidates();
+      ai.action =
+          input -> first(input) && afterHold ? hold(item, 1) : call("searchCandidates", "{}");
+      assertThatThrownBy(() -> allocations.run(request)).isSameAs(failure);
+      assertThat(stock(item)).isEqualTo(2);
+      assertThat(reservations.list(request, null)).isEmpty();
+      org.mockito.Mockito.reset(inventory);
+    }
+  }
+
+  @Test
+  void modelMayInspectOtherCategoriesButCannotHoldThem() {
+    long item = item("FOLDING_TABLE", 2, false, false);
+    ai.action =
+        input -> {
+          if (first(input)) return call("searchCandidates", "{\"category\":\"FOLDING_TABLE\"}");
+          if (input.messages().size() == 4) {
+            assertThat(json.writeValueAsString(input.messages()))
+                .contains("FOLDING_TABLE", "itemId");
+            return hold(item, 1);
+          }
+          return done();
+        };
+    var result = allocations.run(request(1));
+    assertThat(result.status()).isEqualTo("NO_MATCH");
+    assertThat(result.toolCalls()).anyMatch(t -> "CATEGORY_MISMATCH".equals(t.code()));
+    assertThat(stock(item)).isEqualTo(2);
   }
 
   @Test

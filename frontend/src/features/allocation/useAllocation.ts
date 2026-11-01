@@ -22,6 +22,8 @@ export function useAllocation(request: PickupRequest) {
   const [message, setMessage] = useState('')
   const [pollMessage, setPollMessage] = useState('')
   const [stockMessage, setStockMessage] = useState('')
+  const [stockLoading, setStockLoading] = useState(true)
+  const [aiUnavailable, setAiUnavailable] = useState('')
   const [currentStock, setCurrentStock] = useState<Item[]>([])
   const busy = useRef(false)
   const revision = useRef(0)
@@ -78,8 +80,11 @@ export function useAllocation(request: PickupRequest) {
     .reduce((sum, reservation) => sum + reservation.quantity, 0)
   const recoveredPartial = !result && activeQuantity > 0 && activeQuantity < request.quantity
 
+  const manualSelection =
+    !loading && activeQuantity < request.quantity && (recoveredPartial || !!aiUnavailable)
+
   useEffect(() => {
-    if (!recoveredPartial) return
+    if (!manualSelection) return
     const controller = new AbortController()
     let refreshing = false
     async function refreshStock() {
@@ -90,10 +95,13 @@ export function useAllocation(request: PickupRequest) {
         if (!controller.signal.aborted) {
           setCurrentStock(response.data)
           setStockMessage('')
+          setStockLoading(false)
         }
       } catch {
-        if (!controller.signal.aborted)
+        if (!controller.signal.aborted) {
           setStockMessage('추가로 선택할 재고를 불러오지 못했어요. 잠시 후 다시 확인해 주세요.')
+          setStockLoading(false)
+        }
       } finally {
         refreshing = false
       }
@@ -104,10 +112,15 @@ export function useAllocation(request: PickupRequest) {
       controller.abort()
       clearInterval(interval)
     }
-  }, [recoveredPartial, request.id])
+  }, [manualSelection, request.id])
 
   async function execute(alternative?: Alternative) {
     if (busy.current || loading) return
+    if (
+      alternative &&
+      (alternative.quantity <= 0 || alternative.quantity > request.quantity - activeQuantity)
+    )
+      return
     busy.current = true
     revision.current++
     setPending(true)
@@ -149,6 +162,7 @@ export function useAllocation(request: PickupRequest) {
             if (response.status !== 200)
               throw new ApiError(response.status, response.data.code, response.data.message)
             if (active.current) {
+              setAiUnavailable('')
               setResult(response.data)
               setReservations(response.data.reservations)
             }
@@ -178,6 +192,8 @@ export function useAllocation(request: PickupRequest) {
       if (error instanceof ApiError && error.code !== 'IDEMPOTENCY_CONFLICT')
         keys.current.delete(action)
       if (active.current) {
+        if (error instanceof ApiError && error.code === 'AI_UNAVAILABLE')
+          setAiUnavailable(error.message)
         setMessage(
           error instanceof ApiError
             ? error.message
@@ -199,7 +215,10 @@ export function useAllocation(request: PickupRequest) {
     reservations,
     pending,
     loading,
-    message: message || pollMessage || (recoveredPartial ? stockMessage : ''),
+    message: message || (activeQuantity < request.quantity ? aiUnavailable : '') || pollMessage,
+    stockMessage,
+    stockLoading,
+    manualSelection,
     execute,
     recoveredPartial,
     currentStock,
