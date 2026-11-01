@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import {
+  confirmReservation,
   holdItem,
   listItems,
   listReservations,
@@ -210,6 +211,45 @@ export function useAllocation(request: PickupRequest) {
     }
   }
 
+  async function confirm(reservation: Reservation) {
+    if (busy.current || reservation.status !== 'HELD') return
+    busy.current = true
+    revision.current++
+    setPending(true)
+    setMessage('')
+    const action = `confirm:${reservation.id}`
+    const key = keys.current.get(action) ?? crypto.randomUUID()
+    keys.current.set(action, key)
+    try {
+      const response = await confirmReservation(reservation.id, { 'Idempotency-Key': key })
+      if (response.status !== 200)
+        throw new ApiError(response.status, response.data.code, response.data.message)
+      keys.current.delete(action)
+      if (active.current)
+        setReservations((previous) =>
+          previous.map((r) => (r.id === response.data.id ? response.data : r)),
+        )
+    } catch (error) {
+      // An unknown outcome keeps the key, so a retry replays the first confirmation
+      if (error instanceof ApiError && error.status < 500 && error.code !== 'IDEMPOTENCY_CONFLICT')
+        keys.current.delete(action)
+      if (active.current) {
+        setMessage(
+          error instanceof ApiError
+            ? error.message
+            : '예약 확정 결과를 확인하지 못했어요. 다시 시도해 주세요.',
+        )
+        if (error instanceof ApiError && error.code === 'HOLD_EXPIRED') {
+          const response = await listReservations({ requestId: request.id }).catch(() => undefined)
+          if (response && active.current) setReservations(response.data)
+        }
+      }
+    } finally {
+      busy.current = false
+      if (active.current) setPending(false)
+    }
+  }
+
   return {
     result,
     reservations,
@@ -220,6 +260,7 @@ export function useAllocation(request: PickupRequest) {
     stockLoading,
     manualSelection,
     execute,
+    confirm,
     recoveredPartial,
     currentStock,
   }

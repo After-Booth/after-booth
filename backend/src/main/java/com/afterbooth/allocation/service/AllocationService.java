@@ -28,6 +28,8 @@ import java.time.Clock;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,6 +37,7 @@ import tools.jackson.databind.json.JsonMapper;
 
 @Service
 public class AllocationService {
+  private static final Logger log = LoggerFactory.getLogger(AllocationService.class);
   private static final List<ChatRequest.Tool> TOOLS =
       List.of(
           new ChatRequest.Tool(
@@ -125,6 +128,11 @@ public class AllocationService {
           // network loss mid-run restarts once from the first turn, which the gateway can replay
           if (turn == 0 || restarted || !run.held.isEmpty() || !modelFailure(error)) throw error;
           restarted = true;
+          log.info(
+              "Allocation restarts from the first turn requestId={} afterTurn={} cause={}",
+              requestId,
+              turn,
+              error.getCause().getClass().getSimpleName());
           run.reset();
           messages.subList(2, messages.size()).clear();
           turn = -1;
