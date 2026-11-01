@@ -4,6 +4,7 @@ import { getHealth } from './api/generated/afterbooth'
 import type { Health } from './api/generated/model'
 import { RequestScreen } from './features/request/RequestScreen'
 import { IntakeScreen } from './features/intake/IntakeScreen'
+import { HandoverScreen } from './features/handover/HandoverScreen'
 
 // Bootstrap check screen. Replaced in Phase 1 by the capture, pickup request and allocation board screens
 function HomeScreen() {
@@ -40,6 +41,12 @@ function HomeScreen() {
               ? `서버 ${health.status} · AI ${health.aiMode}`
               : '서버 확인 중…'}
         </p>
+        <a
+          href="#/handover"
+          className="mt-4 inline-block py-3 font-semibold text-emerald-800 underline"
+        >
+          물품 인계 및 재사용 통계
+        </a>
       </main>
       <IntakeScreen />
     </>
@@ -59,5 +66,6 @@ export default function App() {
       <AllocationBoard key={id} requestId={Number.isSafeInteger(id) && id > 0 ? id : undefined} />
     )
   }
+  if (hash === '#/handover') return <HandoverScreen />
   return hash === '#/request' ? <RequestScreen /> : <HomeScreen />
 }
