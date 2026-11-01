@@ -1,4 +1,5 @@
-# Local development. Phase 2 (#11) adds backend and frontend services so one `docker compose up` runs the demo.
+# docker compose up --build runs the whole app on http://localhost:8080 in replay mode (README "Run").
+# bootRun starts only the postgres service (spring.docker.compose.start.arguments).
 services:
   postgres:
     image: postgres:17-alpine
@@ -15,6 +16,22 @@ services:
       retries: 10
     volumes:
       - pgdata:/var/lib/postgresql/data
+
+  app:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # No key file here: replay needs no key, and nothing in that file can switch the mode.
+    # Pinned literal, not ${AI_MODE}. Live mode is opt-in through docker-compose.live.yml
+    environment:
+      AI_MODE: replay
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/afterbooth
+      SPRING_DATASOURCE_USERNAME: afterbooth
+      SPRING_DATASOURCE_PASSWORD: local-only
+      SPRING_DOCKER_COMPOSE_ENABLED: "false"
+    ports:
+      - "8080:8080"
 
 volumes:
   pgdata:

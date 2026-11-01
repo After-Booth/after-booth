@@ -81,7 +81,7 @@ Dependency order: #1 → (#3 and #4 in parallel) → #5·#6 (DY) / #7 → #8 →
 
 ## Phase 2: Integration + demo hardening (target 11/2–11/3)
 
-- [ ] #11 Integrate, run everything with one `docker compose up` (DY)
+- [x] #11 Integrate, run everything with one `docker compose up` (DY)
 - [ ] #12 Playwright E2E demo scenario, two contexts requesting at once (WJ)
 - [ ] #13 Record → replay fallback, latency measurements, loading UX (DY)
 - [ ] #14 Self-score against the judging criteria + Muse Code review → fix the weakest area (DY, WJ)
