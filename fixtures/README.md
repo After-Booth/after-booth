@@ -50,4 +50,26 @@ Other calls are recorded the same way, through an opt-in test like `AiGatewayRec
 
 LIVE prefers the live response. When a fixture exists for the same capability and request key, a failed live call (connection error, timeout, non-2xx or non-JSON) or an expired fallback window returns that fixture. The abandoned call is interrupted on its virtual thread. With no fixture, normal timeouts and errors apply. RECORD and REPLAY never use this fallback.
 
-The windows are `afterbooth.ai.fallback-after.spark=10s`, `afterbooth.ai.fallback-after.sam=5s` and `afterbooth.ai.fallback-after.transcribe=6s`. Each fallback writes one WARN with the capability, request key and reason. Every exchange also writes one INFO with capability, mode, outcome (`live`, `recorded`, `reused`, `replay`, `fallback`, or `failed`) and elapsed milliseconds.
+The windows are `afterbooth.ai.fallback-after.spark=8s`, `afterbooth.ai.fallback-after.sam=5s` and `afterbooth.ai.fallback-after.transcribe=6s`, above the slowest live calls measured so far (Spark minimal image 6.4 s max, tool turn 3.9 s, SAM 3.5 s, Transcribe 3.3 s). After one fallback, calls that have a fixture skip the network for `afterbooth.ai.fallback-cooldown=60s`, so a multi-turn allocation waits one window, not one per turn. Each fallback writes one WARN with the capability, request key and reason. Every exchange also writes one INFO with capability, mode, outcome (`live`, `recorded`, `reused`, `replay`, `fallback`, or `failed`) and elapsed milliseconds.
+
+## Demo scenario
+
+The recorded demo replays only when every AI input is byte-identical and every step runs in this order from an empty database, because item IDs and stock are part of the allocation prompts (PR #40 R1, R9). Use these inputs; do not edit the intake draft or the interpreted conditions.
+
+1. Reset: `docker compose down -v`, then `docker compose up --build` (replay) or the record or live variant below. The seed deadline is migration time + 7 days, and `AFTERBOOTH_DEMO_REFERENCE_DATE=2026-10-31` pins the request reference date in every compose variant.
+2. Photo intake (home page): upload `spike/samples/bins-orange-stack.jpg`, wait for "수납함 4개", press "재고로 등록" without edits. Any retry or second photo shifts item IDs; start again from step 1.
+3. Voice request (`#/request`): choose "Community Makers", upload `spike/samples/audio-receiver-racks-sedan.wav` with "녹음 파일 올리기 (WAV)", press "픽업 요청 저장" (request #1: display rack 3, sedan), then "배정 제안 받기". The agent finds the 180 cm rack does not fit a sedan and offers alternatives; do not pick one.
+4. Two-browser race: in two windows on `#/request`, choose "Seoul Event Collective" and "Campus Festival Crew", type exactly `진열대 한 개가 필요해요. 밴으로 가져갈게요.`, press "입력한 내용 해석하기" and "픽업 요청 저장" (requests #2 and #3: display rack 1, van). Press "배정 제안 받기" in both. Either window may win. Both branches are recorded: clicks within a few milliseconds (the loser's hold is rejected after both searched) and clicks further apart (the loser searches after the winner committed and sees stock 0).
+5. Confirm the winner's HOLD. The screens have no confirm button yet, so call `POST /api/reservations/{id}/confirm` with an `Idempotency-Key` header (the reservation ID is in `GET /api/reservations?requestId=<winner>`).
+6. Handover (`#/handover`): select the confirmed reservation and upload `spike/samples/rack-gondola-single.jpg`. The recount matches one rack and completes the handover.
+7. Statistics on the same screen show one reused display rack.
+
+Recording (key A, approved by a human first): from a worktree, the key file stays in the main checkout, so point a copy of `docker-compose.record.yml` at it. Run steps 1–7 once with the two race clicks together, then step 1 again and steps 2–4 with the second race click after the first window shows "배정 성공". The second run reuses every existing fixture and records only the stock-0 branch. Then run the secret scan and commit the new files.
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.record.yml up --build -d
+```
+
+Network-loss check without spending credits: start live mode with a placeholder key and an unroutable base URL (`AI_MODE: live`, `META_API_KEY: not-a-real-key`, `META_BASE_URL: http://10.255.255.1` in an override file) and run steps 1–7. The first Spark call after a quiet minute waits the 8 s window, then every step completes from fixtures.
+
+Measured on 2026-11-01 (#13): live text structuring 1.4 s, allocation 7–10 s over 3–4 tool turns, handover recount 3.3 s. The loading screens use these values (`frontend/src/features/aiLatency.ts`).

@@ -1,0 +1,123 @@
+{
+  "request" : {
+    "method" : "POST",
+    "path" : "/v1/chat/completions",
+    "body" : {
+      "model" : "muse-spark-1.3",
+      "messages" : [
+        {
+          "role" : "system",
+          "content" : "Count only visible reusable equipment of the requested category. Return exactly one\nnormalized x/y/width/height box per unit, with origin at the top-left. Ignore all other\ncategories. Every box must have positive dimensions and fit inside the photo. Return\ncount zero and an empty boxes array when no requested items are visible. Return only JSON.\n"
+        },
+        {
+          "role" : "user",
+          "content" : [
+            {
+              "type" : "text",
+              "text" : "Count display racks."
+            },
+            {
+              "type" : "image_url",
+              "image_url" : {
+                "url" : {
+                  "sha256" : "1ef80c842d03dbebb326b13fe0d4242af5334ffe3dceb862cee19179fdcabc16",
+                  "bytes" : 23809,
+                  "redactedDataUrl" : "data:image/jpeg;base64"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "response_format" : {
+        "type" : "json_schema",
+        "json_schema" : {
+          "name" : "handover_count",
+          "schema" : {
+            "type" : "object",
+            "additionalProperties" : false,
+            "required" : [
+              "count",
+              "boxes"
+            ],
+            "properties" : {
+              "count" : {
+                "type" : "integer",
+                "minimum" : 0,
+                "maximum" : 2147483647
+              },
+              "boxes" : {
+                "type" : "array",
+                "items" : {
+                  "type" : "object",
+                  "additionalProperties" : false,
+                  "required" : [
+                    "x",
+                    "y",
+                    "width",
+                    "height"
+                  ],
+                  "properties" : {
+                    "x" : {
+                      "type" : "number",
+                      "minimum" : 0,
+                      "maximum" : 1
+                    },
+                    "y" : {
+                      "type" : "number",
+                      "minimum" : 0,
+                      "maximum" : 1
+                    },
+                    "width" : {
+                      "type" : "number",
+                      "minimum" : 0,
+                      "maximum" : 1
+                    },
+                    "height" : {
+                      "type" : "number",
+                      "minimum" : 0,
+                      "maximum" : 1
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "reasoning_effort" : "minimal"
+    }
+  },
+  "response" : {
+    "status" : 200,
+    "body" : {
+      "id" : "chatcmpl-01a19681-75b6-7159-a189-1b8767aa1f7f",
+      "choices" : [
+        {
+          "finish_reason" : "stop",
+          "index" : 0,
+          "message" : {
+            "content" : "{\"boxes\": [{\"height\": 0.915, \"width\": 0.702, \"x\": 0.208, \"y\": 0.069}], \"count\": 1}",
+            "refusal" : null,
+            "role" : "assistant"
+          },
+          "logprobs" : null
+        }
+      ],
+      "created" : 1793526429,
+      "model" : "muse-spark-1.3",
+      "object" : "chat.completion",
+      "usage" : {
+        "completion_tokens" : 194,
+        "prompt_tokens" : 618,
+        "total_tokens" : 812,
+        "completion_tokens_details" : {
+          "reasoning_tokens" : 144
+        },
+        "prompt_tokens_details" : {
+          "cached_tokens" : 0
+        }
+      }
+    }
+  }
+}

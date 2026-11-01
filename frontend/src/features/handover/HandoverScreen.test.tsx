@@ -77,7 +77,7 @@ test('limits handover photos to JPEG and PNG and shows the recount duration whil
   expect(screen.getByRole('status')).toHaveTextContent(
     '물품 수량과 분할 결과를 확인하고 있어요. 잠시 기다려 주세요…',
   )
-  expect(screen.getByRole('status')).toHaveTextContent('보통 약 6초 걸려요')
+  expect(screen.getByRole('status')).toHaveTextContent('보통 약 4초 걸려요')
   expect(input).toBeDisabled()
   expect(await screen.findByText('인계를 완료했어요')).toBeInTheDocument()
   expect(calls).toBe(1)

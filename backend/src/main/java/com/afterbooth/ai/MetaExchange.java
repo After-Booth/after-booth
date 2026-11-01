@@ -40,6 +40,7 @@ class MetaExchange {
   private final FixtureStore fixtures;
   private final Map<Capability, RestClient> clients;
   private final Map<String, CompletableFuture<JsonNode>> recordings = new ConcurrentHashMap<>();
+  private volatile long liveSkippedUntil = System.nanoTime();
 
   MetaExchange(AiProperties properties) {
     this.properties = properties;
@@ -97,6 +98,11 @@ class MetaExchange {
       }
       if (fixtures.exists(capability, key)) {
         JsonNode fallback = fixtures.readResponseBody(capability, key);
+        // A multi-turn step must not wait one window per turn once the network is known to be down
+        if (System.nanoTime() - liveSkippedUntil < 0) {
+          outcome = "fallback";
+          return fallback;
+        }
         FutureTask<JsonNode> call =
             new FutureTask<>(() -> parse(capability, send(capability, path, withBody)));
         Thread.startVirtualThread(call);
@@ -120,6 +126,7 @@ class MetaExchange {
         } finally {
           call.cancel(true);
         }
+        liveSkippedUntil = System.nanoTime() + properties.fallbackCooldown().toNanos();
         outcome = "fallback";
         return fallback;
       }

@@ -19,6 +19,11 @@ final class AiTestSupport {
   private AiTestSupport() {}
 
   static AiProperties properties(AiMode mode, String baseUrl, Path fixturesDir, String apiKey) {
+    return properties(mode, baseUrl, fixturesDir, apiKey, Duration.ZERO);
+  }
+
+  static AiProperties properties(
+      AiMode mode, String baseUrl, Path fixturesDir, String apiKey, Duration fallbackCooldown) {
     return new AiProperties(
         mode,
         fixturesDir.toString(),
@@ -31,6 +36,7 @@ final class AiTestSupport {
             Duration.ofSeconds(5), Duration.ofSeconds(5), Duration.ofSeconds(5)),
         new AiProperties.Timeouts(
             Duration.ofMillis(200), Duration.ofMillis(200), Duration.ofMillis(200)),
+        fallbackCooldown,
         List.of("Korean"));
   }
 

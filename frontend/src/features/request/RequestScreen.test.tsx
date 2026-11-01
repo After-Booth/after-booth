@@ -294,7 +294,7 @@ test('uses the shorter text interpretation estimate', async () => {
     }),
   )
   await enterText()
-  expect(screen.getByText('0초 경과 · 보통 약 3초 걸려요')).toBeInTheDocument()
+  expect(screen.getByText('0초 경과 · 보통 약 2초 걸려요')).toBeInTheDocument()
   expect(screen.getByLabelText('녹음 파일 올리기 (WAV)')).toBeDisabled()
   await waitFor(() => expect(complete).toBeTypeOf('function'))
   complete?.()

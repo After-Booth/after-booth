@@ -265,6 +265,22 @@ class AiGatewayModesTest {
   }
 
   @Test
+  void afterAFallbackRecordedCallsSkipTheNetworkUntilTheCooldownEnds() {
+    try (StubMetaServer meta = new StubMetaServer()) {
+      meta.respond(200, spikeResponse("spark-text/rack-sedan-1.json"));
+      ChatResponse recorded = gateway(AiMode.RECORD, meta.baseUrl(), fixtures, KEY).chat(TEXT);
+      meta.respond(503, "{}");
+      AiProperties properties =
+          AiTestSupport.properties(
+              AiMode.LIVE, meta.baseUrl(), fixtures, KEY, Duration.ofMinutes(1));
+      AiGateway live = new MetaAiGateway(properties, new MetaExchange(properties));
+      assertThat(live.chat(TEXT)).isEqualTo(recorded);
+      assertThat(live.chat(TEXT)).isEqualTo(recorded);
+      assertThat(meta.received()).hasSize(2);
+    }
+  }
+
+  @Test
   void liveSuccessTakesPrecedenceOverTheFixtureWithoutOverwritingIt() {
     try (StubMetaServer meta = new StubMetaServer()) {
       meta.respond(200, spikeResponse("spark-text/rack-sedan-1.json"));
