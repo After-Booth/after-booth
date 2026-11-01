@@ -24,7 +24,7 @@ docker compose up --build
 
 The first build takes several minutes. When the log shows `Started AfterboothApplication`, open http://localhost:8080 for the Korean UI; the API is on the same port under `/api`. `GET http://localhost:8080/api/health` answers `{"status":"UP","aiMode":"replay"}`. Seed data is loaded on first start.
 
-The compose file pins `AI_MODE=replay`, so this command never calls the Meta Model API and spends no credits, even when a local key file sets another mode. Replay answers from the recorded responses in `fixtures/`, which are baked into the image. Stop and delete the database with `docker compose down -v`.
+The compose file pins `AI_MODE=replay` and does not load the key file, so this command never calls the Meta Model API and spends no credits. Replay answers from the recorded responses in `fixtures/`, which are baked into the image. Stop and delete the database with `docker compose down -v`.
 
 Live mode makes real, paid calls. A human opts in explicitly after the credit check in AGENTS.md (hard rule 6), with the key file filled in from `.env.example`:
 

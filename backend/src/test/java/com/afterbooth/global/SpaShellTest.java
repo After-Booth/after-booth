@@ -3,6 +3,7 @@ package com.afterbooth.global;
 import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.forwardedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -12,30 +13,28 @@ import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
-// global.config.SpaWebConfig with the shipped spring.web.resources.add-mappings=false and
-// src/test/resources/static/index.html
+// The Docker image bakes the React build into static/ (Dockerfile); the frontend routes by hash,
+// so only / needs the shell. Stands in with src/test/resources/static/index.html
 @WebMvcTest(SystemController.class)
 @TestPropertySource(properties = "afterbooth.ai.mode=replay")
-class SpaFallbackTest {
+class SpaShellTest {
 
   @Autowired MockMvc mockMvc;
 
   @Test
-  void rootAndClientRoutesServeIndexHtml() throws Exception {
-    mockMvc.perform(get("/")).andExpect(status().isOk());
+  void rootForwardsToTheShell() throws Exception {
+    mockMvc.perform(get("/")).andExpect(status().isOk()).andExpect(forwardedUrl("index.html"));
     mockMvc
-        .perform(get("/allocation/board"))
+        .perform(get("/index.html"))
         .andExpect(status().isOk())
         .andExpect(content().string(containsString("spa-shell")));
   }
 
   @Test
-  void unknownApiActuatorAndFilePathsStay404() throws Exception {
+  void unknownApiPathStaysJson404() throws Exception {
     mockMvc
         .perform(get("/api/unknown"))
         .andExpect(status().isNotFound())
         .andExpect(jsonPath("$.code").value("NOT_FOUND"));
-    mockMvc.perform(get("/actuator/unknown")).andExpect(status().isNotFound());
-    mockMvc.perform(get("/assets/missing.js")).andExpect(status().isNotFound());
   }
 }

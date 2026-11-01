@@ -1,6 +1,6 @@
 # One image for the whole app: the React build is served by Spring Boot on port 8080 (#11)
 
-FROM node:22-alpine AS frontend
+FROM node:24-alpine AS frontend
 WORKDIR /src
 # orval generates the API client from the contract during npm run build
 COPY contract/ contract/
@@ -14,7 +14,7 @@ WORKDIR /src/backend
 COPY backend/gradlew backend/settings.gradle backend/build.gradle ./
 COPY backend/gradle/ gradle/
 RUN ./gradlew --no-daemon dependencies > /dev/null
-COPY backend/src/ src/
+COPY backend/src/main/ src/main/
 COPY --from=frontend /src/frontend/dist/ src/main/resources/static/
 RUN ./gradlew --no-daemon bootJar
 

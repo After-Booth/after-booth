@@ -22,13 +22,9 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    # Optional: the app starts without the key file; replay needs no key
-    env_file:
-      - path: .env
-        required: false
+    # No key file here: replay needs no key, and nothing in that file can switch the mode.
+    # Pinned literal, not ${AI_MODE}. Live mode is opt-in through docker-compose.live.yml
     environment:
-      # Pinned literal, not ${AI_MODE}: environment beats env_file, so a plain up never spends credits.
-      # Live mode is opt-in through docker-compose.live.yml.
       AI_MODE: replay
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/afterbooth
       SPRING_DATASOURCE_USERNAME: afterbooth

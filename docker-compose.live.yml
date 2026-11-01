@@ -2,8 +2,6 @@
 # docker compose -f docker-compose.yml -f docker-compose.live.yml up --build
 services:
   app:
-    env_file:
-      - path: .env
-        required: true
+    env_file: .env
     environment:
       AI_MODE: live
