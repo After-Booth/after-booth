@@ -265,7 +265,7 @@ class AiGatewayModesTest {
   }
 
   @Test
-  void afterAFallbackRecordedCallsSkipTheNetworkUntilTheCooldownEnds() {
+  void afterAFallbackRecordedCallsSkipTheNetworkDuringTheCooldown() {
     try (StubMetaServer meta = new StubMetaServer()) {
       meta.respond(200, spikeResponse("spark-text/rack-sedan-1.json"));
       ChatResponse recorded = gateway(AiMode.RECORD, meta.baseUrl(), fixtures, KEY).chat(TEXT);

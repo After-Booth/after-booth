@@ -154,6 +154,37 @@ class AllocationServiceTest {
   }
 
   @Test
+  void networkLossAfterALiveTurnRestartsOnTheRecordedConversation() throws Exception {
+    try (var support = new AllocationReplaySupport(fixtures)) {
+      var recorded = scenario(11L, 31L, NOW, support, false);
+      support.startReplay();
+      request(12L, NOW);
+      item(NOW);
+      when(holds.holdForAgent(any())).thenReturn(held(32L, 12L, NOW));
+      List<ChatRequest> sent = new ArrayList<>();
+      AiGateway ai = mock(AiGateway.class);
+      when(ai.chat(any()))
+          .thenAnswer(
+              invocation -> {
+                ChatRequest request = invocation.getArgument(0);
+                sent.add(request);
+                // A live first answer carries its own tool-call ID, so the next key has no
+                // recording
+                return sent.size() == 1
+                    ? tool("live-search", "searchCandidates", "{}")
+                    : support.replay(request);
+              });
+
+      assertThat(service(ai, NOW).run(12L).reservations())
+          .singleElement()
+          .satisfies(r -> assertThat(r.id()).isEqualTo(32L));
+      assertThat(sent).hasSize(5);
+      assertThat(sent.subList(2, 5)).containsExactlyElementsOf(recorded);
+      support.assertComplete(3);
+    }
+  }
+
+  @Test
   void databaseFailureBeforeAndAfterHoldPropagatesInsteadOfReturningSuccess() {
     for (boolean afterHold : List.of(false, true)) {
       request(11L, NOW);

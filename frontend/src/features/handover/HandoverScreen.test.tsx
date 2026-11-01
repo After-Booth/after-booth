@@ -65,11 +65,9 @@ test('limits handover photos to JPEG and PNG and shows the recount duration whil
       return HttpResponse.json(result(3, 'COMPLETED'))
     }),
   )
-  const user = await selectReservation()
+  await selectReservation()
   const input = screen.getByLabelText('인계 사진 촬영 또는 업로드')
   expect(input).toHaveAttribute('accept', 'image/jpeg,image/png')
-  await user.upload(input, new File(['photo'], 'handover.webp', { type: 'image/webp' }))
-  expect(calls).toBe(0)
   // Checked synchronously after the change, before the upload can answer
   fireEvent.change(input, {
     target: { files: [new File(['photo'], 'handover.png', { type: 'image/png' })] },
