@@ -19,6 +19,9 @@ export function AllocationBoard({ requestId }: { requestId?: number }) {
           <a href="#/request" className="text-emerald-800 underline">
             픽업 요청하기
           </a>
+          <a href="#/handover" className="ml-4 text-emerald-800 underline">
+            물품 인계 및 통계
+          </a>
           <h1 className="mt-4 text-3xl font-bold">배정 보드</h1>
           <p className="mt-2 text-slate-600">
             남은 수량과 요청 결과를 3초마다 확인해요. 시간은 한국 시간 기준이에요.

@@ -87,6 +87,24 @@ public class HandoverLog {
         reservationId, expectedQty, countedQty, acceptedQty, status, boxes, createdAt);
   }
 
+  public static HandoverLog recordPhoto(
+      Long reservationId,
+      int expectedQty,
+      int countedQty,
+      boolean allSegmented,
+      List<BoundingBox> boxes,
+      Instant createdAt) {
+    boolean matched = countedQty > 0 && countedQty == expectedQty && allSegmented;
+    return recordRecount(
+        reservationId,
+        expectedQty,
+        countedQty,
+        matched ? countedQty : null,
+        matched ? HandoverStatus.COMPLETED : HandoverStatus.MISMATCH,
+        boxes,
+        createdAt);
+  }
+
   public int requireMatched(int reservedQuantity) {
     if (status != HandoverStatus.COMPLETED
         || expectedQty != reservedQuantity

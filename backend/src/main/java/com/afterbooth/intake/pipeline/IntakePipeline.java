@@ -4,21 +4,14 @@ import com.afterbooth.ai.AiGateway;
 import com.afterbooth.ai.ChatRequest;
 import com.afterbooth.ai.ChatResponse;
 import com.afterbooth.ai.Image;
-import com.afterbooth.ai.PixelBox;
-import com.afterbooth.ai.SamRequest;
-import com.afterbooth.ai.SamSegment;
+import com.afterbooth.ai.SamBoxSegmenter;
 import com.afterbooth.global.domain.BoundingBox;
 import com.afterbooth.intake.domain.DraftCategory;
 import com.afterbooth.inventory.domain.Condition;
-import java.awt.image.BufferedImage;
-import java.io.ByteArrayInputStream;
-import java.io.IOException;
 import java.math.BigDecimal;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import javax.imageio.ImageIO;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import tools.jackson.databind.JsonNode;
@@ -127,55 +120,9 @@ public class IntakePipeline {
   public List<EstimatedLine> segment(IntakePhoto photo, List<EstimatedLine> lines) {
     List<BoundingBox> boxes = lines.stream().flatMap(line -> line.boxes().stream()).toList();
     if (boxes.isEmpty()) return lines;
-    BufferedImage image;
-    try {
-      image = ImageIO.read(new ByteArrayInputStream(photo.bytes()));
-    } catch (IOException e) {
-      throw new IllegalArgumentException("Cannot decode intake photo", e);
-    }
-    if (image == null) throw new IllegalArgumentException("Cannot decode intake photo");
-    int width = image.getWidth();
-    int height = image.getHeight();
-    Map<Integer, BoundingBox> segmented = new HashMap<>();
-    for (int start = 0; start < boxes.size(); start += SamRequest.Boxes.MAX_BOXES) {
-      List<PixelBox> prompts =
-          boxes.subList(start, Math.min(start + SamRequest.Boxes.MAX_BOXES, boxes.size())).stream()
-              .map(box -> pixels(box, width, height))
-              .toList();
-      List<SamSegment> output =
-          gateway.segment(
-              new SamRequest(
-                  new Image(photo.bytes(), photo.mediaType()),
-                  new SamRequest.Boxes(width, height, prompts)));
-      Map<Integer, Long> occurrences = new HashMap<>();
-      output.forEach(segment -> occurrences.merge(segment.id(), 1L, Long::sum));
-      for (SamSegment segment : output) {
-        if (segment.id() < 1
-            || segment.id() > prompts.size()
-            || occurrences.get(segment.id()) != 1
-            || !Double.isFinite(segment.score())
-            || segment.score() < samMinScore
-            || segment.score() > 1
-            || segment.mask() == null
-            || segment.mask().data() == null
-            || segment.mask().data().isBlank()) continue;
-        PixelBox box = segment.box();
-        if (box == null
-            || box.x1() < 0
-            || box.y1() < 0
-            || box.x2() < box.x1()
-            || box.y2() < box.y1()
-            || box.x2() >= width
-            || box.y2() >= height) continue;
-        segmented.put(
-            start + segment.id() - 1,
-            new BoundingBox(
-                (double) box.x1() / width,
-                (double) box.y1() / height,
-                (double) (box.x2() - box.x1() + 1) / width,
-                (double) (box.y2() - box.y1() + 1) / height));
-      }
-    }
+    Map<Integer, BoundingBox> segmented =
+        SamBoxSegmenter.segment(
+            gateway, new Image(photo.bytes(), photo.mediaType()), boxes, samMinScore);
     List<EstimatedLine> result = new ArrayList<>();
     int index = 0;
     for (EstimatedLine line : lines) {
@@ -189,15 +136,5 @@ public class IntakePipeline {
       result.add(line.segmented(refined, incomplete));
     }
     return List.copyOf(result);
-  }
-
-  private static PixelBox pixels(BoundingBox box, int width, int height) {
-    int x1 = Math.min(width - 1, (int) Math.floor(box.x() * width));
-    int y1 = Math.min(height - 1, (int) Math.floor(box.y() * height));
-    return new PixelBox(
-        x1,
-        y1,
-        Math.max(x1, Math.min(width - 1, (int) Math.ceil((box.x() + box.width()) * width) - 1)),
-        Math.max(y1, Math.min(height - 1, (int) Math.ceil((box.y() + box.height()) * height) - 1)));
   }
 }

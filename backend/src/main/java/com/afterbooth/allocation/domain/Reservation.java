@@ -145,6 +145,11 @@ public class Reservation {
     return null;
   }
 
+  public void requirePhotoHandover(Instant now) {
+    require(status == ReservationStatus.CONFIRMED);
+    if (!now.isBefore(pickupDeadline)) throw new BusinessException(ErrorCode.PICKUP_CLOSED);
+  }
+
   public int requireHandover(int acceptedQuantity, TransitionActor actor, Instant now) {
     require(status == ReservationStatus.CONFIRMED);
     require(actor == TransitionActor.USER || actor == TransitionActor.HANDOVER);
