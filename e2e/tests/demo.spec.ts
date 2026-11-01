@@ -9,7 +9,9 @@ import {
   REJECTION_CODES,
   apiGet,
   captureAllocations,
+  failFastOnAllocationError,
   formatLatencyTable,
+  intervalsOverlap,
   waitForAllocation,
   type AllocationResult,
   type CapturedAllocation,
@@ -50,16 +52,30 @@ async function readSavedRequestId(page: Page): Promise<number> {
   return Number(match[1]);
 }
 
-// Records when each allocation HTTP request starts, so the race overlap proof
-// rests on server-bound traffic rather than on click timestamps alone.
-function watchAllocationStarts(page: Page, starts: Map<number, number>): void {
+// Records each allocation HTTP interval on the same monotonic clock, so the
+// race overlap proof rests on server-bound traffic rather than on click or
+// UI-visibility timestamps.
+function watchAllocationIntervals(
+  page: Page,
+  starts: Map<number, number>,
+  ends: Map<number, number>,
+): void {
+  const requestIdFromUrl = (url: string): number | undefined => {
+    const match = new URL(url).pathname.match(/^\/api\/pickup-requests\/(\d+)\/allocation$/);
+    return match ? Number(match[1]) : undefined;
+  };
   page.on('request', (request) => {
     if (request.method() !== 'POST') return;
-    const match = new URL(request.url()).pathname.match(
-      /^\/api\/pickup-requests\/(\d+)\/allocation$/,
-    );
-    if (match) starts.set(Number(match[1]), performance.now());
+    const id = requestIdFromUrl(request.url());
+    if (id !== undefined) starts.set(id, performance.now());
   });
+  const recordEnd = (request: { method(): string; url(): string }): void => {
+    if (request.method() !== 'POST') return;
+    const id = requestIdFromUrl(request.url());
+    if (id !== undefined) ends.set(id, performance.now());
+  };
+  page.on('requestfinished', recordEnd);
+  page.on('requestfailed', recordEnd);
 }
 
 function raceBranch(loser: AllocationResult): string {
@@ -127,9 +143,17 @@ async function runFirstAllocation(
 ): Promise<AllocationResult> {
   await log.measure('request #1: allocation proposal (sedan cannot fit)', async () => {
     await page.getByRole('button', { name: '배정 제안 받기' }).click();
-    await expect(page.getByText('조건에 맞는 물품을 확보하지 못했어요.')).toBeVisible({
-      timeout: AI_TIMEOUT_MS,
-    });
+    const abort = new AbortController();
+    try {
+      await Promise.race([
+        expect(page.getByText('조건에 맞는 물품을 확보하지 못했어요.')).toBeVisible({
+          timeout: AI_TIMEOUT_MS,
+        }),
+        failFastOnAllocationError(allocations, requestId, { signal: abort.signal }),
+      ]);
+    } finally {
+      abort.abort();
+    }
   });
   const captured = await waitForAllocation(allocations, requestId);
   expect(captured.status).toBe(200);
@@ -238,11 +262,13 @@ test('demo scenario from photo intake to reuse stats', async ({ browser, request
     const allocationsA: CapturedAllocation[] = [];
     const allocationsB: CapturedAllocation[] = [];
     const startsA = new Map<number, number>();
+    const endsA = new Map<number, number>();
     const startsB = new Map<number, number>();
+    const endsB = new Map<number, number>();
     captureAllocations(pageA, allocationsA);
     captureAllocations(pageB, allocationsB);
-    watchAllocationStarts(pageA, startsA);
-    watchAllocationStarts(pageB, startsB);
+    watchAllocationIntervals(pageA, startsA, endsA);
+    watchAllocationIntervals(pageB, startsB, endsB);
 
     const requestA = await test.step('race setup A', () =>
       log.measure('race A: same text -> saved request', () =>
@@ -264,19 +290,32 @@ test('demo scenario from photo intake to reuse stats', async ({ browser, request
       const buttonB = pageB.getByRole('button', { name: '배정 제안 받기' });
       await expect(buttonA).toBeEnabled({ timeout: 30_000 });
       await expect(buttonB).toBeEnabled({ timeout: 30_000 });
-      const fire = async (page: Page, button: typeof buttonA) => {
+      const fire = async (
+        page: Page,
+        button: typeof buttonA,
+        allocations: CapturedAllocation[],
+        raceRequestId: number,
+      ) => {
         const dispatch = performance.now();
         await button.click();
         const sent = performance.now();
-        await expect(
-          page.getByText(/배정 성공|조건에 맞는 물품을 확보하지 못했어요/),
-        ).toBeVisible({ timeout: AI_TIMEOUT_MS });
+        const abort = new AbortController();
+        try {
+          await Promise.race([
+            expect(
+              page.getByText(/배정 성공|조건에 맞는 물품을 확보하지 못했어요/),
+            ).toBeVisible({ timeout: AI_TIMEOUT_MS }),
+            failFastOnAllocationError(allocations, raceRequestId, { signal: abort.signal }),
+          ]);
+        } finally {
+          abort.abort();
+        }
         return { dispatch, sent, done: performance.now() };
       };
       const wallStart = log.now();
       const [outA, outB] = await Promise.all([
-        fire(pageA, buttonA),
-        fire(pageB, buttonB),
+        fire(pageA, buttonA, allocationsA, requestA),
+        fire(pageB, buttonB, allocationsB, requestB),
       ]);
       log.add('race: both allocations dispatched together', log.now() - wallStart);
       log.add('race allocation A: click -> outcome', outA.done - outA.dispatch);
@@ -289,21 +328,25 @@ test('demo scenario from photo intake to reuse stats', async ({ browser, request
       return { outA, outB, captureA: captureA.body, captureB: captureB.body };
     });
 
-    // Concurrency evidence: both allocation requests were in flight at the same
-    // time. A sequential run cannot satisfy this overlap assertion.
+    // Concurrency evidence: both allocation HTTP intervals overlapped in
+    // flight. UI-visibility times stay latency info only; a sequential HTTP
+    // run cannot satisfy this HTTP-interval assertion.
     const startA = startsA.get(requestA);
     const startB = startsB.get(requestB);
-    if (startA === undefined || startB === undefined) {
-      throw new Error('Allocation request start was not observed on both race pages');
+    const endA = endsA.get(requestA);
+    const endB = endsB.get(requestB);
+    if (
+      startA === undefined ||
+      startB === undefined ||
+      endA === undefined ||
+      endB === undefined
+    ) {
+      throw new Error('Allocation HTTP interval was not observed on both race pages');
     }
     const clickGapMs = Math.abs(race.outA.sent - race.outB.sent);
     const requestGapMs = Math.abs(startA - startB);
-    const clickOverlap =
-      Math.max(race.outA.sent, race.outB.sent) < Math.min(race.outA.done, race.outB.done);
-    const requestOverlap =
-      Math.max(startA, startB) < Math.min(race.outA.done, race.outB.done);
-    expect(clickOverlap, 'race clicks overlapped in flight').toBe(true);
-    expect(requestOverlap, 'race allocation requests overlapped in flight').toBe(true);
+    const httpOverlap = intervalsOverlap(startA, endA, startB, endB);
+    expect(httpOverlap, 'race allocation HTTP intervals overlapped in flight').toBe(true);
 
     const wonA = race.captureA.status === 'HELD';
     const wonB = race.captureB.status === 'HELD';
@@ -342,6 +385,20 @@ test('demo scenario from photo intake to reuse stats', async ({ browser, request
     for (const alternative of loser.result.alternatives) {
       expect(rejectedIds.has(alternative.item.id), 'alternative is not also rejected').toBe(false);
     }
+    const firstAlternative = loser.result.alternatives[0];
+    const alternativeDisplayQty = Math.min(firstAlternative.quantity, 1);
+    const alternativeCard = loser.page
+      .locator('article', { hasText: firstAlternative.reason })
+      .first();
+    await expect(
+      alternativeCard.getByText(`${firstAlternative.item.label} ${alternativeDisplayQty}개`),
+    ).toBeVisible();
+    await expect(alternativeCard.getByText(firstAlternative.reason)).toBeVisible();
+    const alternativeButton = alternativeCard.getByRole('button', {
+      name: `${firstAlternative.item.label} 대안 선택`,
+    });
+    await expect(alternativeButton).toBeVisible();
+    await expect(alternativeButton).toBeEnabled();
 
     await test.step('post-race stock check', async () => {
       const winnerHolds = await apiGet<Reservation[]>(
@@ -434,8 +491,9 @@ test('demo scenario from photo intake to reuse stats', async ({ browser, request
         photoDemoBar15s: photoMs < PHOTO_DEMO_BAR_MS ? 'PASS' : 'FAIL',
         clickGapMs: Math.round(clickGapMs * 10) / 10,
         requestStartGapMs: Math.round(requestGapMs * 10) / 10,
-        clickOverlap,
-        requestOverlap,
+        httpOverlap,
+        httpDurationAMs: Math.round((endA - startA) * 10) / 10,
+        httpDurationBMs: Math.round((endB - startB) * 10) / 10,
         raceBranch: branch,
         winnerRequestId: winner.requestId,
         loserRequestId: loser.requestId,
@@ -456,7 +514,8 @@ test('demo scenario from photo intake to reuse stats', async ({ browser, request
       console.log(
         `race: click gap ${clickGapMs.toFixed(1)}ms, ` +
           `request gap ${requestGapMs.toFixed(1)}ms, ` +
-          `click overlap ${clickOverlap}, request overlap ${requestOverlap}, ` +
+          `http overlap ${httpOverlap} ` +
+          `(A ${(endA - startA).toFixed(1)}ms, B ${(endB - startB).toFixed(1)}ms), ` +
           `branch ${branch}, winner request #${winner.requestId}`,
       );
     });

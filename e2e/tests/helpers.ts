@@ -130,6 +130,75 @@ export interface CapturedAllocation {
   body?: AllocationResult;
 }
 
+// Pure predicate for the race overlap gate: strict overlap of two HTTP
+// intervals on the same monotonic clock. Touching endpoints do not overlap.
+export function intervalsOverlap(
+  startA: number,
+  endA: number,
+  startB: number,
+  endB: number,
+): boolean {
+  return Math.max(startA, startB) < Math.min(endA, endB);
+}
+
+function allocationPath(requestId: number): string {
+  return `/api/pickup-requests/${requestId}/allocation`;
+}
+
+function isOk(status: number): boolean {
+  return status >= 200 && status < 300;
+}
+
+// Synchronous fail-fast check for the current store contents. Matches the
+// allocation URL first, then throws on non-2xx (with HTTP status and URL) or
+// on malformed 2xx bodies (missing requestId). A valid success entry wins, so
+// the success path never throws.
+export function throwIfAllocationError(
+  store: CapturedAllocation[],
+  requestId: number,
+): void {
+  const matching = store.filter((entry) => entry.url.includes(allocationPath(requestId)));
+  const hasSuccess = matching.some(
+    (entry) => isOk(entry.status) && entry.body?.requestId === requestId,
+  );
+  if (hasSuccess) return;
+  const httpError = matching.find((entry) => !isOk(entry.status));
+  if (httpError) {
+    throw new Error(
+      `Allocation request #${requestId} failed with HTTP ${httpError.status} at ${httpError.url}`,
+    );
+  }
+  const malformed = matching.find(
+    (entry) => isOk(entry.status) && entry.body?.requestId !== requestId,
+  );
+  if (malformed) {
+    throw new Error(
+      `Allocation request #${requestId} returned malformed body (missing requestId) ` +
+        `with HTTP ${malformed.status} at ${malformed.url}`,
+    );
+  }
+}
+
+// Never-resolving fail-fast for racing against UI outcome waits. Rejects
+// promptly on HTTP error, stays pending on success so the UI wait still
+// decides the success path. Callers abort after the race settles.
+export function failFastOnAllocationError(
+  store: CapturedAllocation[],
+  requestId: number,
+  options?: { signal?: AbortSignal; pollMs?: number },
+): Promise<never> {
+  const pollMs = options?.pollMs ?? 100;
+  return (async (): Promise<never> => {
+    for (;;) {
+      if (options?.signal?.aborted) {
+        await new Promise<never>(() => undefined);
+      }
+      throwIfAllocationError(store, requestId);
+      await new Promise((resolve) => setTimeout(resolve, pollMs));
+    }
+  })();
+}
+
 // Passive observer for allocation responses. It never alters, blocks or replays
 // traffic; the scenario path stays on the real backend in replay mode.
 export function captureAllocations(page: Page, store: CapturedAllocation[]): void {
@@ -155,18 +224,12 @@ export async function waitForAllocation(
 ): Promise<CapturedAllocation & { body: AllocationResult }> {
   const deadline = performance.now() + timeoutMs;
   for (;;) {
-    const found = store.find((entry) => entry.body?.requestId === requestId);
-    if (found?.body) return { url: found.url, status: found.status, body: found.body };
-    const failed = store.find(
-      (entry) =>
-        entry.body === undefined &&
-        entry.url.includes(`/api/pickup-requests/${requestId}/allocation`),
+    const matching = store.filter((entry) => entry.url.includes(allocationPath(requestId)));
+    const success = matching.find(
+      (entry) => isOk(entry.status) && entry.body?.requestId === requestId,
     );
-    if (failed) {
-      throw new Error(
-        `Allocation request #${requestId} failed with HTTP ${failed.status} at ${failed.url}`,
-      );
-    }
+    if (success?.body) return { url: success.url, status: success.status, body: success.body };
+    throwIfAllocationError(store, requestId);
     if (performance.now() > deadline) {
       throw new Error(`Timed out waiting for the allocation response of request #${requestId}`);
     }
