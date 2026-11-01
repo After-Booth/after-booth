@@ -16,7 +16,7 @@ public enum ErrorCode {
   DRAFT_ALREADY_CONFIRMED(HttpStatus.CONFLICT, "이미 확정한 초안이에요."),
   NOT_FOUND(HttpStatus.NOT_FOUND, "대상을 찾을 수 없어요."),
   UNSUPPORTED_REQUEST(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "지원하지 않는 요청 형식이에요."),
-  AI_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "음성이나 조건을 해석하지 못했어요. 잠시 후 다시 시도해 주세요."),
+  AI_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "AI 처리를 완료하지 못했어요. 잠시 후 다시 시도해 주세요."),
   INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "잠시 후 다시 시도해 주세요.");
 
   private final HttpStatus status;

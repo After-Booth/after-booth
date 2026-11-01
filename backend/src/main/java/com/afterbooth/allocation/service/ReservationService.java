@@ -145,6 +145,23 @@ public class ReservationService {
     return true;
   }
 
+  @Transactional(
+      readOnly = true,
+      propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
+  public com.afterbooth.inventory.domain.ItemCategory preparePhotoHandover(Long id) {
+    Reservation reservation = find(id);
+    reservation.requirePhotoHandover(clock.instant());
+    return items.get(reservation.itemId()).category();
+  }
+
+  @Transactional(propagation = org.springframework.transaction.annotation.Propagation.MANDATORY)
+  public ReservationResponse lockForPhotoHandover(Long id) {
+    Reservation reservation =
+        reservations.lock(id).orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+    reservation.requirePhotoHandover(clock.instant());
+    return response(reservation, false);
+  }
+
   @Transactional(propagation = org.springframework.transaction.annotation.Propagation.MANDATORY)
   public ReservationResponse lockForHandover(Long id) {
     return response(

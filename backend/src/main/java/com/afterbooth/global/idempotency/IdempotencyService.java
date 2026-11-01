@@ -35,6 +35,16 @@ public class IdempotencyService {
 
   public ResponseEntity<String> execute(
       UUID key, String method, String path, byte[] body, int successStatus, Supplier<?> action) {
+    return executePrepared(key, method, path, body, successStatus, () -> action);
+  }
+
+  public ResponseEntity<String> executePrepared(
+      UUID key,
+      String method,
+      String path,
+      byte[] body,
+      int successStatus,
+      Supplier<? extends Supplier<?>> preparation) {
     String fingerprint = fingerprint(method, path, body);
     Stored existing =
         transaction.execute(
@@ -70,6 +80,7 @@ public class IdempotencyService {
       return response(existing.status(), existing.body());
     }
     try {
+      Supplier<?> action = preparation.get();
       return transaction.execute(
           status -> {
             Object result = action.get();
