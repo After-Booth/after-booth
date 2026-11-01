@@ -5,7 +5,9 @@ import com.afterbooth.ai.ChatRequest.SystemMessage;
 import com.afterbooth.ai.ChatRequest.ToolMessage;
 import com.afterbooth.ai.ChatRequest.UserMessage;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import org.springframework.stereotype.Component;
@@ -151,14 +153,24 @@ class MetaAiGateway implements AiGateway {
       throw new AiCallException(Capability.SPARK, "response has no choices");
     }
     JsonNode message = choice.path("message");
+    if (!message.isObject()) {
+      throw new AiCallException(Capability.SPARK, "response has no assistant message");
+    }
     List<ToolCall> toolCalls = new ArrayList<>();
-    for (JsonNode call : message.path("tool_calls")) {
+    JsonNode calls = message.path("tool_calls");
+    if (!calls.isMissingNode() && !calls.isNull() && !calls.isArray()) {
+      throw new AiCallException(Capability.SPARK, "response tool_calls is not an array");
+    }
+    Set<String> callIds = new HashSet<>();
+    for (JsonNode call : calls) {
       JsonNode function = call.path("function");
-      toolCalls.add(
-          new ToolCall(
-              text(call.path("id")),
-              text(function.path("name")),
-              text(function.path("arguments"))));
+      String id = requiredText(call.path("id"));
+      String name = requiredText(function.path("name"));
+      String arguments = requiredText(function.path("arguments"));
+      if (!"function".equals(text(call.path("type"))) || !callIds.add(id)) {
+        throw new AiCallException(Capability.SPARK, "response has an invalid tool call");
+      }
+      toolCalls.add(new ToolCall(id, name, arguments));
     }
     JsonNode usage = body.path("usage");
     return new ChatResponse(
@@ -210,5 +222,13 @@ class MetaAiGateway implements AiGateway {
 
   private static String text(JsonNode node) {
     return node.isString() ? node.stringValue() : null;
+  }
+
+  private static String requiredText(JsonNode node) {
+    String value = text(node);
+    if (value == null || value.isBlank()) {
+      throw new AiCallException(Capability.SPARK, "response has a malformed tool call");
+    }
+    return value;
   }
 }

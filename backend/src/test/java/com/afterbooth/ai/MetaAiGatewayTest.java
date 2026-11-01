@@ -18,6 +18,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import tools.jackson.databind.JsonNode;
 
 /** Request shapes from spike/REPORT.md §2 and parsing of real spike responses, in live mode. */
@@ -134,6 +136,85 @@ class MetaAiGatewayTest {
           .isInstanceOf(AiCallException.class)
           .hasMessageContaining("no choices");
     }
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+      strings = {
+        "{}",
+        "[{\"id\":\"c1\",\"type\":\"function\",\"function\":{\"name\":\"holdQuantity\",\"arguments\":{}}}]",
+        "[{\"id\":\"\",\"type\":\"function\",\"function\":{\"name\":\"holdQuantity\",\"arguments\":\"{}\"}}]",
+        "[{\"id\":\"c1\",\"type\":\"custom\",\"function\":{\"name\":\"holdQuantity\",\"arguments\":\"{}\"}}]",
+        "[{\"id\":\"c1\",\"type\":\"function\",\"function\":{\"name\":\"holdQuantity\",\"arguments\":\"{}\"}},"
+            + "{\"id\":\"c1\",\"type\":\"function\",\"function\":{\"name\":\"holdQuantity\",\"arguments\":\"{}\"}}]"
+      })
+  void sparkRejectsMalformedToolCallEnvelopes(String calls) {
+    try (StubMetaServer meta = new StubMetaServer()) {
+      meta.respond(200, "{\"choices\":[{\"message\":{\"tool_calls\":" + calls + "}}]}");
+      AiGateway gateway = gateway(AiMode.LIVE, meta.baseUrl(), fixtures, KEY);
+
+      assertThatThrownBy(() -> gateway.chat(textRequest())).isInstanceOf(AiCallException.class);
+    }
+  }
+
+  @Test
+  void sparkPreservesUnknownToolsAndRawArgumentsForServerValidation() {
+    try (StubMetaServer meta = new StubMetaServer()) {
+      meta.respond(
+          200,
+          """
+          {"choices":[{"message":{"tool_calls":[{"id":"c1","type":"function",
+          "function":{"name":"confirmReservation","arguments":"invalid json"}}]}}]}
+          """);
+
+      ChatResponse response =
+          gateway(AiMode.LIVE, meta.baseUrl(), fixtures, KEY).chat(textRequest());
+
+      assertThat(response.toolCalls())
+          .containsExactly(new ToolCall("c1", "confirmReservation", "invalid json"));
+    }
+  }
+
+  @Test
+  void sparkContinuesWithTheExactAssistantCallsAndServerResults() {
+    try (StubMetaServer meta = new StubMetaServer()) {
+      meta.respond(
+          200,
+          """
+          {"choices":[{"message":{"content":null,"tool_calls":[{"id":"c1","type":"function",
+          "function":{"name":"searchCandidates","arguments":"{}"}}]},"finish_reason":"tool_calls"}]}
+          """);
+      AiGateway gateway = gateway(AiMode.LIVE, meta.baseUrl(), fixtures, KEY);
+      ChatResponse first = gateway.chat(textRequest());
+      meta.respond(
+          200,
+          """
+          {"choices":[{"message":{"content":"배정 가능한 물품을 찾았습니다."},"finish_reason":"stop"}]}
+          """);
+
+      ChatResponse second =
+          gateway.chat(
+              new ChatRequest(
+                  List.of(
+                      textRequest().messages().getFirst(),
+                      new ChatRequest.AssistantMessage(first.content(), first.toolCalls()),
+                      new ChatRequest.ToolMessage("c1", "{\"items\":[]}")),
+                  null,
+                  List.of(),
+                  null));
+
+      JsonNode sent = JSON.readTree(meta.received().get(1).body());
+      assertThat(sent.at("/messages/1/content").isNull()).isTrue();
+      assertThat(sent.at("/messages/1/tool_calls/0/id").stringValue()).isEqualTo("c1");
+      assertThat(sent.at("/messages/2/tool_call_id").stringValue()).isEqualTo("c1");
+      assertThat(sent.at("/messages/2/content").stringValue()).isEqualTo("{\"items\":[]}");
+      assertThat(second.content()).isEqualTo("배정 가능한 물품을 찾았습니다.");
+    }
+  }
+
+  private static ChatRequest textRequest() {
+    return new ChatRequest(
+        List.of(new ChatRequest.UserMessage("물품을 배정해 주세요", List.of())), null, List.of(), null);
   }
 
   @Test

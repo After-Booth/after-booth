@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { AllocationProposal } from '../allocation/AllocationProposal'
 import type { ItemCategory, VehicleType } from '../../api/generated/model'
 import { seoulInput, useRequest } from './useRequest'
 
@@ -331,6 +332,7 @@ export function RequestScreen() {
             )}
           </section>
         )}
+        {saved && <AllocationProposal key={saved.id} request={saved} />}
       </div>
     </main>
   )

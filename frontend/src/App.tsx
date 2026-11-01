@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { AllocationBoard } from './features/allocation/AllocationBoard'
 import { getHealth } from './api/generated/afterbooth'
 import type { Health } from './api/generated/model'
 import { RequestScreen } from './features/request/RequestScreen'
@@ -26,6 +27,12 @@ function HomeScreen() {
         >
           물품 픽업 요청하기
         </a>
+        <a
+          href="#/allocation"
+          className="ml-4 inline-block py-3 font-semibold text-emerald-800 underline"
+        >
+          배정 보드
+        </a>
         <p className="mt-6 text-sm" data-testid="health">
           {error
             ? '서버 연결 실패'
@@ -46,5 +53,11 @@ export default function App() {
     window.addEventListener('hashchange', navigate)
     return () => window.removeEventListener('hashchange', navigate)
   }, [])
+  if (hash.startsWith('#/allocation')) {
+    const id = Number(new URLSearchParams(hash.split('?')[1]).get('requestId'))
+    return (
+      <AllocationBoard key={id} requestId={Number.isSafeInteger(id) && id > 0 ? id : undefined} />
+    )
+  }
   return hash === '#/request' ? <RequestScreen /> : <HomeScreen />
 }

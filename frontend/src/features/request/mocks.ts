@@ -3,7 +3,9 @@ import {
   getInterpretConditionsMockHandler,
   getListOrganizationsMockHandler,
 } from '../../api/generated/afterbooth.msw'
-import type { CreatePickupRequest } from '../../api/generated/model'
+import type { CreatePickupRequest, PickupRequest } from '../../api/generated/model'
+
+export const mockPickupRequests = new Map<number, PickupRequest>()
 
 export const requestHandlers = [
   getListOrganizationsMockHandler([
@@ -28,9 +30,12 @@ export const requestHandlers = [
         { status: 400 },
       )
     const body = (await request.json()) as CreatePickupRequest
-    return HttpResponse.json(
-      { id: 1, ...body, createdAt: '2026-10-31T12:00:00+09:00' },
-      { status: 201 },
-    )
+    const saved: PickupRequest = {
+      id: mockPickupRequests.size + 1,
+      ...body,
+      createdAt: new Date().toISOString(),
+    }
+    mockPickupRequests.set(saved.id, saved)
+    return HttpResponse.json(saved, { status: 201 })
   }),
 ]

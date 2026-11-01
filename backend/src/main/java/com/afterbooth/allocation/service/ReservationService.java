@@ -56,7 +56,11 @@ public class ReservationService {
     return hold(input, TransitionActor.USER);
   }
 
-  @Transactional
+  @Transactional(
+      noRollbackFor = {
+        BusinessException.class,
+        com.afterbooth.allocation.domain.AgentHoldRejectedException.class
+      })
   public ReservationResponse holdForAgent(HoldItemRequest input) {
     return hold(input, TransitionActor.AGENT);
   }

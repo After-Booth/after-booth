@@ -60,6 +60,26 @@ public class ItemService {
         .toList();
   }
 
+  @Transactional(readOnly = true)
+  public ItemResponse get(Long id) {
+    return ItemResponse.from(
+        items.findById(id).orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND)));
+  }
+
+  @Transactional(readOnly = true)
+  public List<Item> candidates() {
+    return items.findAll(org.springframework.data.domain.Sort.by("id"));
+  }
+
+  @Transactional(readOnly = true)
+  public List<ItemResponse> list(Long eventId, boolean availableOnly, Instant now) {
+    return candidates().stream()
+        .filter(i -> eventId == null || eventId.equals(i.eventId()))
+        .filter(i -> !availableOnly || (i.availableQty() > 0 && !i.isPickupClosed(now)))
+        .map(ItemResponse::from)
+        .toList();
+  }
+
   private Event findEvent(Long id) {
     return events.findById(id).orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
   }

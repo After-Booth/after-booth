@@ -20,7 +20,7 @@ public class ItemStockService {
     return repository.findById(id).orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
   }
 
-  @Transactional(propagation = Propagation.MANDATORY)
+  @Transactional(propagation = Propagation.MANDATORY, noRollbackFor = BusinessException.class)
   public void decrease(Long id, int quantity) {
     if (repository.decrease(id, quantity) != 1)
       throw new BusinessException(ErrorCode.QTY_UNAVAILABLE);
