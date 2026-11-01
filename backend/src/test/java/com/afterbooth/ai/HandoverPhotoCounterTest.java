@@ -22,12 +22,10 @@ import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
-import tools.jackson.databind.json.JsonMapper;
 
 class HandoverPhotoCounterTest {
   private final AiGateway gateway = mock(AiGateway.class);
-  private final HandoverPhotoCounter counter =
-      new HandoverPhotoCounter(gateway, JsonMapper.builder().build(), "medium", 0.5);
+  private final HandoverPhotoCounter counter = new HandoverPhotoCounter(gateway, "medium", 0.5);
 
   @Test
   void countsReservedCategoryAndMapsBatchLocalIds() throws Exception {
@@ -186,7 +184,7 @@ class HandoverPhotoCounterTest {
             }
           };
       recorded =
-          new HandoverPhotoCounter(local, AiTestSupport.JSON, "medium", 0.5)
+          new HandoverPhotoCounter(local, "medium", 0.5)
               .count(image, "image/png", ItemCategory.STORAGE_BIN);
       assertThat(recorded.allSegmented()).isTrue();
       assertThat(server.received()).hasSize(2);
@@ -194,7 +192,7 @@ class HandoverPhotoCounterTest {
     }
     AiGateway replay = AiTestSupport.gateway(AiMode.REPLAY, closedUrl, fixtures, "");
     assertThat(
-            new HandoverPhotoCounter(replay, AiTestSupport.JSON, "medium", 0.5)
+            new HandoverPhotoCounter(replay, "medium", 0.5)
                 .count(image, "image/png", ItemCategory.STORAGE_BIN))
         .isEqualTo(recorded);
     assertThat(AiTestSupport.fixtureFiles(fixtures)).hasSize(2);

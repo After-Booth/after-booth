@@ -25,19 +25,17 @@ public class HandoverPhotoCounter {
       """;
 
   private final AiGateway gateway;
-  private final JsonMapper json;
+  private final JsonMapper json = JsonMapper.builder().build();
   private final String reasoningEffort;
   private final double samMinScore;
 
   public HandoverPhotoCounter(
       AiGateway gateway,
-      JsonMapper json,
       @Value("${afterbooth.ai.handover.reasoning-effort:minimal}") String reasoningEffort,
       @Value("${afterbooth.ai.sam.min-score}") double samMinScore) {
     if (!Double.isFinite(samMinScore) || samMinScore < 0 || samMinScore > 1)
       throw new IllegalArgumentException("SAM minimum score must be between zero and one");
     this.gateway = gateway;
-    this.json = json;
     this.reasoningEffort = reasoningEffort;
     this.samMinScore = samMinScore;
   }
