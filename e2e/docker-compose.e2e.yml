@@ -1,0 +1,18 @@
+# Dedicated E2E stack for issue #12. Isolates the demo scenario from parallel
+# sessions on the default ports (8080/15432) and the shared pgdata volume.
+# Run from the repo root:
+#   docker compose -p afterbooth-e2e-12 -f docker-compose.yml -f e2e/docker-compose.e2e.yml up --build -d
+# Reset the demo database (this project only, never the shared one):
+#   docker compose -p afterbooth-e2e-12 -f docker-compose.yml -f e2e/docker-compose.e2e.yml down -v
+services:
+  postgres:
+    ports: !override
+      - "15433:5432"
+    volumes: !override
+      - pgdata-e2e-12:/var/lib/postgresql/data
+  app:
+    ports: !override
+      - "18080:8080"
+
+volumes:
+  pgdata-e2e-12:
