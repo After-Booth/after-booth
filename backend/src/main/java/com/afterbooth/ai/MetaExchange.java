@@ -1,7 +1,6 @@
 package com.afterbooth.ai;
 
 import java.io.ByteArrayOutputStream;
-import java.net.http.HttpClient;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.EnumMap;
@@ -18,7 +17,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
-import org.springframework.http.client.JdkClientHttpRequestFactory;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
@@ -237,10 +236,9 @@ class MetaExchange {
   private static Map<Capability, RestClient> clients(AiProperties properties) {
     Map<Capability, RestClient> clients = new EnumMap<>(Capability.class);
     for (Capability capability : Capability.values()) {
-      // JDK HTTP requests cancel their underlying exchange when the virtual thread is interrupted.
-      JdkClientHttpRequestFactory factory =
-          new JdkClientHttpRequestFactory(
-              HttpClient.newBuilder().connectTimeout(properties.timeouts().of(capability)).build());
+      // Non-streaming calls answer in one piece, so the read timeout bounds the whole call
+      SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+      factory.setConnectTimeout(properties.timeouts().of(capability));
       factory.setReadTimeout(properties.timeouts().of(capability));
       clients.put(
           capability,

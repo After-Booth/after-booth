@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { setupServer } from 'msw/node'
@@ -228,41 +228,33 @@ test.each(['audio/wav', 'audio/x-wav', ''])(
   'uploads WAV bytes unchanged with voice timing when the file MIME is %s',
   async (type) => {
     const bytes = new Uint8Array([82, 73, 70, 70, 0, 255, 128, 0, 87, 65, 86, 69])
-    let received: Uint8Array | undefined
-    let complete: (() => void) | undefined
-    server.use(
-      http.post('*/api/conditions/interpret', async ({ request }) => {
-        const form = await request.formData()
-        expect(form.get('context')).toBe('RECEIVER')
-        expect(form.has('text')).toBe(false)
-        const audio = form.get('audio') as File
-        expect(audio.name).toBe('sample.WAV')
-        expect(audio.type).toBe('audio/wav')
-        received = new Uint8Array(await audio.arrayBuffer())
-        await new Promise<void>((resolve) => {
-          complete = resolve
-        })
-        return HttpResponse.json({
-          context: 'RECEIVER',
-          transcript,
-          conditions: {},
-          missingFields: [],
-        })
-      }),
-    )
+    // MSW cannot read a jsdom File from a multipart body, so the request is inspected before it leaves
+    const send = globalThis.fetch
+    let sent: FormData | undefined
+    vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
+      if (!url.endsWith('/api/conditions/interpret')) return send(url, init)
+      sent = init?.body as FormData
+      return Promise.resolve(
+        Response.json({ context: 'RECEIVER', transcript, conditions: {}, missingFields: [] }),
+      )
+    })
     render(<RequestScreen />)
-    const user = userEvent.setup()
     const input = screen.getByLabelText('녹음 파일 올리기 (WAV)')
     expect(input).toHaveAttribute('accept', 'audio/wav,.wav')
     expect(input).toHaveAccessibleDescription('16 kHz 모노 WAV 파일을 올려 주세요 · 최대 60초')
-    await user.upload(input, new File([bytes], 'sample.WAV', { type }))
-    expect(await screen.findByText('말씀하신 조건을 정리하고 있어요…')).toBeInTheDocument()
+    // Checked synchronously after the change, before the upload can answer
+    fireEvent.change(input, { target: { files: [new File([bytes], 'sample.WAV', { type })] } })
+    expect(screen.getByText('말씀하신 조건을 정리하고 있어요…')).toBeInTheDocument()
     expect(screen.getByText('0초 경과 · 보통 약 5초 걸려요')).toBeInTheDocument()
     expect(input).toBeDisabled()
     expect(screen.getByRole('button', { name: '마이크로 말하기' })).toBeDisabled()
-    await waitFor(() => expect(received).toEqual(bytes))
-    complete?.()
     expect(await screen.findByText('입력 원문')).toBeInTheDocument()
+    expect(sent?.get('context')).toBe('RECEIVER')
+    expect(sent?.has('text')).toBe(false)
+    const audio = sent?.get('audio') as File
+    expect(audio.name).toBe('sample.WAV')
+    expect(audio.type).toBe('audio/wav')
+    expect(new Uint8Array(await audio.arrayBuffer())).toEqual(bytes)
     expect(input).toBeEnabled()
   },
 )
