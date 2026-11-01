@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { setupServer } from 'msw/node'
-import { afterAll, afterEach, beforeAll, expect, test } from 'vitest'
+import { afterAll, afterEach, beforeAll, expect, test, vi } from 'vitest'
 import { HandoverScreen } from './HandoverScreen'
 
 const reservation = {
@@ -44,9 +44,21 @@ const server = setupServer(
   ),
   http.get('*/api/stats/reuse', () => HttpResponse.json(emptyStats)),
 )
-beforeAll(() => server.listen())
+beforeAll(() => {
+  server.listen()
+  vi.stubGlobal(
+    'URL',
+    class extends URL {
+      static createObjectURL = vi.fn(() => 'blob:handover')
+      static revokeObjectURL = vi.fn()
+    },
+  )
+})
 afterEach(() => server.resetHandlers())
-afterAll(() => server.close())
+afterAll(() => {
+  server.close()
+  vi.unstubAllGlobals()
+})
 
 async function selectReservation() {
   const user = userEvent.setup()

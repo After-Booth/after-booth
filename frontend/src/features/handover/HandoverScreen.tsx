@@ -11,7 +11,8 @@ export function HandoverScreen() {
   const [quantity, setQuantity] = useState('')
   const reservation = handover.reservations.find((entry) => entry.id === handover.selectedId)
   const confirmed = reservation?.status === 'CONFIRMED'
-  const completed = handover.result?.status === 'COMPLETED'
+  const completion = handover.recoveredReservation ?? handover.result?.reservation ?? reservation
+  const completed = completion?.status === 'HANDED_OVER' && completion.handedOverQty !== undefined
   const accepted = Number(quantity)
   const validQuantity =
     Number.isInteger(accepted) && accepted >= 1 && accepted <= (reservation?.quantity ?? 0)
@@ -56,7 +57,12 @@ export function HandoverScreen() {
             >
               <option value="">예약을 선택해 주세요</option>
               {handover.reservations
-                .filter((entry) => entry.status === 'CONFIRMED' || entry.id === handover.selectedId)
+                .filter(
+                  (entry) =>
+                    entry.status === 'CONFIRMED' ||
+                    entry.status === 'HANDED_OVER' ||
+                    entry.id === handover.selectedId,
+                )
                 .map((entry) => (
                   <option key={entry.id} value={entry.id}>
                     예약 #{entry.id} · {entry.itemLabel} {entry.quantity}개
@@ -91,10 +97,38 @@ export function HandoverScreen() {
                 onChange={(event) => {
                   const photo = event.target.files?.[0]
                   event.target.value = ''
-                  if (photo) void handover.upload(photo)
+                  if (photo) {
+                    setQuantity('')
+                    void handover.upload(photo)
+                  }
                 }}
               />
             </label>
+          )}
+          {handover.photoUrl && (
+            <figure>
+              <div className="relative overflow-hidden rounded-xl bg-slate-100">
+                <img src={handover.photoUrl} alt="인계 사진" className="block w-full" />
+                {handover.photoResult?.boxes.map((box, index) => (
+                  <div
+                    key={index}
+                    data-testid="handover-box"
+                    className="pointer-events-none absolute border-2 border-emerald-600"
+                    style={{
+                      left: `${box.x * 100}%`,
+                      top: `${box.y * 100}%`,
+                      width: `${box.width * 100}%`,
+                      height: `${box.height * 100}%`,
+                    }}
+                  />
+                ))}
+              </div>
+              {handover.photoResult && handover.photoResult.boxes.length === 0 && (
+                <figcaption className="mt-2 text-sm text-slate-600">
+                  사진에 표시할 수량 박스가 없어요.
+                </figcaption>
+              )}
+            </figure>
           )}
           {handover.busy && (
             <AiProgress
@@ -172,8 +206,7 @@ export function HandoverScreen() {
             <div role="status" className="rounded-xl bg-emerald-100 p-5">
               <h3 className="text-lg font-bold">인계를 완료했어요</h3>
               <p className="mt-2">
-                {handover.result?.reservation.itemLabel}{' '}
-                {handover.result?.reservation.handedOverQty}개가 다시 사용돼요.
+                {completion.itemLabel} {completion.handedOverQty}개가 다시 사용돼요.
               </p>
             </div>
           )}
