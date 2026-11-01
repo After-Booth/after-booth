@@ -165,6 +165,8 @@ export function useHandover() {
         signal.throwIfAborted()
         setCancelled(true)
         setResult(undefined)
+        setPhoto(undefined)
+        setPhotoResult(undefined)
       } else {
         const response = await retryConflict(
           () =>

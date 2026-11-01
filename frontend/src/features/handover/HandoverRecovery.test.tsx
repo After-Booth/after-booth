@@ -386,3 +386,52 @@ test('clears the photo and old result when choosing a different reservation', as
   expect(screen.queryByTestId('handover-box')).not.toBeInTheDocument()
   expect(screen.queryByLabelText('실제 받은 수량')).not.toBeInTheDocument()
 })
+
+test('clears the photo and recount evidence and revokes its URL after cancellation succeeds', async () => {
+  vi.mocked(cancelReservation).mockResolvedValue(ok({ ...reservation, status: 'RELEASED' }))
+  await mount()
+  await upload()
+  expect(screen.getAllByTestId('handover-box')).toHaveLength(2)
+  await act(async () => {
+    fireEvent.click(screen.getByRole('button', { name: '아무것도 받지 않았어요 · 예약 취소' }))
+  })
+  expect(screen.getByText('예약을 취소하고 수량을 재고로 돌려놓았어요.')).toBeInTheDocument()
+  expect(screen.queryByAltText('인계 사진')).not.toBeInTheDocument()
+  expect(screen.queryByTestId('handover-box')).not.toBeInTheDocument()
+  expect(screen.queryByText('수량 확인이 필요해요')).not.toBeInTheDocument()
+  expect(revokeUrl).toHaveBeenCalledExactlyOnceWith('blob:handover-1')
+})
+
+test.each(['network', 500, 502, 504] as const)(
+  'preserves photo evidence after ambiguous cancellation %s and clears it after a same-key retry succeeds',
+  async (failure) => {
+    vi.mocked(cancelReservation)
+      .mockRejectedValueOnce(
+        failure === 'network'
+          ? new TypeError('Connection lost')
+          : new ApiError(failure, 'INTERNAL_ERROR', '요청 결과를 확인하지 못했어요.'),
+      )
+      .mockResolvedValue(ok({ ...reservation, status: 'RELEASED' }))
+    await mount()
+    await upload()
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '아무것도 받지 않았어요 · 예약 취소' }))
+    })
+    expect(screen.getByRole('alert')).toBeInTheDocument()
+    expect(screen.getByAltText('인계 사진')).toHaveAttribute('src', 'blob:handover-1')
+    expect(screen.getAllByTestId('handover-box')).toHaveLength(2)
+    expect(screen.getByText('수량 확인이 필요해요')).toBeInTheDocument()
+    expect(revokeUrl).not.toHaveBeenCalled()
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '다시 시도' }))
+    })
+    expect(cancelReservation).toHaveBeenCalledTimes(2)
+    const calls = vi.mocked(cancelReservation).mock.calls
+    expect(calls[1][1]['Idempotency-Key']).toBe(calls[0][1]['Idempotency-Key'])
+    expect(screen.getByText('예약을 취소하고 수량을 재고로 돌려놓았어요.')).toBeInTheDocument()
+    expect(screen.queryByAltText('인계 사진')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('handover-box')).not.toBeInTheDocument()
+    expect(screen.queryByText('수량 확인이 필요해요')).not.toBeInTheDocument()
+    expect(revokeUrl).toHaveBeenCalledExactlyOnceWith('blob:handover-1')
+  },
+)
