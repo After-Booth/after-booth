@@ -1,0 +1,193 @@
+import { expect, type APIRequestContext, type Page } from '@playwright/test';
+import { performance } from 'node:perf_hooks';
+
+export const BASE_URL = process.env.E2E_BASE_URL ?? 'http://localhost:18080';
+
+// Contract shapes used for verification reads (subset of contract/openapi.yaml).
+export interface Organization {
+  id: number;
+  name: string;
+}
+
+export interface Event {
+  id: number;
+  name: string;
+  organizationId: number;
+  venue: string;
+  teardownDeadline: string;
+}
+
+export interface Item {
+  id: number;
+  eventId: number;
+  organizationId: number;
+  category: 'DISPLAY_RACK' | 'STORAGE_BIN' | 'FOLDING_TABLE';
+  label: string;
+  totalQty: number;
+  availableQty: number;
+  pickupDeadline: string;
+}
+
+export interface Reservation {
+  id: number;
+  requestId: number;
+  organizationId: number;
+  itemId: number;
+  itemLabel: string;
+  quantity: number;
+  handedOverQty?: number;
+  status: 'HELD' | 'CONFIRMED' | 'HANDED_OVER' | 'RELEASED' | 'EXPIRED';
+  holdExpiresAt: string;
+  pickupDeadline: string;
+  createdAt: string;
+}
+
+export interface ToolCall {
+  name: 'searchCandidates' | 'checkVehicleFit' | 'holdQuantity';
+  arguments: Record<string, unknown>;
+  outcome: 'OK' | 'REJECTED';
+  code?: string;
+  summary?: string;
+}
+
+export interface Rejection {
+  itemId: number;
+  code: string;
+  message: string;
+  limitingDimension?: string;
+}
+
+export interface Alternative {
+  item: Item;
+  quantity: number;
+  reason: string;
+}
+
+export interface AllocationResult {
+  requestId: number;
+  status: 'HELD' | 'NO_MATCH';
+  explanation: string;
+  reservations: Reservation[];
+  rejections: Rejection[];
+  alternatives: Alternative[];
+  toolCalls: ToolCall[];
+}
+
+export interface ReuseStats {
+  totalReused: number;
+  byCategory: { category: string; label: string; quantity: number }[];
+  byEvent: { eventId: number; eventName: string; quantity: number }[];
+}
+
+export const REJECTION_CODES = new Set([
+  'VEHICLE_TOO_SMALL',
+  'QTY_UNAVAILABLE',
+  'QTY_EXCEEDS_REQUEST',
+  'PICKUP_CLOSED',
+  'CATEGORY_MISMATCH',
+]);
+
+export async function apiGet<T>(request: APIRequestContext, path: string): Promise<T> {
+  const response = await request.get(BASE_URL + path);
+  expect(response.status(), `GET ${path}`).toBe(200);
+  return (await response.json()) as T;
+}
+
+export interface LatencyStep {
+  step: string;
+  ms: number;
+}
+
+// Wall-clock recorder for the per-step latency table in the report.
+export class LatencyLog {
+  private readonly steps: LatencyStep[] = [];
+
+  now(): number {
+    return performance.now();
+  }
+
+  add(step: string, ms: number): void {
+    this.steps.push({ step, ms });
+  }
+
+  async measure<T>(step: string, fn: () => Promise<T>): Promise<T> {
+    const start = performance.now();
+    try {
+      return await fn();
+    } finally {
+      this.steps.push({ step, ms: performance.now() - start });
+    }
+  }
+
+  entries(): LatencyStep[] {
+    return [...this.steps];
+  }
+}
+
+export interface CapturedAllocation {
+  url: string;
+  status: number;
+  body?: AllocationResult;
+}
+
+// Passive observer for allocation responses. It never alters, blocks or replays
+// traffic; the scenario path stays on the real backend in replay mode.
+export function captureAllocations(page: Page, store: CapturedAllocation[]): void {
+  page.on('response', (response) => {
+    const request = response.request();
+    if (request.method() !== 'POST') return;
+    const path = new URL(request.url()).pathname;
+    if (!/^\/api\/pickup-requests\/\d+\/allocation$/.test(path)) return;
+    void response.json().then(
+      (body) =>
+        store.push({ url: request.url(), status: response.status(), body: body as AllocationResult }),
+      // Non-JSON responses carry no requestId, so keep a status-only entry
+      // matched by URL in waitForAllocation to fail fast with the real status.
+      () => store.push({ url: request.url(), status: response.status() }),
+    );
+  });
+}
+
+export async function waitForAllocation(
+  store: CapturedAllocation[],
+  requestId: number,
+  timeoutMs = 30_000,
+): Promise<CapturedAllocation & { body: AllocationResult }> {
+  const deadline = performance.now() + timeoutMs;
+  for (;;) {
+    const found = store.find((entry) => entry.body?.requestId === requestId);
+    if (found?.body) return { url: found.url, status: found.status, body: found.body };
+    const failed = store.find(
+      (entry) =>
+        entry.body === undefined &&
+        entry.url.includes(`/api/pickup-requests/${requestId}/allocation`),
+    );
+    if (failed) {
+      throw new Error(
+        `Allocation request #${requestId} failed with HTTP ${failed.status} at ${failed.url}`,
+      );
+    }
+    if (performance.now() > deadline) {
+      throw new Error(`Timed out waiting for the allocation response of request #${requestId}`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+}
+
+export function formatLatencyTable(
+  entries: LatencyStep[],
+  header: Record<string, string>,
+): string {
+  const headerLine = Object.entries(header)
+    .map(([key, value]) => `${key}=${value}`)
+    .join(' ');
+  const rows = entries.map(
+    (entry) => `| ${entry.step} | ${(entry.ms / 1000).toFixed(1)}s | ${Math.round(entry.ms)}ms |`,
+  );
+  return [
+    headerLine,
+    '| step | seconds | ms |',
+    '|---|---|---|',
+    ...rows,
+  ].join('\n');
+}

@@ -88,6 +88,31 @@ Dependency order: #1 → (#3 and #4 in parallel) → #5·#6 (DY) / #7 → #8 →
 
 #13 recorded the demo scenario with key A (12 live calls, about $0.03, D-057/D-058) and verified it three ways on the real Docker stack through the built-in browser: replay from an empty database (intake, voice request, allocation, two-tab race within 5 ms, confirm, handover, statistics); live mode with an unroutable Meta base URL (the first Spark call waited the 8 s window, every step then completed from fixtures, including the stock-0 loser branch); and the record runs themselves. Codex wrote the first implementation but its sandbox could not run Gradle or vitest; four of its frontend tests failed locally and were rewritten, and the 60 s fallback cooldown was added after the network-loss run exposed per-turn waits. The recording confirmed the winner through the API; a "예약 확정하기" button for HELD reservations was then added to the allocation proposal in the same PR.
 
+#12 replays the full demo on the real Docker stack through headless Chromium (D-059): photo intake → voice request → sedan NO_MATCH proposal → pre-race API check (exactly one available rack; the photo added 4 bins, 0 racks) → two independent browser contexts racing the last rack with Promise.all clicks → winner confirms via the "진열대 예약 확정하기" UI button → photo handover → stats agreement. Six green runs from clean DBs (2 verified by the main session, 4 by the implementer); every run executed the `simultaneous-reject` branch with click/request gaps of 5–8 ms and in-flight overlap asserted on both click and HTTP timestamps; winners varied (#2/#3), so the test is winner-agnostic. The recorded `stock-0-after-commit` branch never executed; its detector matches the recorded fixture (search shows availableQty 0, the model makes no holdQuantity call) and fails closed on any other loser shape. "Green once in live" stays open (no live approval); #12 is not closed.
+
+Latency per step (mode=replay, env=macOS Docker app on localhost:18080 + headless-shell Chromium, n=1 per run, wall clock in ms):
+
+| step | main1 | main2 |
+|---|---|---|
+| guard: server health and replay mode | 17 | 17 |
+| photo intake: upload bins photo → auto result | 1314 | 1317 |
+| photo intake: confirm registration | 92 | 66 |
+| request #1: voice WAV → interpretation | 32 | 33 |
+| request #1: save pickup request | 45 | 51 |
+| request #1: allocation proposal (sedan cannot fit) | 112 | 112 |
+| pre-race API check: stock of one rack | 7 | 6 |
+| race A: same text → saved request | 224 | 222 |
+| race B: same text → saved request | 257 | 239 |
+| race: both allocations dispatched together | 105 | 103 |
+| race allocation A: click → outcome | 95 | 96 |
+| race allocation B: click → outcome | 104 | 103 |
+| winner: confirm held reservation in UI | 51 | 43 |
+| handover: rack photo → completed | 73 | 122 |
+| stats: UI and API agreement | 4 | 5 |
+| whole scenario (test body) | ~2700 | ~2700 |
+
+Photo → auto result is 1.3 s in replay, inside the 15 s demo bar; replay latency is not model latency (live expectation ≈ 8 s per `aiLatency.ts`, not measured here — the live 15 s bar belongs to #16/G3).
+
 ## Phase 3: Submission (target 11/4 morning)
 
 - [ ] #15 English README (DY)
