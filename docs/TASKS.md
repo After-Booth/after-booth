@@ -31,7 +31,7 @@ The unit of work is a GitHub issue. Owners: **DY** = namdongyeob, **WJ** = WookJ
 | #9 | Allocation agent (function calling, server validation, alternatives) + allocation board | WJ | BE+AI+FE |
 | #10 | Handover recount + reuse stats + screens | WJ | BE+AI+FE |
 
-- [x] #3 · [x] #4 · [x] #5 · [x] #6 · [x] #7 · [x] #8 · [ ] #9 · [ ] #10
+- [x] #3 · [x] #4 · [x] #5 · [x] #6 · [x] #7 · [x] #8 · [ ] #9 · [x] #10
 
 #9 implementation and local automated checks are complete, but its actual two-browser acceptance criterion remains open. #12 owns that browser scenario and the separately approved live end-to-end run. Do not treat database concurrency tests as browser execution or close #9 before that criterion is verified or explicitly reassigned.
 
@@ -57,6 +57,25 @@ The subsequent independent pre-PR review found R5: already-held item IDs were ex
 PR #40 review revisions address R1–R8 (D-053/D-054). Replay inputs now exclude per-run identity and timestamps while retaining server decision inputs; a real loopback RECORD → closed-server REPLAY test confirms all three fixture keys match across different request/reservation IDs and shifted dates. Other-category search is read-only and cannot bypass agent HOLD category validation. Typed protocol errors keep model fallback separate from database errors; PostgreSQL tests prove an infrastructure failure rolls back earlier holds. Domain assembly and Korean item-labelled rejections are covered, and AI_UNAVAILABLE exposes manual stock selection without claiming AI success.
 
 The main session ran in `backend/`: `./gradlew spotlessApply compileJava compileTestJava spotlessCheck test --tests '*AllocationIntegrationTest' --tests '*AllocationServiceTest' --tests '*AllocationOutcomeTest' --tests 'com.afterbooth.ArchitectureTest' --tests '*ReservationIntegrationTest' --tests '*DefaultVehicleHoldIntegrationTest' --tests '*AiGatewayModesTest' --tests '*MetaAiGatewayTest' --tests '*FixtureStoreTest' --tests '*VehicleFitPolicyTest' --no-daemon` — 110 tests passed with zero failures/errors/skips, including 15 allocation PostgreSQL tests. In `frontend/`, `npm run build && npm test && npm run lint && npm run format:check` passed, including 61 tests. Fresh independent and scoped adversarial reviews found no new blocking findings. Only local commits are authorized for this revision; the remote PR still refers to the preceding head. No external AI call was made. Actual two-browser execution, the integrated demo and the full local backend suite were not run for this revision; the earlier PR head's GitHub backend CI did run its full suite successfully, which does not certify these new changes.
+
+#10 implements photo recount, human mismatch resolution, reuse statistics and the Korean handover screen (D-055). It starts from merged #9 on `origin/main` `c679021`; the existing #9 worktree was not modified. Spark counts the reserved category, shared SAM batching checks every box, and completed zero/incomplete results remain resolvable. AI preparation holds no database transaction; final recount, existing #7 completion/restoration and the idempotent response commit together after locking and revalidation. Existing contracted event reads now work on the real server. No contract, migration or dependency changed.
+
+The main session inspected the implementation diff and ran these final gates on macOS:
+
+```bash
+cd backend
+./gradlew spotlessApply compileJava compileTestJava spotlessCheck test --tests '*HandoverIntegrationTest' --tests '*HandoverPhotoCounterTest' --tests 'com.afterbooth.ArchitectureTest' --tests '*ReservationIntegrationTest' --tests '*DefaultVehicleHoldIntegrationTest' --tests '*ReservationRulesTest' --tests '*ReservationSchedulerTest' --tests '*IntakeIntegrationTest' --tests '*IntakePipelineTest' --tests '*IntakeProcessorTest' --tests '*CoreDomainTest' --tests '*AllocationIntegrationTest' --tests '*PickupRequestIntegrationTest' --no-daemon
+# 146 passed, zero failures/errors/skips, including 14 PostgreSQL handover tests and 20 counter tests.
+cd ../frontend
+npm run build && npm test && npm run lint && npm run format:check
+# Build, lint and formatting passed; 72 tests passed, including 11 handover screen tests.
+```
+
+The first backend gate exposed incomplete prepared-action wiring: a missing supplier failed compilation, then the unchanged controller call caused two cancellation/scheduler restoration assertions to fail. Both were corrected; the final gate also proves twelve simultaneous HTTP preparations do not exhaust the connection pool, and an in-flight duplicate conflicts before replaying the completed first result. A loopback real-gateway RECORD → closed-server REPLAY test covers serialization and fixture lookup without external model access.
+
+Separately, actual headless Chromium at 390×844 ran against Vite without MSW, the real Spring HTTP server and PostgreSQL Testcontainers. A temporary test-only launcher supplied a local AiGateway double to the real counter. `node /private/tmp/afterbooth-10-browser/browser.cjs` passed matching completion, same-file retake, partial resolution, Spark zero, completed SAM without masks, 503 recovery, empty/nonempty event filters, and real request → HOLD → confirm → zero-count photo → cancel. HTTP reads confirmed handed-over quantities, exact remaining inventory and total reuse ten; no browser page errors occurred. The temporary launcher, images and screenshot remain outside the repository and are not required product artifacts. This is real browser/server verification with synthetic AI, not live model verification or the full demo.
+
+Fresh read-only Codex CLI review found R1: rotating the action key after any HTTP error could lose a committed result behind a 502/504. R1 is fixed by preserving keys for ambiguous infrastructure errors, with mounted regressions for 502, 504 and 500. A second fresh independent re-review, including adversarial state/concurrency/AI-evidence inspection, approved with no blocking findings. The designated companion plugin is unavailable; the installed Codex CLI provided the substitute, rather than claiming Claude or companion execution. The main session also inspected the final diff and test XML. Secret scanning and whitespace checks passed before local commits. No GitHub write, push, PR or external product AI call was made. Not verified: full backend suite, real model accuracy/latency, the complete intake-to-allocation demo and the separate two-browser #12 scenario.
 
 Dependency order: #1 → (#3 and #4 in parallel) → #5·#6 (DY) / #7 → #8 → #9 → #10 (WJ)
 

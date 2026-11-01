@@ -1,0 +1,48 @@
+package com.afterbooth.handover.service;
+
+import com.afterbooth.ai.AiCallException;
+import com.afterbooth.ai.HandoverPhotoCounter;
+import com.afterbooth.ai.MissingFixtureException;
+import com.afterbooth.allocation.service.ReservationService;
+import com.afterbooth.global.error.BusinessException;
+import com.afterbooth.global.error.ErrorCode;
+import com.afterbooth.handover.dto.HandoverResult;
+import com.afterbooth.intake.domain.IntakeUpload;
+import java.util.function.Supplier;
+import org.springframework.stereotype.Service;
+
+@Service
+public class HandoverService {
+  private final ReservationService reservations;
+  private final HandoverPhotoCounter counter;
+  private final HandoverCompletionService completion;
+
+  public HandoverService(
+      ReservationService reservations,
+      HandoverPhotoCounter counter,
+      HandoverCompletionService completion) {
+    this.reservations = reservations;
+    this.counter = counter;
+    this.completion = completion;
+  }
+
+  public HandoverResult submit(Long id, byte[] bytes, String mediaType) {
+    return prepare(id, bytes, mediaType).get();
+  }
+
+  public Supplier<HandoverResult> prepare(Long id, byte[] bytes, String mediaType) {
+    IntakeUpload upload = new IntakeUpload(bytes, mediaType);
+    var category = reservations.preparePhotoHandover(id);
+    HandoverPhotoCounter.Result result;
+    try {
+      result = counter.count(upload.bytes(), upload.mediaType(), category);
+    } catch (AiCallException | MissingFixtureException failure) {
+      throw new BusinessException(ErrorCode.AI_UNAVAILABLE);
+    }
+    return () -> completion.record(id, result.count(), result.boxes(), result.allSegmented());
+  }
+
+  public HandoverResult resolve(Long id, int accepted) {
+    return completion.resolveResult(id, accepted);
+  }
+}

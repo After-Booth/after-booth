@@ -12,6 +12,7 @@ import com.afterbooth.allocation.repository.TransitionRepository;
 import com.afterbooth.global.error.BusinessException;
 import com.afterbooth.global.error.ErrorCode;
 import com.afterbooth.inventory.domain.Item;
+import com.afterbooth.inventory.domain.ItemCategory;
 import com.afterbooth.inventory.service.ItemStockService;
 import com.afterbooth.inventory.service.VehicleFitPolicy;
 import com.afterbooth.request.domain.PickupRequest;
@@ -143,6 +144,23 @@ public class ReservationService {
       items.restore(r.itemId(), r.quantity());
     transitions.save(ReservationTransition.record(r.id(), r.status(), next, actor, now));
     return true;
+  }
+
+  @Transactional(
+      readOnly = true,
+      propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
+  public ItemCategory preparePhotoHandover(Long id) {
+    Reservation reservation = find(id);
+    reservation.requirePhotoHandover(clock.instant());
+    return items.get(reservation.itemId()).category();
+  }
+
+  @Transactional(propagation = org.springframework.transaction.annotation.Propagation.MANDATORY)
+  public ReservationResponse lockForPhotoHandover(Long id) {
+    Reservation reservation =
+        reservations.lock(id).orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+    reservation.requirePhotoHandover(clock.instant());
+    return response(reservation, false);
   }
 
   @Transactional(propagation = org.springframework.transaction.annotation.Propagation.MANDATORY)
