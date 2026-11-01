@@ -37,3 +37,6 @@ Thumbs.db
 
 ### Raw spike output (commit sample photos and audio only after checking them by hand) ###
 spike/out/
+
+### Local graphify knowledge graph (regenerate with /graphify) ###
+graphify-out/
