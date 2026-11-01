@@ -20,6 +20,7 @@ record AiProperties(
     @NotNull @Valid PerCapability models,
     @NotNull @Valid PerCapability paths,
     @NotNull @Valid Timeouts timeouts,
+    @NotNull @Valid Timeouts fallbackAfter,
     @NotEmpty List<String> transcribeLanguageBias) {
 
   AiProperties {
@@ -53,6 +54,8 @@ record AiProperties(
         + paths
         + ", timeouts="
         + timeouts
+        + ", fallbackAfter="
+        + fallbackAfter
         + ", transcribeLanguageBias="
         + transcribeLanguageBias
         + "]";

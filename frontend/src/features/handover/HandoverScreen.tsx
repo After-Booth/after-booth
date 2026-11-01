@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { AiProgress } from '../../components/AiProgress'
+import { AI_EXPECTED_SECONDS } from '../aiLatency'
 import { useHandover } from './useHandover'
 
 const button =
@@ -83,7 +85,7 @@ export function HandoverScreen() {
               <input
                 className="sr-only"
                 type="file"
-                accept="image/*"
+                accept="image/jpeg,image/png"
                 capture="environment"
                 disabled={handover.busy}
                 onChange={(event) => {
@@ -95,7 +97,10 @@ export function HandoverScreen() {
             </label>
           )}
           {handover.busy && (
-            <p role="status">물품 수량과 분할 결과를 확인하고 있어요. 잠시 기다려 주세요…</p>
+            <AiProgress
+              label="물품 수량과 분할 결과를 확인하고 있어요. 잠시 기다려 주세요…"
+              expectedSeconds={AI_EXPECTED_SECONDS.handover}
+            />
           )}
           {handover.message && (
             <div role="alert">

@@ -29,6 +29,8 @@ final class AiTestSupport {
             "/v1/chat/completions", "/v1/responses", "/v1/asr/transcribe"),
         new AiProperties.Timeouts(
             Duration.ofSeconds(5), Duration.ofSeconds(5), Duration.ofSeconds(5)),
+        new AiProperties.Timeouts(
+            Duration.ofMillis(200), Duration.ofMillis(200), Duration.ofMillis(200)),
         List.of("Korean"));
   }
 

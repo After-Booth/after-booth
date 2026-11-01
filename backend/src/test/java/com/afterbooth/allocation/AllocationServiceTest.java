@@ -174,6 +174,35 @@ class AllocationServiceTest {
   }
 
   @Test
+  void searchWithoutCategoryDescribesRequestedInventory() {
+    assertSearchSummary("{}", "요청한 종류의 재고를 조회했어요.");
+  }
+
+  @Test
+  void searchWithRequestedCategoryDescribesRequestedInventory() {
+    assertSearchSummary("{\"category\":\"DISPLAY_RACK\"}", "요청한 종류의 재고를 조회했어요.");
+  }
+
+  @Test
+  void searchWithAnotherCategoryDescribesOtherInventory() {
+    assertSearchSummary("{\"category\":\"FOLDING_TABLE\"}", "다른 종류의 재고도 살펴봤어요.");
+  }
+
+  private void assertSearchSummary(String arguments, String summary) {
+    request(11L, NOW);
+    item(NOW);
+    AiGateway ai = mock(AiGateway.class);
+    when(ai.chat(any()))
+        .thenReturn(
+            tool("search", "searchCandidates", arguments),
+            new ChatResponse("재고를 확인했어요.", List.of(), "stop", null));
+
+    assertThat(service(ai, NOW).run(11L).toolCalls())
+        .singleElement()
+        .satisfies(trace -> assertThat(trace.summary()).isEqualTo(summary));
+  }
+
+  @Test
   void categorySearchIsOptionalValidatedAndCannotSmuggleExtraFields() {
     assertThat(AllocationArguments.parse(json, "searchCandidates", "{}").category()).isNull();
     assertThat(

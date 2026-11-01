@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { AiProgress } from '../../components/AiProgress'
+import { AI_EXPECTED_SECONDS } from '../aiLatency'
 import { AllocationProposal } from '../allocation/AllocationProposal'
 import type { ItemCategory, VehicleType } from '../../api/generated/model'
 import { seoulInput, useRequest } from './useRequest'
@@ -113,6 +115,24 @@ export function RequestScreen() {
           <p className="mt-2 text-center text-sm text-slate-500">
             한 번 눌러 시작하고 다시 눌러 끝내요 · 최대 60초
           </p>
+          <label className="mt-4 block rounded-xl border border-emerald-800 p-3 text-center font-semibold text-emerald-900 has-disabled:opacity-40">
+            녹음 파일 올리기 (WAV)
+            <input
+              type="file"
+              accept="audio/wav,.wav"
+              className="sr-only"
+              aria-describedby="audio-file-hint"
+              disabled={busy || status === 'saved'}
+              onChange={(event) => {
+                const file = event.currentTarget.files?.[0]
+                event.currentTarget.value = ''
+                if (file) request.interpretAudio(file)
+              }}
+            />
+          </label>
+          <p id="audio-file-hint" className="mt-2 text-center text-sm text-slate-500">
+            16 kHz 모노 WAV 파일을 올려 주세요 · 최대 60초
+          </p>
           {status === 'recording' && (
             <p role="status" className="mt-3 text-center font-semibold text-red-700">
               녹음 중 {request.elapsed} / 60초
@@ -150,9 +170,14 @@ export function RequestScreen() {
 
         <div aria-live="polite">
           {status === 'interpreting' && (
-            <p role="status" className="rounded-xl bg-emerald-50 p-5 text-emerald-900">
-              말씀하신 조건을 정리하고 있어요…
-            </p>
+            <AiProgress
+              label="말씀하신 조건을 정리하고 있어요…"
+              expectedSeconds={
+                request.interpretationSource === 'voice'
+                  ? AI_EXPECTED_SECONDS.voiceRequest
+                  : AI_EXPECTED_SECONDS.textRequest
+              }
+            />
           )}
           {status === 'saving' && <p role="status">요청을 저장하고 있어요…</p>}
           {status === 'idle' && (

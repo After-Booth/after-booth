@@ -193,7 +193,11 @@ public class AllocationService {
               .limit(100)
               .map(i -> AllocationModelData.Candidate.from(i, clock.instant()))
               .toList();
-      run.trace.add(new ToolTrace(name, args.values(), "OK", null, "요청한 종류의 재고를 조회했어요."));
+      String summary =
+          args.category() == null || args.category() == run.request.category()
+              ? "요청한 종류의 재고를 조회했어요."
+              : "다른 종류의 재고도 살펴봤어요.";
+      run.trace.add(new ToolTrace(name, args.values(), "OK", null, summary));
       return candidates;
     }
     Item item;

@@ -70,6 +70,32 @@ afterEach(() => {
 })
 afterAll(() => server.close())
 
+test('shows measured AI progress and prevents duplicate allocation while pending', async () => {
+  let calls = 0
+  let complete: (() => void) | undefined
+  server.use(
+    http.post('*/api/pickup-requests/1/allocation', async () => {
+      calls++
+      await new Promise<void>((resolve) => {
+        complete = resolve
+      })
+      return HttpResponse.json(result)
+    }),
+  )
+  render(<AllocationProposal request={request} />)
+  await waitFor(() => expect(screen.getByRole('button', { name: '배정 제안 받기' })).toBeEnabled())
+  await userEvent.dblClick(screen.getByRole('button', { name: '배정 제안 받기' }))
+  expect(
+    await screen.findByText('배정 에이전트가 재고와 차량 조건을 확인하고 있어요…'),
+  ).toBeInTheDocument()
+  expect(screen.getByRole('status')).toHaveTextContent('보통 약 10초 걸려요')
+  expect(screen.getByRole('button', { name: '배정 확인 중…' })).toBeDisabled()
+  await waitFor(() => expect(calls).toBe(1))
+  complete?.()
+  expect(await screen.findByText(result.explanation)).toBeInTheDocument()
+  expect(screen.queryByRole('progressbar')).not.toBeInTheDocument()
+})
+
 test('shows no match reasons and holds a human-selected alternative with one key', async () => {
   let holds = 0
   let sent: unknown

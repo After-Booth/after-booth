@@ -110,6 +110,7 @@ test('interprets receiver text, edits all fields and saves the edited body with 
   })
   expect(key).toMatch(/^[0-9a-f-]{36}$/)
   expect(screen.getByText('수납함 5개')).toBeInTheDocument()
+  expect(screen.getByLabelText('녹음 파일 올리기 (WAV)')).toBeDisabled()
 })
 
 test('highlights missing fields and defaults quantity to one before allowing manual completion', async () => {
@@ -218,6 +219,92 @@ test('omits blank optional fields and prevents duplicate submissions while savin
     vehicleType: 'SEDAN',
     transcript,
   })
+  expect(screen.getByLabelText('녹음 파일 올리기 (WAV)')).toBeDisabled()
   complete?.()
   expect(await screen.findByText('픽업 요청을 저장했어요')).toBeInTheDocument()
+})
+
+test.each(['audio/wav', 'audio/x-wav', ''])(
+  'uploads WAV bytes unchanged with voice timing when the file MIME is %s',
+  async (type) => {
+    const bytes = new Uint8Array([82, 73, 70, 70, 0, 255, 128, 0, 87, 65, 86, 69])
+    let received: Uint8Array | undefined
+    let complete: (() => void) | undefined
+    server.use(
+      http.post('*/api/conditions/interpret', async ({ request }) => {
+        const form = await request.formData()
+        expect(form.get('context')).toBe('RECEIVER')
+        expect(form.has('text')).toBe(false)
+        const audio = form.get('audio') as File
+        expect(audio.name).toBe('sample.WAV')
+        expect(audio.type).toBe('audio/wav')
+        received = new Uint8Array(await audio.arrayBuffer())
+        await new Promise<void>((resolve) => {
+          complete = resolve
+        })
+        return HttpResponse.json({
+          context: 'RECEIVER',
+          transcript,
+          conditions: {},
+          missingFields: [],
+        })
+      }),
+    )
+    render(<RequestScreen />)
+    const user = userEvent.setup()
+    const input = screen.getByLabelText('녹음 파일 올리기 (WAV)')
+    expect(input).toHaveAttribute('accept', 'audio/wav,.wav')
+    expect(input).toHaveAccessibleDescription('16 kHz 모노 WAV 파일을 올려 주세요 · 최대 60초')
+    await user.upload(input, new File([bytes], 'sample.WAV', { type }))
+    expect(await screen.findByText('말씀하신 조건을 정리하고 있어요…')).toBeInTheDocument()
+    expect(screen.getByText('0초 경과 · 보통 약 5초 걸려요')).toBeInTheDocument()
+    expect(input).toBeDisabled()
+    expect(screen.getByRole('button', { name: '마이크로 말하기' })).toBeDisabled()
+    await waitFor(() => expect(received).toEqual(bytes))
+    complete?.()
+    expect(await screen.findByText('입력 원문')).toBeInTheDocument()
+    expect(input).toBeEnabled()
+  },
+)
+
+test('rejects non-WAV uploads before calling the interpretation API', async () => {
+  let calls = 0
+  server.use(
+    http.post('*/api/conditions/interpret', () => {
+      calls++
+      return HttpResponse.error()
+    }),
+  )
+  render(<RequestScreen />)
+  const user = userEvent.setup({ applyAccept: false })
+  await user.upload(
+    screen.getByLabelText('녹음 파일 올리기 (WAV)'),
+    new File(['audio'], 'recording.mp3', { type: 'audio/wav' }),
+  )
+  expect(await screen.findByRole('alert')).toHaveTextContent('WAV 파일만 올릴 수 있어요.')
+  expect(calls).toBe(0)
+  expect(screen.getByLabelText('녹음 파일 올리기 (WAV)')).toBeEnabled()
+})
+
+test('uses the shorter text interpretation estimate', async () => {
+  let complete: (() => void) | undefined
+  server.use(
+    http.post('*/api/conditions/interpret', async () => {
+      await new Promise<void>((resolve) => {
+        complete = resolve
+      })
+      return HttpResponse.json({
+        context: 'RECEIVER',
+        transcript,
+        conditions: {},
+        missingFields: [],
+      })
+    }),
+  )
+  await enterText()
+  expect(screen.getByText('0초 경과 · 보통 약 3초 걸려요')).toBeInTheDocument()
+  expect(screen.getByLabelText('녹음 파일 올리기 (WAV)')).toBeDisabled()
+  await waitFor(() => expect(complete).toBeTypeOf('function'))
+  complete?.()
+  await screen.findByText('입력 원문')
 })

@@ -4,12 +4,12 @@ import java.util.List;
 
 /**
  * The single seam for every Meta Model API call (AGENTS.md hard rule 4). {@code AI_MODE} decides
- * whether a call goes to the network (live), goes to the network and is saved to {@code fixtures/}
- * (record), or is answered from {@code fixtures/} only (replay).
+ * whether a call goes to the network with a recorded fallback (live), reuses an existing fixture or
+ * records one shared call per request key (record), or reads fixtures only (replay).
  *
  * <p>No call is retried here; callers own their re-ask logic. A failed call throws {@link
- * AiCallException}; a replay request without a recorded fixture throws {@link
- * MissingFixtureException}.
+ * AiCallException} unless live fallback is available; a replay request without a recorded fixture
+ * throws {@link MissingFixtureException}.
  */
 public interface AiGateway {
 

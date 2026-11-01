@@ -1,4 +1,6 @@
 import type { PickupRequest } from '../../api/generated/model'
+import { AiProgress } from '../../components/AiProgress'
+import { AI_EXPECTED_SECONDS } from '../aiLatency'
 import { useAllocation } from './useAllocation'
 
 const button =
@@ -29,6 +31,12 @@ function RequestAllocationProposal({ request }: { request: PickupRequest }) {
       >
         {allocation.pending ? '배정 확인 중…' : '배정 제안 받기'}
       </button>
+      {allocation.pending && (
+        <AiProgress
+          label="배정 에이전트가 재고와 차량 조건을 확인하고 있어요…"
+          expectedSeconds={AI_EXPECTED_SECONDS.allocation}
+        />
+      )}
       {allocation.message && (
         <p role="alert" className="text-red-700">
           {allocation.message}

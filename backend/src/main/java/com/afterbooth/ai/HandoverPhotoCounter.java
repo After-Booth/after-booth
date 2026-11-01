@@ -52,7 +52,7 @@ public class HandoverPhotoCounter {
         count zero and an empty boxes array when no requested items are visible. Return only JSON.
         """));
     messages.add(
-        new ChatRequest.UserMessage("Count category " + category.name() + ".", List.of(image)));
+        new ChatRequest.UserMessage("Count " + description(category) + ".", List.of(image)));
     List<BoundingBox> boxes = null;
     for (int attempt = 0; attempt < 2; attempt++) {
       ChatResponse response =
@@ -85,6 +85,14 @@ public class HandoverPhotoCounter {
     for (int index = 0; index < boxes.size(); index++)
       refined.add(segmented.getOrDefault(index, boxes.get(index)));
     return new Result(boxes.size(), refined, !boxes.isEmpty() && segmented.size() == boxes.size());
+  }
+
+  private static String description(ItemCategory category) {
+    return switch (category) {
+      case DISPLAY_RACK -> "display racks";
+      case STORAGE_BIN -> "storage bins";
+      case FOLDING_TABLE -> "folding tables";
+    };
   }
 
   private List<BoundingBox> parse(String content) {

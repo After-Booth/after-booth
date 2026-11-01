@@ -10,12 +10,17 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.Base64;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import tools.jackson.databind.JsonNode;
 
 /** live, record and replay against a local stub server; nothing here touches the network. */
@@ -213,6 +218,139 @@ class AiGatewayModesTest {
 
     assertThatThrownBy(() -> live.chat(TEXT))
         .isInstanceOfSatisfying(AiCallException.class, e -> assertThat(e.httpStatus()).isEmpty());
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"http-error", "non-json", "timeout", "refused"})
+  void liveReturnsRecordedBodyWhenTheLiveCallFails(String failure) throws Exception {
+    ChatResponse recorded;
+    String closedUrl;
+    try (StubMetaServer meta = new StubMetaServer()) {
+      meta.respond(200, spikeResponse("spark-text/rack-sedan-1.json"));
+      recorded = gateway(AiMode.RECORD, meta.baseUrl(), fixtures, KEY).chat(TEXT);
+      closedUrl = meta.baseUrl();
+    }
+    byte[] before = read(fixtureFiles(fixtures).getFirst());
+    try (StubMetaServer meta = new StubMetaServer()) {
+      switch (failure) {
+        case "http-error" -> meta.respond(500, "{}");
+        case "non-json" -> meta.respond(200, "not JSON");
+        case "timeout" -> meta.delay(Duration.ofSeconds(2));
+        default -> {}
+      }
+      String url = failure.equals("refused") ? closedUrl : meta.baseUrl();
+      long started = System.nanoTime();
+      assertThat(gateway(AiMode.LIVE, url, fixtures, KEY).chat(TEXT)).isEqualTo(recorded);
+      long elapsed = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
+      assertThat(elapsed).isLessThan(1500);
+      if (failure.equals("timeout")) assertThat(elapsed).isGreaterThanOrEqualTo(150);
+      assertThat(read(fixtureFiles(fixtures).getFirst())).isEqualTo(before);
+    }
+  }
+
+  @Test
+  void liveFallbackCancelsAStalledResponseBody() throws Exception {
+    ChatResponse recorded;
+    try (StubMetaServer meta = new StubMetaServer()) {
+      meta.respond(200, spikeResponse("spark-text/rack-sedan-1.json"));
+      recorded = gateway(AiMode.RECORD, meta.baseUrl(), fixtures, KEY).chat(TEXT);
+    }
+    try (StubMetaServer meta = new StubMetaServer().stallBody()) {
+      long started = System.nanoTime();
+      assertThat(gateway(AiMode.LIVE, meta.baseUrl(), fixtures, KEY).chat(TEXT))
+          .isEqualTo(recorded);
+      assertThat(TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started)).isLessThan(1500);
+      assertThat(meta.awaitDisconnect()).isTrue();
+    }
+  }
+
+  @Test
+  void liveSuccessTakesPrecedenceOverTheFixtureWithoutOverwritingIt() {
+    try (StubMetaServer meta = new StubMetaServer()) {
+      meta.respond(200, spikeResponse("spark-text/rack-sedan-1.json"));
+      ChatResponse recorded = gateway(AiMode.RECORD, meta.baseUrl(), fixtures, KEY).chat(TEXT);
+      byte[] before = read(fixtureFiles(fixtures).getFirst());
+      meta.respond(
+          200,
+          "{\"choices\":[{\"finish_reason\":\"stop\",\"message\":{\"content\":\"live answer\"}}]}");
+      assertThat(gateway(AiMode.LIVE, meta.baseUrl(), fixtures, KEY).chat(TEXT).content())
+          .isEqualTo("live answer")
+          .isNotEqualTo(recorded.content());
+      assertThat(read(fixtureFiles(fixtures).getFirst())).isEqualTo(before);
+      assertThat(meta.received()).hasSize(2);
+    }
+  }
+
+  @Test
+  void recordReusesAnExistingFixtureWithoutCallingHttp() {
+    try (StubMetaServer meta = new StubMetaServer()) {
+      meta.respond(200, spikeResponse("spark-text/rack-sedan-1.json"));
+      ChatResponse first = gateway(AiMode.RECORD, meta.baseUrl(), fixtures, KEY).chat(TEXT);
+      meta.respond(500, "{}");
+      assertThat(gateway(AiMode.RECORD, meta.baseUrl(), fixtures, KEY).chat(TEXT)).isEqualTo(first);
+      assertThat(meta.received()).hasSize(1);
+      assertThat(fixtureFiles(fixtures)).hasSize(1);
+    }
+  }
+
+  @Test
+  void concurrentRecordingSharesOneRequestAndOneFixture() throws Exception {
+    try (StubMetaServer meta = new StubMetaServer();
+        var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+      meta.respond(200, spikeResponse("spark-text/rack-sedan-1.json"))
+          .delay(Duration.ofMillis(300));
+      AiGateway record = gateway(AiMode.RECORD, meta.baseUrl(), fixtures, KEY);
+      CountDownLatch start = new CountDownLatch(1);
+      var first =
+          executor.submit(
+              () -> {
+                start.await();
+                return record.chat(TEXT);
+              });
+      var second =
+          executor.submit(
+              () -> {
+                start.await();
+                return record.chat(TEXT);
+              });
+      start.countDown();
+      assertThat(first.get(3, TimeUnit.SECONDS)).isEqualTo(second.get(3, TimeUnit.SECONDS));
+      assertThat(meta.received()).hasSize(1);
+      assertThat(fixtureFiles(fixtures)).hasSize(1);
+    }
+  }
+
+  @Test
+  void failedConcurrentRecordingIsNotCachedAndCanBeRecordedLater() throws Exception {
+    try (StubMetaServer meta = new StubMetaServer();
+        var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+      meta.respond(500, "{}").delay(Duration.ofMillis(300));
+      AiGateway record = gateway(AiMode.RECORD, meta.baseUrl(), fixtures, KEY);
+      CountDownLatch start = new CountDownLatch(1);
+      var first =
+          executor.submit(
+              () -> {
+                start.await();
+                return record.chat(TEXT);
+              });
+      var second =
+          executor.submit(
+              () -> {
+                start.await();
+                return record.chat(TEXT);
+              });
+      start.countDown();
+      assertThatThrownBy(() -> first.get(3, TimeUnit.SECONDS))
+          .hasCauseInstanceOf(AiCallException.class);
+      assertThatThrownBy(() -> second.get(3, TimeUnit.SECONDS))
+          .hasCauseInstanceOf(AiCallException.class);
+      assertThat(meta.received()).hasSize(1);
+      assertThat(fixtureFiles(fixtures)).isEmpty();
+      meta.respond(200, spikeResponse("spark-text/rack-sedan-1.json")).delay(Duration.ZERO);
+      assertThat(record.chat(TEXT).content()).contains("180cm");
+      assertThat(meta.received()).hasSize(2);
+      assertThat(fixtureFiles(fixtures)).hasSize(1);
+    }
   }
 
   private static SamRequest orangeBinsBoxes() {

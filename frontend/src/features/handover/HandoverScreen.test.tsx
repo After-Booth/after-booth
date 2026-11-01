@@ -57,6 +57,34 @@ async function selectReservation() {
 }
 const photo = () => new File(['photo'], 'handover.jpg', { type: 'image/jpeg' })
 
+test('limits handover photos to JPEG and PNG and shows the recount duration while busy', async () => {
+  let calls = 0
+  let complete: (() => void) | undefined
+  server.use(
+    http.post('*/api/reservations/7/handover', async () => {
+      calls++
+      await new Promise<void>((resolve) => {
+        complete = resolve
+      })
+      return HttpResponse.json(result(3, 'COMPLETED'))
+    }),
+  )
+  const user = await selectReservation()
+  const input = screen.getByLabelText('인계 사진 촬영 또는 업로드')
+  expect(input).toHaveAttribute('accept', 'image/jpeg,image/png')
+  await user.upload(input, new File(['photo'], 'handover.webp', { type: 'image/webp' }))
+  expect(calls).toBe(0)
+  await user.upload(input, new File(['photo'], 'handover.png', { type: 'image/png' }))
+  expect(
+    await screen.findByText('물품 수량과 분할 결과를 확인하고 있어요. 잠시 기다려 주세요…'),
+  ).toBeInTheDocument()
+  expect(screen.getByRole('status')).toHaveTextContent('보통 약 6초 걸려요')
+  expect(input).toBeDisabled()
+  await waitFor(() => expect(calls).toBe(1))
+  complete?.()
+  expect(await screen.findByText('인계를 완료했어요')).toBeInTheDocument()
+})
+
 test('uploads a matching photo and refreshes category and event reuse totals', async () => {
   let completed = false
   server.use(

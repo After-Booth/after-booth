@@ -58,6 +58,7 @@ export function useRequest() {
     purpose: '',
   })
   const [elapsed, setElapsed] = useState(0)
+  const [interpretationSource, setInterpretationSource] = useState<'voice' | 'text'>('text')
   const recorder = useRef<Awaited<ReturnType<typeof startRecording>> | undefined>(undefined)
   const active = useRef(true)
   const busy = useRef(false)
@@ -103,6 +104,7 @@ export function useRequest() {
   }, [status])
 
   async function interpret(input: { text: string } | { audio: File }) {
+    setInterpretationSource('audio' in input ? 'voice' : 'text')
     setStatus('interpreting')
     setMessage('')
     setInterpretation(undefined)
@@ -137,6 +139,16 @@ export function useRequest() {
     if (busy.current || !text.trim() || text.length > 500) return
     busy.current = true
     void interpret({ text: text.trim() })
+  }
+
+  function interpretAudio(file: File) {
+    if (busy.current || status === 'saved') return
+    if (!file.name.toLowerCase().endsWith('.wav')) {
+      setMessage('WAV 파일만 올릴 수 있어요. 확장자가 .wav인 녹음 파일을 선택해 주세요.')
+      return
+    }
+    busy.current = true
+    void interpret({ audio: new File([file], file.name, { type: 'audio/wav' }) })
   }
 
   function stop() {
@@ -245,8 +257,10 @@ export function useRequest() {
     fields,
     setFields,
     elapsed,
+    interpretationSource,
     toggleRecording,
     interpretText,
+    interpretAudio,
     submit,
     saved,
   }
