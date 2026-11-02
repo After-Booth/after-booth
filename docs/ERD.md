@@ -131,7 +131,7 @@ erDiagram
 
 ## Notes
 
-- **Reuse stats are a query, not a table.** `getReuseStats` sums `reservation.handed_over_qty` for HANDED_OVER reservations, grouped by item category and event. SPEC's "ReuseStat" is this read model.
+- **Reuse stats are a query, not a table.** `getReuseStats` sums `reservation.handed_over_qty` for HANDED_OVER reservations, grouped by item category and event, and `handed_over_qty × width_cm × depth_cm × height_cm` of their items as liters, rounded down (D-064). SPEC's "ReuseStat" is this read model.
 - **Allocation runs are not stored.** A same-key retry replays the response kept in `idempotency_record`; holds are re-read from `reservation`.
 - **Labels are not stored for lookups.** `item.label` is written from the category table in the contract (`ItemCategory`) at confirm time, and stats labels use the same table.
 - **Times are `timestamptz`.** The API returns them with the +09:00 offset (`docs/DECISIONS.md` D-019).

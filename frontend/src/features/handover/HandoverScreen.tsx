@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { AiProgress } from '../../components/AiProgress'
 import { AI_EXPECTED_SECONDS } from '../aiLatency'
 import { useHandover } from './useHandover'
+import { volumeText } from './volume'
 
 const button =
   'min-h-12 rounded-xl bg-emerald-800 px-5 py-3 font-semibold text-white disabled:opacity-50'
@@ -243,8 +244,8 @@ export function HandoverScreen() {
               {handover.stats.totalReused > 0 && (
                 <div>
                   <p className="font-semibold text-emerald-900">
-                    부피 약 {(handover.stats.reusedVolumeLiters / 1000).toFixed(2)}㎥ 장비를 버리지
-                    않고 다시 썼어요
+                    부피 약 {volumeText(handover.stats.reusedVolumeLiters)} 장비를 버리지 않고 다시
+                    썼어요
                   </p>
                   <p className="text-sm text-slate-600">(등록된 크기 기준 추정)</p>
                 </div>

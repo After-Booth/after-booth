@@ -75,6 +75,7 @@ export interface AllocationResult {
 
 export interface ReuseStats {
   totalReused: number;
+  reusedVolumeLiters: number;
   byCategory: { category: string; label: string; quantity: number }[];
   byEvent: { eventId: number; eventName: string; quantity: number }[];
 }

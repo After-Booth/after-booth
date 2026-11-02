@@ -36,13 +36,15 @@ function HomeScreen() {
         </nav>
       </header>
       <IntakeScreen />
-      <p className="mx-auto max-w-md px-4 pb-6 text-xs text-slate-400" data-testid="health">
-        {error
-          ? '서버 연결 실패'
-          : health
-            ? `서버 ${health.status} · AI ${health.aiMode}`
-            : '서버 확인 중…'}
-      </p>
+      <footer className="mx-auto max-w-md px-4 pb-6">
+        <p className="text-xs text-slate-400" data-testid="health">
+          {error
+            ? '서버 연결 실패'
+            : health
+              ? `서버 ${health.status} · AI ${health.aiMode}`
+              : '서버 확인 중…'}
+        </p>
+      </footer>
     </>
   )
 }

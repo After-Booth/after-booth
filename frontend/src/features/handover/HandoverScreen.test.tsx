@@ -107,7 +107,7 @@ test('uploads a matching photo and refreshes category and event reuse totals', a
         completed
           ? {
               totalReused: 3,
-              reusedVolumeLiters: 864,
+              reusedVolumeLiters: 1859,
               byCategory: [{ category: 'DISPLAY_RACK', label: '진열대', quantity: 3 }],
               byEvent: [{ eventId: 1, eventName: '가을 행사', quantity: 3 }],
             }
@@ -119,7 +119,7 @@ test('uploads a matching photo and refreshes category and event reuse totals', a
   await user.upload(screen.getByLabelText('인계 사진 촬영 또는 업로드'), photo())
   expect(await screen.findByText('인계를 완료했어요')).toBeInTheDocument()
   expect(await screen.findByText('총 3개 재사용')).toBeInTheDocument()
-  expect(screen.getByText('부피 약 0.86㎥ 장비를 버리지 않고 다시 썼어요')).toBeInTheDocument()
+  expect(screen.getByText('부피 약 1.85㎥ 장비를 버리지 않고 다시 썼어요')).toBeInTheDocument()
   expect(screen.getByText('(등록된 크기 기준 추정)')).toBeInTheDocument()
   expect(screen.getByText('가을 행사 · 3개')).toBeInTheDocument()
 })
