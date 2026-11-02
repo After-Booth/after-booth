@@ -93,7 +93,7 @@ The first build takes several minutes. When the log shows `Started AfterboothApp
 curl http://localhost:8080/api/health
 ```
 
-It answers `{"status":"UP","aiMode":"replay"}`. This compose file pins replay mode and does not load any key file, so it never calls the Meta Model API and spends nothing.
+It answers `{"aiMode":"replay","status":"UP"}`. This compose file pins replay mode and does not load any key file, so it never calls the Meta Model API and spends nothing.
 
 ### Try the recorded demo
 
