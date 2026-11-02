@@ -23,7 +23,10 @@ public class IdempotencyLockPool {
   public IdempotencyLockPool(
       DataSource source,
       @Value("${afterbooth.idempotency.lock-pool.maximum-pool-size:16}") int maximum,
-      @Value("${afterbooth.idempotency.lock-pool.minimum-idle:0}") int minimum,
+      // Prefilled to the maximum: a burst on a growing pool can strand a waiter until the timeout
+      @Value(
+              "${afterbooth.idempotency.lock-pool.minimum-idle:${afterbooth.idempotency.lock-pool.maximum-pool-size:16}}")
+          int minimum,
       @Value("${afterbooth.idempotency.lock-pool.connection-timeout:5s}")
           Duration connectionTimeout) {
     this(source, maximum, minimum, connectionTimeout.toMillis());

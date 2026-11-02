@@ -211,6 +211,21 @@ Independent re-review approved with zero blocking findings and zero suggestions;
 
 Not verified: actual application process kill/restart, mixed-version rolling deployment, full backend suite, frontend/browser/demo flows, external Meta model accuracy/latency and post-DONE async intake worker restart. Tests used synthetic requests and test-owned PostgreSQL containers/sessions only. No secret files, real database rows, product live/record calls, GitHub writes, push or PR were used.
 
+### #61: lock pool prefill
+
+- [x] #61 A burst on the empty idempotency lock pool can strand a request until the 5 s timeout (D-068).
+
+CI run 41435677051 failed the twelve-preparation regression with `idempotency-locks ... total=11, active=11, idle=0, waiting=0` after 5 s. The HikariCP 7.0.2 bytecode shows why: each creator task adds at most one connection, a task is submitted only when the waiting count exceeds the queued tasks, and with minimum idle 0 nothing else grows the pool. The user chose to prefill the pool. When `minimum-idle` is not set, it now defaults to the configured `maximum-pool-size` (16), so overriding only the maximum still starts (`IdempotencyLockPoolSettingsTest`). Nine runs before the change on this 16-core PC did not reproduce the failure (six normal, three under full CPU load, where the pool took about 2 s to reach 12 connections). The race is therefore inferred from the CI report and the HikariCP code, not reproduced locally.
+
+Run from `backend/` on Windows through PowerShell:
+
+```bash
+./gradlew spotlessApply compileJava compileTestJava spotlessCheck test --tests "com.afterbooth.HandoverIntegrationTest" --tests "com.afterbooth.IdempotencyRecoveryIntegrationTest" --tests "com.afterbooth.global.idempotency.IdempotencyLockPoolIntegrationTest" --tests "com.afterbooth.ArchitectureTest" --no-daemon
+# BUILD SUCCESSFUL; 32 tests (15 handover, 7 recovery, 3 lock pool, 7 architecture), zero failures/errors/skips.
+```
+
+A debug-logged rerun of the twelve-preparation test passed. Its log shows 16 `idempotency-locks` connections added, ending at `total=16/16, idle=16/16`. Not verified: the slow CI runner itself, until this PR's CI runs; the full backend suite locally.
+
 ## Phase 3: Submission (target 11/4 morning)
 
 - [ ] #15 English README (DY)
