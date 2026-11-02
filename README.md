@@ -93,7 +93,7 @@ The first build takes several minutes. When the log shows `Started AfterboothApp
 curl http://localhost:8080/api/health
 ```
 
-It answers `{"aiMode":"replay","status":"UP"}`. This compose file pins replay mode and does not load any key file, so it never calls the Meta Model API and spends nothing.
+It answers with `"status":"UP"` and `"aiMode":"replay"`. This compose file pins replay mode and does not load any key file, so it never calls the Meta Model API and spends nothing.
 
 ### Try the recorded demo
 
@@ -138,8 +138,12 @@ Developer commands (backend, frontend, tests) are in [`AGENTS.md`](AGENTS.md) §
 
 ## Measured so far
 
-- One human-approved live run of the full scenario from a clean database: 19 AI calls, no fallback, photo to result in 6.4 s, the whole scenario in 38.2 s, about $0.04 ([`docs/TASKS.md`](docs/TASKS.md) #12, [`docs/BUDGET.md`](docs/BUDGET.md)). This is a single run (n = 1), not a benchmark.
-- Total estimated Meta API spend for the project so far, including the Phase 0 spike: about $0.53, plus Muse Code usage whose billing was not measured ([`docs/BUDGET.md`](docs/BUDGET.md)).
+- Three human-approved live runs of the full scenario, each from a clean database, each with 19 AI calls answered live and no fallback:
+  - one through the UI with Playwright: photo to result in 6.4 s, the whole scenario in 38.2 s ([`docs/TASKS.md`](docs/TASKS.md) #12);
+  - two through the HTTP API on 2026-11-02: the whole flow in 40.7 s and 36.3 s.
+
+  That is three runs, not a benchmark. Each costs about $0.04 ([`docs/BUDGET.md`](docs/BUDGET.md)).
+- Total estimated Meta API spend for the project so far, including the Phase 0 spike: about $0.61, plus Muse Code usage whose billing was not measured ([`docs/BUDGET.md`](docs/BUDGET.md)).
 
 ## Development tools
 
