@@ -232,3 +232,11 @@ A debug-logged rerun of the twelve-preparation test passed. Its log shows 16 `id
 - [ ] #16 Demo script + 2–3 minute video (WJ, key B)
 - [ ] #17 Submission checklist (DY, WJ)
 - [ ] **G3 STOP** — report how to run, demo results, self-score, remaining risks
+
+## Member authentication design (#63)
+
+- [x] #63 local specification and contract: incorporated the user's answers and updated SPEC, scope exclusions, OpenAPI, ERD, DECISIONS and shared implementation boundaries. Contract validation, client generation, build, 118 tests, lint and formatting passed; independent re-review found no blockers. This does not mean authentication is implemented or the GitHub issue is closed. See AUTH_DESIGN for commands, warnings and unverified scope.
+- Confirmed: immediate personal-data deletion / 30 days of transaction history from withdrawal / 30 days of re-registration blocking. Email verification is for signup; delivery uses the Resend API.
+- Introduce the authentication runtime after submission. The user subsequently canceled the earlier commits while preserving changes and authorized one combined local commit, including the omitted authenticated password-change specification (D-075), after a sensitive-data check. This task does not implement features, write/apply migrations, send mail, push, create a PR or close the issue. See `docs/AUTH_DESIGN.md` for final identifiers and verification results.
+
+- [x] #63 password-change correction: changePassword, its policy/schema references and D-075 are defined. Final contract validation and client generation passed (35 operations, 298 local references); build, 118 tests, lint and formatting passed. Fresh independent review found no blockers. No runtime implementation is included.

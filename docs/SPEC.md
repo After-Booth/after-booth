@@ -50,7 +50,7 @@ A surplus equipment hand-off service for events. Equipment left over after festi
 ## Scope
 
 - Minimum: one region, three categories (display rack, storage bin, folding table), direct pickup only, organization accounts as seed data
-- Out of scope: maps, notifications, payments, sign-up
+- Out of scope: maps, notifications, payments. Registration and authentication are managed separately under the #63 design scope below.
 
 ## Required tests (Testcontainers)
 
@@ -78,3 +78,13 @@ A surplus equipment hand-off service for events. Equipment left over after festi
 6. Reused quantity totaled
 
 Step 1 must appear within the first 15 seconds of the demo video.
+
+## Member authentication rollout scope (#63)
+
+- Before hackathon submission, define authentication policies, API contracts and data structures only. Introduce the authentication runtime in follow-up work after submission and preserve the existing demo (D-069). OpenAPI 0.3.0 is a target contract, not evidence of current server implementation.
+- Email/password registration → signup email verification → password login. Email verification confirms registration; it is not required for each login. Use the Resend API for verification and password-reset emails through the same delivery foundation.
+- An ACTIVE member can change their password by confirming the current password (`changePassword`); email-based password reset remains a separate recovery flow. Success revokes all Access/Refresh sessions and outstanding reset challenges, clears member-linked CSRF sessions, and requires a fresh login. See D-075 and AUTH_DESIGN for permissions, request limits and concurrency rules.
+- Immediately reject existing JWTs and revoke every Refresh Token when withdrawal commits. Reject withdrawal if either the giver or receiver has a HELD or CONFIRMED reservation. MISMATCH blocks withdrawal while its reservation remains CONFIRMED. HANDED_OVER, RELEASED, EXPIRED and historical mismatch records do not block withdrawal.
+- The user selected **immediate personal-data deletion / 30 days of minimal transaction history after withdrawal / 30 days of re-registration blocking identifiers**. Retain only an email HMAC and allow the same email to register again after 30 days. A new account does not recover prior ownership (D-070).
+- Each new member owns one personal organization. Do not assign existing unclaimed organizations, items, requests or reservations automatically. See [Member authentication design](AUTH_DESIGN.md) for API permissions, tokens, cookies, CSRF, email limits and deletion scope; contract/openapi.yaml defines the target APIs, and the #63 ERD extension defines their data structures.
+- Implementation order: shared member schema → security/email foundation → APIs, domain authorization and frontend integration. Before rollout, use synthetic data to verify withdrawal/transaction races, immediate JWT rejection, 30-day boundaries, code/refresh reuse, authorization bypass attempts, and inventory/statistics after history deletion.
