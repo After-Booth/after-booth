@@ -6,7 +6,6 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.afterbooth.global.error.BusinessException;
-import com.afterbooth.global.error.ErrorCode;
 import com.afterbooth.global.idempotency.IdempotencyService;
 import com.afterbooth.inventory.dto.OrganizationResponse;
 import com.afterbooth.request.dto.PickupRequestResponse;
@@ -146,7 +145,7 @@ class PickupRequestIntegrationTest {
   }
 
   @Test
-  void committedInProgressRequestConflicts() {
+  void committedOrphanRequestRecoversAndReplays() {
     UUID key = UUID.randomUUID();
     jdbc.update(
         "insert into idempotency_record(idempotency_key,fingerprint,state,created_at) values"
@@ -154,10 +153,10 @@ class PickupRequestIntegrationTest {
         key,
         IdempotencyService.fingerprint(
             "POST", "/api/pickup-requests", BODY.getBytes(StandardCharsets.UTF_8)));
-    assertThatThrownBy(() -> create(key, BODY))
-        .isInstanceOfSatisfying(
-            BusinessException.class,
-            error -> assertThat(error.errorCode()).isEqualTo(ErrorCode.IDEMPOTENCY_CONFLICT));
+    var first = create(key, BODY);
+    assertThat(first.getStatusCode().value()).isEqualTo(201);
+    var replay = create(key, BODY);
+    assertThat(json.readTree(replay.getBody())).isEqualTo(json.readTree(first.getBody()));
   }
 
   @TestConfiguration(proxyBeanMethods = false)

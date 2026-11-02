@@ -190,6 +190,27 @@ Not done, with reasons:
 - Muse Code reviewed the photo intake core path (D-066, [evidence](evidence/muse-intake-review.png)). M1 and M5 are fixed on this branch; the other ten findings have recorded dispositions.
 - README figures and a "try it with these sample files" section belong to #15. The video opening and narration belong to #16. Missing Muse Code screenshots belong to #17. Each of those issues has an English comment from #14.
 
+### #51: abandoned idempotency recovery
+
+- [x] #51 Recover abandoned IN_PROGRESS keys without duplicating active requests (D-067).
+
+Implementation uses a separate PostgreSQL session-lock pool, final idempotency-row locking and original-session ownership checks. No schema, migration, dependency, API, frontend or AI fixture change. Scope includes single and multiple instances sharing the same database and protocol; post-DONE asynchronous intake worker restart remains excluded by user decision.
+
+The first main-session gate passed formatting and compilation, then ran 114 selected tests: 113 passed and one failed. The unchanged twelve-preparation HTTP regression timed out acquiring its twelfth dedicated connection after 1,001 ms with eleven active connections. A fresh read-only Codex independent and adversarial review confirmed this as blocking R1; no other correctness blocker was substantiated. The user explicitly approved increasing only the connection acquisition timeout to five seconds. The final main-session gate below passed all 114 tests, with zero failures, errors or skips. The twelve-preparation assertion is unchanged and uses no test-only warming.
+
+Run from `backend/` with `JAVA_HOME` set to the installed Java 21 runtime; automated tests force `AI_MODE=replay`:
+
+```bash
+./gradlew spotlessApply compileJava compileTestJava spotlessCheck test --tests '*IdempotencyRecoveryIntegrationTest' --tests '*IdempotencyLockPoolIntegrationTest' --tests '*PickupRequestIntegrationTest' --tests '*ReservationIntegrationTest' --tests '*ReservationRulesTest' --tests '*ReservationSchedulerTest' --tests '*HandoverIntegrationTest' --tests '*AllocationIntegrationTest' --tests '*IntakeIntegrationTest' --tests '*DefaultVehicleHoldIntegrationTest' --tests '*HoldItemValidationTest' --tests '*HandoverResolveValidationTest' --tests 'com.afterbooth.ArchitectureTest' --no-daemon --console=plain
+# BUILD SUCCESSFUL; 114 tests passed, zero failures/errors/skips.
+```
+
+The main session inspected the actual implementation, new untracked files and test XML. Seven PostgreSQL recovery tests cover same-fingerprint orphan replay, fingerprint rejection, stored business errors, concurrent recovery, separate service instances, stale-owner late success/business failure/runtime cleanup, and final-row-lock protection after lock-session termination. Three pool tests cover invalid settings, bounded acquisition with the main pool still available, release and dead-session eviction. Domain regressions include recovered HOLD stock/reservation count and recovered photo-handover recount/log uniqueness, cancellation/expiry during AI, atomic rollback/error replay and strict input validation from #47/#53.
+
+Independent re-review approved with zero blocking findings and zero suggestions; R1 is resolved by the user-approved five-second timeout and the unchanged passing twelve-preparation regression. The designated Claude reviewer/companion tooling is unavailable; a fresh read-only Codex subagent used the repository reviewer role and review/re-review format, including adversarial concurrency and connection-lifecycle inspection. No Claude execution or remote CI result is claimed. A local PR-body draft follows the repository template and uses `Issue: Refs #51`. Staged secret scanning, whitespace checks and manual diff inspection passed; the existing pre-commit and commit-msg hooks remain enabled.
+
+Not verified: actual application process kill/restart, mixed-version rolling deployment, full backend suite, frontend/browser/demo flows, external Meta model accuracy/latency and post-DONE async intake worker restart. Tests used synthetic requests and test-owned PostgreSQL containers/sessions only. No secret files, real database rows, product live/record calls, GitHub writes, push or PR were used.
+
 ## Phase 3: Submission (target 11/4 morning)
 
 - [ ] #15 English README (DY)

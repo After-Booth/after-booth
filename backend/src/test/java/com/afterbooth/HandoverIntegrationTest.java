@@ -132,6 +132,27 @@ class HandoverIntegrationTest {
   }
 
   @Test
+  void orphanPhotoHandoverRecoversAndReplaysWithoutAnotherRecount() throws Exception {
+    Long id = confirmed(2);
+    UUID key = UUID.randomUUID();
+    String path = "/api/reservations/" + id + "/handover";
+    byte[] multipart =
+        com.afterbooth.global.idempotency.IdempotencyService.fingerprint(
+                "photo", "image/png", photo)
+            .getBytes(java.nio.charset.StandardCharsets.UTF_8);
+    jdbc.update(
+        "insert into idempotency_record(idempotency_key,fingerprint,state,created_at) values (?,?,'IN_PROGRESS',current_timestamp)",
+        key,
+        com.afterbooth.global.idempotency.IdempotencyService.fingerprint("POST", path, multipart));
+    counted(2, true);
+    submit(id, key, photo).andExpect(status().isOk());
+    submit(id, key, photo).andExpect(status().isOk());
+    verify(counter, times(1)).count(any(), anyString(), any());
+    assertThat(logCount(id)).isEqualTo(1);
+    assertThat(reservations.get(id).status().name()).isEqualTo("HANDED_OVER");
+  }
+
+  @Test
   void matchedPhotoCompletesOnceAndIncreasesRealHttpStats() throws Exception {
     Long id = confirmed(3);
     counted(3, true);
