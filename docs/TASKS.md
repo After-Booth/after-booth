@@ -187,6 +187,7 @@ Not done, with reasons:
 - Rewriting the allocation prompt to remove enum names and IDs would change every allocation fixture key. It would need a human-approved re-record and fresh E2E runs of both race branches two days before submission, and it would invalidate the inputs #16 records against.
 - Codex R1, R3 and R5 are correctness hardening outside the demo path, below the three fixes above in score impact. They stay listed here.
 - Codex R6 (the raced rack is seeded, not the photographed bins) needs a new recorded scenario. #16 should narrate it honestly instead.
+- Muse Code reviewed the photo intake core path (D-066, [evidence](evidence/muse-intake-review.png)). M1 and M5 are fixed on this branch; the other ten findings have recorded dispositions.
 - README figures and a "try it with these sample files" section belong to #15. The video opening and narration belong to #16. Missing Muse Code screenshots belong to #17. Each of those issues has an English comment from #14.
 
 ## Phase 3: Submission (target 11/4 morning)
