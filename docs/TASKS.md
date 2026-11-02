@@ -133,6 +133,62 @@ Latency per step (mode=replay, env=macOS Docker app on localhost:18080 + headles
 
 Photo → auto result is 1.3 s in replay, inside the 15 s demo bar; replay latency is not model latency (live expectation ≈ 8 s per `aiLatency.ts`, not measured here — the live 15 s bar belongs to #16/G3).
 
+### #14 self-score (main `e45f08e`, 2026-11-02)
+
+Sources: a fresh Claude `reviewer` in scoring mode (Opus, medium effort) and a read-only Codex CLI adversarial pass over the core paths (`codex exec --sandbox read-only`, gpt-6.1-sol; the branch had no diff, so the companion's `--base origin/main` mode had nothing to review, and the first run ended on a model-capacity error before answering). The main session re-checked every finding used below against the code. Neither tool ran builds, tests or the demo; run results are quoted from the #12/#13 records above.
+
+**Impact — 5/10 (weight 30).**
+- Strong: the problem is concrete (teardown deadline, racks, bins, tables; `README.md:3`), and the allocation board counts down to the deadline (`AllocationBoard.tsx:52`).
+- Weak: reuse was reported only as an item count (`ReuseStats.totalReused`), and the demo ends at "총 1개 재사용". Neither the UI nor the README gives a number for the scale of the waste or for what was saved. The README still says the write-up comes in Phase 3.
+- Weak: SPEC demo step 1 promised "display rack 4, storage bin 12", but the recorded photo registers "수납함 4개" (4 storage bins).
+
+**Use of Meta AI Tooling — 6/10 (weight 25).**
+- Strong: every model leads to an action.
+  - Spark estimate → SAM 3.1 box prompts → inventory draft (`IntakePipeline.java:120-140`).
+  - Transcribe → Spark structuring → a saved pickup request.
+  - Spark recount plus a SAM gate decides HANDED_OVER (D-032/D-034).
+- Strong: function calling has substance (`AllocationService`).
+  - Three strictly validated tools, all executed by the server, with typed rejections returned to the model.
+  - A bounded loop, and the agent can create at most a HOLD.
+  - Codex found no non-Meta model in the runtime, no call that bypasses `AiGateway`, and no agent-created CONFIRMED.
+- Weak: nothing in the UI named a Meta model. The intake stage text was generic, and the tool trace was a collapsed `<details>` with no tool names (`AllocationProposal.tsx:64-77`).
+- Weak: SAM masks are not drawn; the overlay draws boxes.
+- Weak: the recorded agent explanations leak enum names and IDs ("SEDAN에 적재 불가", "(DISPLAY_RACK) … itemId 1", "확보(HELD)했습니다" in `fixtures/replay/spark/550b4b0f…`, `93c1d7db…`, `74038e7a…`).
+- Muse Code: four `[Muse Code]` decisions (D-024, D-052, D-061, D-062). Only D-052 has a screenshot in `docs/evidence/`.
+
+**Demo — 6/10 (weight 25).**
+- Strong: the full scenario runs against the real stack with two browser contexts racing for the last rack (`e2e/tests/demo.spec.ts`).
+  - Twelve green replay runs and one live run, 38.2 s in total with photo → result in 6.4 s (#12 record above).
+  - The live → fixture fallback is covered by D-057 and the #13 network-loss run.
+- Weak: the home page rendered a full-height `min-h-dvh` block, so the capture control was below the fold on a phone (`App.tsx:22`). It also showed "서버 UP · AI replay", and a stale bootstrap comment remained (`App.tsx:9`).
+- Weak: the race loser's headline was a flat failure line, so SPEC step 4's "the agent immediately offers the other an alternative" was not visible at a glance.
+- Weak: replay needs byte-identical inputs in a fixed order (`fixtures/README.md` §Demo scenario). A judge who runs `docker compose up` with their own photo gets AI_UNAVAILABLE or a failed draft, and the README does not list the sample files (Codex R2).
+- Missing: the video (#16).
+
+**Technical Depth — 8/10 (weight 20).**
+- Strong: conditional stock updates (`ItemRepository.java:10-18`) and all seven required Testcontainers tests (`ReservationIntegrationTest`): 100 threads for the last 2, restoration, idempotency, forbidden transitions, the per-request cap, and confirm racing expiry in both orders.
+- Strong: record/replay keyed by a SHA-256 of the canonical, redacted request, with single-flight recording and model DTOs free of per-run IDs (D-053). `ArchitectureTest` enforces layering.
+- Weak: allocation holds the request-row and item locks across later model turns, including the explanation turn after the HOLD succeeds (D-051; Codex R5).
+- Weak: a duplicate Spark box around one object can pass the SAM gate (Codex R3, plausible, not reproduced).
+- Weak: intake confirmation and manual holds rotate the idempotency key after any HTTP error, including an ambiguous 5xx (Codex R1; the compose stack has no proxy that produces 502/504).
+
+**Weighted total: 61/100.** The weakest criterion is Impact.
+
+Top 3 fixes, all done on `feat/14-self-score-fixes` (Closes #14):
+
+1. **Impact as a number.** Reuse statistics now report `reusedVolumeLiters`, the summed registered volume of handed-over equipment (contract commit `5c15e96`). The handover screen shows it in m³ as an estimate. SPEC demo step 1 now matches the recorded photo.
+2. **Meta models visible from the first screen.**
+   - Photo intake is the top of the home page, and the health line moved to the bottom.
+   - Every AI step names its model: Muse Spark, SAM 3.1, Muse Voice Transcribe.
+   - The agent's tool trace is open by default and shows each tool name with 통과/거절.
+3. **The race loser gets the alternative as a headline.** "대신 {label} {n}개 어떠세요?" is built from the first server alternative, with no AI or fixture change.
+
+Not done, with reasons:
+- Rewriting the allocation prompt to remove enum names and IDs would change every allocation fixture key. It would need a human-approved re-record and fresh E2E runs of both race branches two days before submission, and it would invalidate the inputs #16 records against.
+- Codex R1, R3 and R5 are correctness hardening outside the demo path, below the three fixes above in score impact. They stay listed here.
+- Codex R6 (the raced rack is seeded, not the photographed bins) needs a new recorded scenario. #16 should narrate it honestly instead.
+- README figures and a "try it with these sample files" section belong to #15. The video opening and narration belong to #16. Missing Muse Code screenshots belong to #17. Each of those issues has an English comment from #14.
+
 ## Phase 3: Submission (target 11/4 morning)
 
 - [ ] #15 English README (DY)

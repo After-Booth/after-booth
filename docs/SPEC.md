@@ -70,7 +70,7 @@ A surplus equipment hand-off service for events. Equipment left over after festi
 
 ## Demo scenario
 
-1. Take a photo → "display rack 4, storage bin 12" registered automatically
+1. Take a photo → "storage bin 4" registered automatically (the recorded demo photo, `fixtures/README.md` §Demo scenario)
 2. Request pickup by voice
 3. Allocation proposal shown
 4. Two browsers request the last display rack at the same time → one succeeds, the agent immediately offers the other an alternative
