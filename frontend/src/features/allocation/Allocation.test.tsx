@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { setupServer } from 'msw/node'
@@ -86,7 +86,7 @@ test('shows measured AI progress and prevents duplicate allocation while pending
   await waitFor(() => expect(screen.getByRole('button', { name: '배정 제안 받기' })).toBeEnabled())
   await userEvent.dblClick(screen.getByRole('button', { name: '배정 제안 받기' }))
   expect(
-    await screen.findByText('배정 에이전트가 재고와 차량 조건을 확인하고 있어요…'),
+    await screen.findByText('Muse Spark 배정 에이전트가 재고와 차량 조건을 확인하고 있어요…'),
   ).toBeInTheDocument()
   expect(screen.getByRole('status')).toHaveTextContent('보통 약 10초 걸려요')
   expect(screen.getByRole('button', { name: '배정 확인 중…' })).toBeDisabled()
@@ -115,10 +115,46 @@ test('shows no match reasons and holds a human-selected alternative with one key
   expect(await screen.findByText(result.explanation)).toBeInTheDocument()
   expect(screen.getByText('진열대는 차량 높이가 부족해요.')).toBeInTheDocument()
   expect(screen.queryByText(/물품 #3/)).not.toBeInTheDocument()
+  const failure = screen.getByText('조건에 맞는 물품을 확보하지 못했어요.')
+  const headline = screen.getByText('대신 접이식 테이블 3개 어떠세요?')
+  expect(failure.compareDocumentPosition(headline) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   await user.dblClick(screen.getByRole('button', { name: '접이식 테이블 대안 선택' }))
   expect(await screen.findByText('3개 중 3개 확보 · 배정 성공')).toBeInTheDocument()
   expect(holds).toBe(1)
   expect(sent).toEqual({ requestId: 1, itemId: 7, quantity: 3 })
+})
+
+test('opens the server tool trace by default with each tool name, Korean gloss and outcome', async () => {
+  server.use(
+    http.post('*/api/pickup-requests/1/allocation', () =>
+      HttpResponse.json({
+        ...result,
+        toolCalls: [
+          {
+            name: 'searchCandidates',
+            arguments: {},
+            outcome: 'OK',
+            summary: '남은 물품 2종을 찾았어요.',
+          },
+          { ...result.toolCalls[0] },
+        ],
+      }),
+    ),
+  )
+  render(<AllocationProposal request={request} />)
+  await waitFor(() => expect(screen.getByRole('button', { name: '배정 제안 받기' })).toBeEnabled())
+  await userEvent.click(screen.getByRole('button', { name: '배정 제안 받기' }))
+  const trace = (await screen.findByText('Muse Spark가 호출한 서버 도구')).closest('details')
+  expect(trace).toHaveAttribute('open')
+  const rows = within(trace!).getAllByRole('listitem')
+  expect(rows).toHaveLength(2)
+  expect(rows[0]).toHaveTextContent('searchCandidates')
+  expect(rows[0]).toHaveTextContent('재고 후보 찾기')
+  expect(rows[0]).toHaveTextContent('남은 물품 2종을 찾았어요.')
+  expect(rows[0]).toHaveTextContent('통과')
+  expect(rows[1]).toHaveTextContent('checkVehicleFit')
+  expect(rows[1]).toHaveTextContent('차량에 실을 수 있는지 확인')
+  expect(rows[1]).toHaveTextContent('거절')
 })
 
 test('shows partial holds and caps alternative quantity to the remaining request quantity', async () => {
@@ -132,6 +168,7 @@ test('shows partial holds and caps alternative quantity to the remaining request
   await userEvent.click(screen.getByRole('button', { name: '배정 제안 받기' }))
   expect(await screen.findByText('3개 중 1개 확보 · 부분 배정')).toBeInTheDocument()
   expect(screen.getByRole('heading', { name: '접이식 테이블 2개' })).toBeInTheDocument()
+  expect(screen.queryByText(/어떠세요\?/)).not.toBeInTheDocument()
   expect(screen.getByRole('button', { name: '배정 제안 받기' })).toBeDisabled()
 })
 

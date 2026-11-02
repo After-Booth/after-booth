@@ -1,10 +1,16 @@
-import type { PickupRequest } from '../../api/generated/model'
+import type { PickupRequest, ToolCallName } from '../../api/generated/model'
 import { AiProgress } from '../../components/AiProgress'
 import { AI_EXPECTED_SECONDS } from '../aiLatency'
 import { useAllocation } from './useAllocation'
 
 const button =
   'min-h-12 rounded-xl bg-emerald-800 px-5 py-3 font-semibold text-white disabled:opacity-40'
+
+const TOOL_GLOSS: Record<ToolCallName, string> = {
+  searchCandidates: '재고 후보 찾기',
+  checkVehicleFit: '차량에 실을 수 있는지 확인',
+  holdQuantity: '수량 임시 확보',
+}
 
 export function AllocationProposal({ request }: { request: PickupRequest }) {
   return <RequestAllocationProposal key={request.id} request={request} />
@@ -14,6 +20,10 @@ function RequestAllocationProposal({ request }: { request: PickupRequest }) {
   const allocation = useAllocation(request)
   const held = allocation.reservations.filter((r) => ['HELD', 'CONFIRMED'].includes(r.status))
   const quantity = held.reduce((sum, reservation) => sum + reservation.quantity, 0)
+  const leadAlternative =
+    allocation.result?.status === 'NO_MATCH' && quantity === 0
+      ? allocation.result.alternatives[0]
+      : undefined
   return (
     <section
       aria-labelledby="allocation-heading"
@@ -33,7 +43,7 @@ function RequestAllocationProposal({ request }: { request: PickupRequest }) {
       </button>
       {allocation.pending && (
         <AiProgress
-          label="배정 에이전트가 재고와 차량 조건을 확인하고 있어요…"
+          label="Muse Spark 배정 에이전트가 재고와 차량 조건을 확인하고 있어요…"
           expectedSeconds={AI_EXPECTED_SECONDS.allocation}
         />
       )}
@@ -53,6 +63,12 @@ function RequestAllocationProposal({ request }: { request: PickupRequest }) {
           {allocation.result.status === 'NO_MATCH' && quantity === 0 && (
             <p className="font-semibold text-amber-800">조건에 맞는 물품을 확보하지 못했어요.</p>
           )}
+          {leadAlternative && (
+            <p className="text-lg font-bold text-emerald-900">
+              대신 {leadAlternative.item.label}{' '}
+              {Math.min(leadAlternative.quantity, request.quantity - quantity)}개 어떠세요?
+            </p>
+          )}
           <p>{allocation.result.explanation}</p>
           {allocation.result.rejections.length > 0 && (
             <ul className="space-y-2 text-sm text-amber-900">
@@ -62,13 +78,29 @@ function RequestAllocationProposal({ request }: { request: PickupRequest }) {
             </ul>
           )}
           {allocation.result.toolCalls.length > 0 && (
-            <details>
-              <summary className="cursor-pointer text-sm font-semibold">서버 검사 결과</summary>
-              <ol className="mt-2 space-y-2 text-sm">
+            <details open>
+              <summary className="cursor-pointer text-sm font-semibold">
+                Muse Spark가 호출한 서버 도구
+              </summary>
+              <ol className="mt-2 space-y-3 text-sm">
                 {allocation.result.toolCalls.map((call, index) => (
-                  <li key={index}>
-                    {call.summary ?? '조건을 확인했어요.'}{' '}
-                    {call.outcome === 'REJECTED' ? '(거절)' : '(통과)'}
+                  <li key={index} className="flex flex-wrap items-center gap-2">
+                    <code className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs">
+                      {call.name}
+                    </code>
+                    <span className="font-semibold">{TOOL_GLOSS[call.name]}</span>
+                    <span
+                      className={`rounded px-2 py-0.5 text-xs font-semibold ${
+                        call.outcome === 'REJECTED'
+                          ? 'bg-amber-100 text-amber-900'
+                          : 'bg-emerald-100 text-emerald-900'
+                      }`}
+                    >
+                      {call.outcome === 'REJECTED' ? '거절' : '통과'}
+                    </span>
+                    <span className="w-full text-slate-700">
+                      {call.summary ?? '조건을 확인했어요.'}
+                    </span>
                   </li>
                 ))}
               </ol>

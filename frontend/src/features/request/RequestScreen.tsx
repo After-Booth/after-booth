@@ -171,7 +171,11 @@ export function RequestScreen() {
         <div aria-live="polite">
           {status === 'interpreting' && (
             <AiProgress
-              label="말씀하신 조건을 정리하고 있어요…"
+              label={
+                request.interpretationSource === 'voice'
+                  ? '음성은 Muse Voice Transcribe로 받아쓰고, Muse Spark가 조건을 정리하고 있어요…'
+                  : 'Muse Spark가 말씀하신 조건을 정리하고 있어요…'
+              }
               expectedSeconds={
                 request.interpretationSource === 'voice'
                   ? AI_EXPECTED_SECONDS.voiceRequest

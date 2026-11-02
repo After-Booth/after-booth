@@ -28,7 +28,7 @@ const result = (countedQty: number, status = 'MISMATCH', acceptedQty = 3) => ({
   countedQty,
   boxes: [],
 })
-const emptyStats = { totalReused: 0, byCategory: [], byEvent: [] }
+const emptyStats = { totalReused: 0, reusedVolumeLiters: 0, byCategory: [], byEvent: [] }
 const server = setupServer(
   http.get('*/api/reservations', () => HttpResponse.json([reservation])),
   http.get('*/api/events', () =>
@@ -85,7 +85,7 @@ test('limits handover photos to JPEG and PNG and shows the recount duration whil
     target: { files: [new File(['photo'], 'handover.png', { type: 'image/png' })] },
   })
   expect(screen.getByRole('status')).toHaveTextContent(
-    '물품 수량과 분할 결과를 확인하고 있어요. 잠시 기다려 주세요…',
+    'Muse Spark가 물품 수량을 세고, SAM 3.1이 분할 결과를 확인하고 있어요. 잠시 기다려 주세요…',
   )
   expect(screen.getByRole('status')).toHaveTextContent('보통 약 4초 걸려요')
   expect(input).toBeDisabled()
@@ -107,6 +107,7 @@ test('uploads a matching photo and refreshes category and event reuse totals', a
         completed
           ? {
               totalReused: 3,
+              reusedVolumeLiters: 864,
               byCategory: [{ category: 'DISPLAY_RACK', label: '진열대', quantity: 3 }],
               byEvent: [{ eventId: 1, eventName: '가을 행사', quantity: 3 }],
             }
@@ -118,6 +119,8 @@ test('uploads a matching photo and refreshes category and event reuse totals', a
   await user.upload(screen.getByLabelText('인계 사진 촬영 또는 업로드'), photo())
   expect(await screen.findByText('인계를 완료했어요')).toBeInTheDocument()
   expect(await screen.findByText('총 3개 재사용')).toBeInTheDocument()
+  expect(screen.getByText('부피 약 0.86㎥ 장비를 버리지 않고 다시 썼어요')).toBeInTheDocument()
+  expect(screen.getByText('(등록된 크기 기준 추정)')).toBeInTheDocument()
   expect(screen.getByText('가을 행사 · 3개')).toBeInTheDocument()
 })
 
@@ -282,4 +285,5 @@ test('filters statistics by event and displays an empty result', async () => {
   await waitFor(() => expect(filters).toContain('1'))
   expect(await screen.findByText('총 0개 재사용')).toBeInTheDocument()
   expect(screen.getByText('아직 완료된 인계가 없어요.')).toBeInTheDocument()
+  expect(screen.queryByText(/부피 약/)).not.toBeInTheDocument()
 })
