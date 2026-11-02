@@ -11,7 +11,7 @@ import java.util.stream.Collectors;
 
 /**
  * Parses SAM 3.1's special-token text. The whole text must be either empty (nothing found) or
- * {@code <0f>OBJECT(,OBJECT)*} with an optional final newline, where OBJECT is {@code
+ * {@code <0f>OBJECT(,OBJECT)*} followed by optional trailing whitespace, where OBJECT is {@code
  * n<|box;x1=..;y1=..;x2=..;y2=..;w=..;h=..;c=..|><|mask;x=..;y=..;c=..;data=..|>} (grammar from
  * dev.meta.ai/docs; every spike and replay SAM response has exactly this shape).
  */
@@ -45,7 +45,7 @@ final class SamOutput {
       }
       position++;
     }
-    if (position != text.length() && !text.substring(position).equals("\n")) {
+    if (!text.substring(position).isBlank()) {
       throw malformed(text, position);
     }
     return segments;

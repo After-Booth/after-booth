@@ -58,8 +58,16 @@ class SamOutputTest {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = {"<0f>" + ONE + "," + TWO + "\n", "<0f>" + ONE + "," + TWO})
-  void parsesObjectsSeparatedByCommasWithOrWithoutTheFinalNewline(String text) {
+  @ValueSource(
+      strings = {
+        "<0f>" + ONE + "," + TWO + "\n",
+        "<0f>" + ONE + "," + TWO,
+        "<0f>" + ONE + "," + TWO + "\r\n",
+        "<0f>" + ONE + "," + TWO + " ",
+        "<0f>" + ONE + "," + TWO + "\n\n",
+        "<0f>" + ONE + "," + TWO + " \t\r\n"
+      })
+  void parsesObjectsFollowedByOnlyTrailingWhitespace(String text) {
     assertThat(SamOutput.parse(text)).extracting(SamSegment::id).containsExactly(1, 2);
   }
 
@@ -73,7 +81,9 @@ class SamOutputTest {
         "<0f>",
         ONE,
         "<0f>" + ONE + "trailing",
-        "<0f>" + ONE + "\n\n",
+        "<0f>" + ONE + " trailing",
+        "<0f>" + ONE + "\r\ntrailing",
+        "<0f>" + ONE + "\n\nx",
         "<0f>" + ONE + ",",
         "<0f>" + ONE + ",junk," + TWO,
         "<0f>" + ONE + TWO,
