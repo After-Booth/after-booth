@@ -1321,11 +1321,20 @@ components:
 
     ReuseStats:
       type: object
-      required: [totalReused, byCategory, byEvent]
+      required: [totalReused, reusedVolumeLiters, byCategory, byEvent]
       properties:
         totalReused:
           type: integer
           example: 7
+        reusedVolumeLiters:
+          type: integer
+          format: int64
+          minimum: 0
+          description: |
+            Bulk kept out of the waste stream: the sum of handedOverQty × width × depth × height of each
+            handed-over item, from its registered size in cm (seed data or a human-confirmed intake draft),
+            converted to liters and rounded down. An estimate of volume, not a weight.
+          example: 864
         byCategory:
           type: array
           items:
