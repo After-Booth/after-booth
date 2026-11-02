@@ -194,7 +194,14 @@ class IntakeControllerTest {
                 + sizes
                 + ",\"condition\":\"GOOD\"}]}",
             "{\"lines\":[{\"lineId\":1,\"category\":\"DISPLAY_RACK\",\"quantity\":1,\"sizeCm\":{\"width\":\"90\",\"depth\":1,\"height\":1},\"condition\":\"GOOD\"}]}",
-            "{\"lines\":[{\"lineId\":1,\"category\":\"DISPLAY_RACK\",\"quantity\":1,\"sizeCm\":{\"width\":1,\"depth\":90.5,\"height\":1},\"condition\":\"GOOD\"}]}")) {
+            "{\"lines\":[{\"lineId\":1,\"category\":\"DISPLAY_RACK\",\"quantity\":1,\"sizeCm\":{\"width\":1,\"depth\":90.5,\"height\":1},\"condition\":\"GOOD\"}]}",
+            "{\"lines\":[{\"lineId\":1,\"category\":\"DISPLAY_RACK\",\"quantity\":null,"
+                + sizes
+                + ",\"condition\":\"GOOD\"}]}",
+            "{\"lines\":[{\"lineId\":1,\"category\":\"DISPLAY_RACK\","
+                + sizes
+                + ",\"condition\":\"GOOD\"}]}",
+            "{\"lines\":[{\"lineId\":1,\"category\":\"DISPLAY_RACK\",\"quantity\":1,\"sizeCm\":{\"depth\":1,\"height\":1},\"condition\":\"GOOD\"}]}")) {
       mvc.perform(
               post("/api/intake/drafts/1/confirm")
                   .header("Idempotency-Key", UUID.randomUUID())

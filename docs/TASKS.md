@@ -84,7 +84,7 @@ Dependency order: #1 → (#3 and #4 in parallel) → #5·#6 (DY) / #7 → #8 →
 - [x] #11 Integrate, run everything with one `docker compose up` (DY)
 - [x] #12 Playwright E2E demo scenario, two contexts requesting at once (WJ)
 - [x] #13 Record → replay fallback, latency measurements, loading UX (DY)
-- [ ] #14 Self-score against the judging criteria + Muse Code review → fix the weakest area (DY, WJ)
+- [x] #14 Self-score against the judging criteria + Muse Code review → fix the weakest area (DY, WJ)
 
 #13 recorded the demo scenario with key A (12 live calls, about $0.03, D-057/D-058) and verified it three ways on the real Docker stack through the built-in browser: replay from an empty database (intake, voice request, allocation, two-tab race within 5 ms, confirm, handover, statistics); live mode with an unroutable Meta base URL (the first Spark call waited the 8 s window, every step then completed from fixtures, including the stock-0 loser branch); and the record runs themselves. Codex wrote the first implementation but its sandbox could not run Gradle or vitest; four of its frontend tests failed locally and were rewritten, and the 60 s fallback cooldown was added after the network-loss run exposed per-turn waits. The recording confirmed the winner through the API; a "예약 확정하기" button for HELD reservations was then added to the allocation proposal in the same PR.
 
@@ -176,7 +176,7 @@ Sources: a fresh Claude `reviewer` in scoring mode (Opus, medium effort) and a r
 
 Top 3 fixes, all done on `feat/14-self-score-fixes` (Closes #14):
 
-1. **Impact as a number.** Reuse statistics now report `reusedVolumeLiters`, the summed registered volume of handed-over equipment (contract commit `5c15e96`). The handover screen shows it in m³ as an estimate. SPEC demo step 1 now matches the recorded photo.
+1. **Impact as a number.** Reuse statistics now report `reusedVolumeLiters`, the summed registered volume of handed-over equipment (contract commit `5c15e96`). The handover screen shows it as an estimate, in liters below 1,000 L and in m³ rounded down above. SPEC demo step 1 now matches the recorded photo.
 2. **Meta models visible from the first screen.**
    - Photo intake is the top of the home page, and the health line moved to the bottom.
    - Every AI step names its model: Muse Spark, SAM 3.1, Muse Voice Transcribe.
