@@ -10,6 +10,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class ReuseStatsService {
+  private static final long CUBIC_CM_PER_LITER = 1_000;
+
   private final ReuseStatsRepository repository;
 
   public ReuseStatsService(ReuseStatsRepository repository) {
@@ -22,8 +24,10 @@ public class ReuseStatsService {
     var categories = new EnumMap<ItemCategory, Long>(ItemCategory.class);
     var events = new LinkedHashMap<Long, ReuseStats.EventQuantity>();
     long total = 0;
+    long cubicCm = 0;
     for (var row : rows) {
       total += row.quantity();
+      cubicCm += row.cubicCm();
       categories.merge(row.category(), row.quantity(), Long::sum);
       events.compute(
           row.eventId(),
@@ -35,6 +39,7 @@ public class ReuseStatsService {
     }
     return new ReuseStats(
         total,
+        cubicCm / CUBIC_CM_PER_LITER,
         categories.entrySet().stream()
             .map(
                 entry ->
