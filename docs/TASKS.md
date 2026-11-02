@@ -215,7 +215,7 @@ Not verified: actual application process kill/restart, mixed-version rolling dep
 
 - [x] #61 A burst on the empty idempotency lock pool can strand a request until the 5 s timeout (D-068).
 
-CI run 41435677051 failed the twelve-preparation regression with `idempotency-locks ... total=11, active=11, idle=0, waiting=0` after 5 s. The HikariCP 7.0.2 bytecode shows why: each creator task adds at most one connection, a task is submitted only when the waiting count exceeds the queued tasks, and with minimum idle 0 nothing else grows the pool. The user chose to prefill the pool, so the default `minimum-idle` is now 16. Nine runs before the change on this 16-core PC did not reproduce the failure (six normal, three under full CPU load, where the pool took about 2 s to reach 12 connections). The race is therefore inferred from the CI report and the HikariCP code, not reproduced locally.
+CI run 41435677051 failed the twelve-preparation regression with `idempotency-locks ... total=11, active=11, idle=0, waiting=0` after 5 s. The HikariCP 7.0.2 bytecode shows why: each creator task adds at most one connection, a task is submitted only when the waiting count exceeds the queued tasks, and with minimum idle 0 nothing else grows the pool. The user chose to prefill the pool. When `minimum-idle` is not set, it now defaults to the configured `maximum-pool-size` (16), so overriding only the maximum still starts (`IdempotencyLockPoolSettingsTest`). Nine runs before the change on this 16-core PC did not reproduce the failure (six normal, three under full CPU load, where the pool took about 2 s to reach 12 connections). The race is therefore inferred from the CI report and the HikariCP code, not reproduced locally.
 
 Run from `backend/` on Windows through PowerShell:
 
