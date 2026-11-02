@@ -9,6 +9,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import java.time.OffsetDateTime;
 import java.util.List;
+import tools.jackson.databind.annotation.JsonDeserialize;
 
 public record ConfirmIntakeRequest(
     @NotEmpty List<@NotNull @Valid ConfirmLine> lines,
@@ -16,9 +17,9 @@ public record ConfirmIntakeRequest(
     VehicleType vehicleRequirement,
     String conditionsTranscript) {
   public record ConfirmLine(
-      @NotNull Long lineId,
+      @JsonDeserialize(using = StrictIdDeserializer.class) @NotNull Long lineId,
       @NotNull ItemCategory category,
-      @Positive int quantity,
+      @JsonDeserialize(using = StrictIntegerDeserializer.class) @Positive int quantity,
       @NotNull @Valid SizeCm sizeCm,
       @NotNull Condition condition) {}
 }

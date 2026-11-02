@@ -180,6 +180,33 @@ class IntakeControllerTest {
   }
 
   @Test
+  void confirmRejectsNonIntegerJsonBeforeService() throws Exception {
+    String sizes = "\"sizeCm\":{\"width\":1,\"depth\":1,\"height\":1}";
+    for (String body :
+        List.of(
+            "{\"lines\":[{\"lineId\":1.0,\"category\":\"DISPLAY_RACK\",\"quantity\":1,"
+                + sizes
+                + ",\"condition\":\"GOOD\"}]}",
+            "{\"lines\":[{\"lineId\":1,\"category\":\"DISPLAY_RACK\",\"quantity\":1.5,"
+                + sizes
+                + ",\"condition\":\"GOOD\"}]}",
+            "{\"lines\":[{\"lineId\":1,\"category\":\"DISPLAY_RACK\",\"quantity\":\"2\","
+                + sizes
+                + ",\"condition\":\"GOOD\"}]}",
+            "{\"lines\":[{\"lineId\":1,\"category\":\"DISPLAY_RACK\",\"quantity\":1,\"sizeCm\":{\"width\":\"90\",\"depth\":1,\"height\":1},\"condition\":\"GOOD\"}]}",
+            "{\"lines\":[{\"lineId\":1,\"category\":\"DISPLAY_RACK\",\"quantity\":1,\"sizeCm\":{\"width\":1,\"depth\":90.5,\"height\":1},\"condition\":\"GOOD\"}]}")) {
+      mvc.perform(
+              post("/api/intake/drafts/1/confirm")
+                  .header("Idempotency-Key", UUID.randomUUID())
+                  .contentType(MediaType.APPLICATION_JSON)
+                  .content(body))
+          .andExpect(status().isBadRequest())
+          .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+    }
+    verifyNoInteractions(service);
+  }
+
+  @Test
   void mapsDraftConflictToContractError() throws Exception {
     when(service.get(1L)).thenThrow(new BusinessException(ErrorCode.DRAFT_NOT_READY));
     mvc.perform(get("/api/intake/drafts/1"))
