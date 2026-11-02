@@ -261,7 +261,6 @@ export function useAllocation(request: PickupRequest) {
     manualSelection,
     execute,
     confirm,
-    recoveredPartial,
     currentStock,
   }
 }

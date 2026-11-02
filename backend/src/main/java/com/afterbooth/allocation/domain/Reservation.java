@@ -126,12 +126,6 @@ public class Reservation {
   public record ConfirmationDecision(
       ReservationStatus next, TransitionActor actor, ErrorCode error) {}
 
-  public ReservationStatus confirm(Instant now) {
-    ConfirmationDecision decision = confirmationAt(now);
-    if (decision.error() != null) throw new BusinessException(decision.error());
-    return decision.next();
-  }
-
   public ReservationStatus cancel() {
     require(status == ReservationStatus.HELD || status == ReservationStatus.CONFIRMED);
     return ReservationStatus.RELEASED;

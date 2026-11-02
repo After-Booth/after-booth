@@ -1,9 +1,7 @@
 package com.afterbooth.allocation.domain;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.afterbooth.global.error.BusinessException;
 import com.afterbooth.global.error.ErrorCode;
 import java.time.Instant;
 import org.junit.jupiter.api.Test;
@@ -13,15 +11,6 @@ class ReservationRulesTest {
 
   private Reservation hold() {
     return Reservation.hold(1L, 1L, 2L, 1, NOW.plusSeconds(900), NOW.plusSeconds(3600), NOW);
-  }
-
-  @Test
-  void confirmIsAllowedStrictlyBeforeHoldExpiry() {
-    assertThat(hold().confirm(NOW.plusSeconds(899))).isEqualTo(ReservationStatus.CONFIRMED);
-    assertThatThrownBy(() -> hold().confirm(NOW.plusSeconds(900)))
-        .isInstanceOfSatisfying(
-            BusinessException.class,
-            error -> assertThat(error.errorCode()).isEqualTo(ErrorCode.HOLD_EXPIRED));
   }
 
   @Test
@@ -41,7 +30,7 @@ class ReservationRulesTest {
   }
 
   @Test
-  void confirmationDecisionIncludesLazyExpiryActorAndResult() {
+  void confirmationDecisionConfirmsStrictlyBeforeExpiryAndExpiresAtTheBoundary() {
     var before = hold().confirmationAt(NOW.plusSeconds(899));
     assertThat(before.next()).isEqualTo(ReservationStatus.CONFIRMED);
     assertThat(before.actor()).isEqualTo(TransitionActor.USER);
