@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { AiProgress } from '../../components/AiProgress'
 import { AI_EXPECTED_SECONDS } from '../aiLatency'
 import { useHandover } from './useHandover'
+import { volumeText } from './volume'
 
 const button =
   'min-h-12 rounded-xl bg-emerald-800 px-5 py-3 font-semibold text-white disabled:opacity-50'
@@ -132,7 +133,7 @@ export function HandoverScreen() {
           )}
           {handover.busy && (
             <AiProgress
-              label="물품 수량과 분할 결과를 확인하고 있어요. 잠시 기다려 주세요…"
+              label="Muse Spark가 물품 수량을 세고, SAM 3.1이 분할 결과를 확인하고 있어요. 잠시 기다려 주세요…"
               expectedSeconds={AI_EXPECTED_SECONDS.handover}
             />
           )}
@@ -240,6 +241,15 @@ export function HandoverScreen() {
               <p className="text-2xl font-bold text-emerald-900">
                 총 {handover.stats.totalReused}개 재사용
               </p>
+              {handover.stats.totalReused > 0 && (
+                <div>
+                  <p className="font-semibold text-emerald-900">
+                    부피 약 {volumeText(handover.stats.reusedVolumeLiters)} 장비를 버리지 않고 다시
+                    썼어요
+                  </p>
+                  <p className="text-sm text-slate-600">(등록된 크기 기준 추정)</p>
+                </div>
+              )}
               {handover.stats.totalReused === 0 && <p>아직 완료된 인계가 없어요.</p>}
               <h3 className="font-bold">카테고리별</h3>
               <ul>

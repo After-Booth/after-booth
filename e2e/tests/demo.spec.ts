@@ -458,6 +458,7 @@ test('demo scenario from photo intake to reuse stats', async ({ browser, request
         apiGet<ReuseStats>(request, '/api/stats/reuse'),
       );
       expect(stats.totalReused).toBe(1);
+      expect(stats.reusedVolumeLiters, 'seeded 90×40×180 cm rack').toBe(648);
       expect(
         stats.byCategory.find((entry) => entry.category === 'DISPLAY_RACK')?.quantity,
       ).toBe(1);
@@ -468,6 +469,7 @@ test('demo scenario from photo intake to reuse stats', async ({ browser, request
 
       await expect(winner.page.getByText('총 1개 재사용')).toBeVisible();
       await expect(winner.page.getByText('진열대 · 1개')).toBeVisible();
+      await expect(winner.page.getByText('부피 약 648L')).toBeVisible();
       await expect(winner.page.getByText(`${events[0].name} · 1개`)).toBeVisible();
 
       const handedOver = await apiGet<Reservation>(request, `/api/reservations/${reservationId}`);

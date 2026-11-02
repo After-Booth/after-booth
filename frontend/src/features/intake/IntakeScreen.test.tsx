@@ -74,10 +74,12 @@ test('polls while processing, showing the stage, until the draft is ready', asyn
 
   await uploadPhoto()
 
-  expect(await screen.findByText('사진에서 물품을 세는 중이에요…')).toBeInTheDocument()
+  expect(await screen.findByText('Muse Spark가 사진에서 물품을 세는 중이에요…')).toBeInTheDocument()
   expect(screen.getByRole('status')).toHaveTextContent('보통 약 8초 걸려요')
   expect(
-    await screen.findByText('물품 윤곽을 다듬는 중이에요…', undefined, { timeout: 3000 }),
+    await screen.findByText('SAM 3.1이 물품마다 윤곽을 확인하는 중이에요…', undefined, {
+      timeout: 3000,
+    }),
   ).toBeInTheDocument()
   expect(screen.getByRole('status')).not.toHaveTextContent('0초 경과')
   expect(await screen.findByText('진열대 4개', undefined, { timeout: 3000 })).toBeInTheDocument()

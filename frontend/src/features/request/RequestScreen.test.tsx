@@ -244,7 +244,11 @@ test.each(['audio/wav', 'audio/x-wav', ''])(
     expect(input).toHaveAccessibleDescription('16 kHz 모노 WAV 파일을 올려 주세요 · 최대 60초')
     // Checked synchronously after the change, before the upload can answer
     fireEvent.change(input, { target: { files: [new File([bytes], 'sample.WAV', { type })] } })
-    expect(screen.getByText('말씀하신 조건을 정리하고 있어요…')).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        '음성은 Muse Voice Transcribe로 받아쓰고, Muse Spark가 조건을 정리하고 있어요…',
+      ),
+    ).toBeInTheDocument()
     expect(screen.getByText('0초 경과 · 보통 약 5초 걸려요')).toBeInTheDocument()
     expect(input).toBeDisabled()
     expect(screen.getByRole('button', { name: '마이크로 말하기' })).toBeDisabled()

@@ -69,7 +69,9 @@ beforeEach(() => {
   )
   vi.mocked(listReservations).mockResolvedValue(ok([reservation]))
   vi.mocked(listEvents).mockResolvedValue(ok([]))
-  vi.mocked(getReuseStats).mockResolvedValue(ok({ totalReused: 0, byCategory: [], byEvent: [] }))
+  vi.mocked(getReuseStats).mockResolvedValue(
+    ok({ totalReused: 0, reusedVolumeLiters: 0, byCategory: [], byEvent: [] }),
+  )
   vi.mocked(getReservation).mockResolvedValue(ok(reservation))
   vi.mocked(submitHandoverPhoto).mockResolvedValue(ok(mismatch))
 })

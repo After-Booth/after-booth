@@ -157,6 +157,7 @@ class HandoverIntegrationTest {
     mvc.perform(get("/api/stats/reuse"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.totalReused").value(3))
+        .andExpect(jsonPath("$.reusedVolumeLiters").value(24))
         .andExpect(jsonPath("$.byCategory[0].label").value("수납함"))
         .andExpect(jsonPath("$.byEvent[0].eventId").value(1));
     mvc.perform(get("/api/reservations").param("eventId", "1"))
@@ -451,7 +452,7 @@ class HandoverIntegrationTest {
             Long.class,
             java.sql.Timestamp.from(NOW.plusSeconds(3600)));
     jdbc.update(
-        "update item set category='FOLDING_TABLE',label='접이식 테이블',event_id=? where id=(select item_id from reservation where id=?)",
+        "update item set category='FOLDING_TABLE',label='접이식 테이블',event_id=?,width_cm=15,depth_cm=15,height_cm=16 where id=(select item_id from reservation where id=?)",
         otherEvent,
         second);
     counted(2, true);
@@ -463,12 +464,15 @@ class HandoverIntegrationTest {
     reservations.cancel(cancelled);
     var result = stats.get(null);
     assertThat(result.totalReused()).isEqualTo(3);
+    assertThat(result.reusedVolumeLiters()).isEqualTo(19);
     assertThat(result.byCategory()).hasSize(2);
     assertThat(result.byEvent()).hasSize(2);
     assertThat(stats.get(otherEvent).totalReused()).isEqualTo(1);
+    assertThat(stats.get(otherEvent).reusedVolumeLiters()).isEqualTo(3);
     mvc.perform(get("/api/stats/reuse").param("eventId", "-1"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.totalReused").value(0))
+        .andExpect(jsonPath("$.reusedVolumeLiters").value(0))
         .andExpect(jsonPath("$.byCategory").isEmpty())
         .andExpect(jsonPath("$.byEvent").isEmpty());
   }

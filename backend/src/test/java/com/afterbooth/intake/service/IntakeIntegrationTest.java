@@ -201,6 +201,42 @@ class IntakeIntegrationTest {
   }
 
   @Test
+  void confirmRejectsCoercibleNonIntegerJsonWithoutCreatingItems() throws Exception {
+    var draft = create(UUID.randomUUID(), eventId, photo, "image/png");
+    ready(draft.id());
+    Long line = lines.findByDraftIdOrderById(draft.id()).getFirst().id();
+    String size = "\"sizeCm\":{\"width\":60,\"depth\":40,\"height\":35}";
+    for (String body :
+        List.of(
+            "{\"lines\":[{\"lineId\":"
+                + line
+                + ".0,\"category\":\"STORAGE_BIN\",\"quantity\":1,"
+                + size
+                + ",\"condition\":\"FAIR\"}]}",
+            "{\"lines\":[{\"lineId\":"
+                + line
+                + ",\"category\":\"STORAGE_BIN\",\"quantity\":1.5,"
+                + size
+                + ",\"condition\":\"FAIR\"}]}",
+            "{\"lines\":[{\"lineId\":"
+                + line
+                + ",\"category\":\"STORAGE_BIN\",\"quantity\":1,\"sizeCm\":{\"width\":\"60\",\"depth\":40,\"height\":35},\"condition\":\"FAIR\"}]}")) {
+      mvc.perform(
+              post("/api/intake/drafts/" + draft.id() + "/confirm")
+                  .header("Idempotency-Key", UUID.randomUUID())
+                  .contentType("application/json")
+                  .content(body))
+          .andExpect(status().isBadRequest())
+          .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+    }
+    assertThat(service.get(draft.id()).status()).isEqualTo(IntakeStatus.READY);
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM item WHERE intake_draft_id=?", Long.class, draft.id()))
+        .isZero();
+  }
+
+  @Test
   void confirmationRejectsForeignDuplicateAndLateDeadlineAndRollsBackState() {
     var draft = create(UUID.randomUUID(), eventId, photo, "image/png");
     ready(draft.id());

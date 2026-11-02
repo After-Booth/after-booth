@@ -5,8 +5,8 @@ import { CATEGORIES, CATEGORY_COLOR, CATEGORY_LABEL } from './categories'
 import { problemOf, useIntake, type EditableLine } from './useIntake'
 
 const STAGE_TEXT: Record<IntakeStage, string> = {
-  ESTIMATE: '사진에서 물품을 세는 중이에요…',
-  SEGMENT: '물품 윤곽을 다듬는 중이에요…',
+  ESTIMATE: 'Muse Spark가 사진에서 물품을 세는 중이에요…',
+  SEGMENT: 'SAM 3.1이 물품마다 윤곽을 확인하는 중이에요…',
 }
 
 const CONDITION_LABEL: Record<Condition, string> = { GOOD: '양호', FAIR: '보통', POOR: '불량' }
