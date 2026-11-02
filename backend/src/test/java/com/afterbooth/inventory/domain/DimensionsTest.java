@@ -15,7 +15,6 @@ class DimensionsTest {
           new Dimensions(80, 120, 60), new Dimensions(80, 60, 120),
           new Dimensions(60, 120, 80), new Dimensions(60, 80, 120)
         }) {
-      assertThat(item.fitsIn(cargo)).isTrue();
       assertThat(item.limitingDimension(cargo)).isNull();
     }
   }
@@ -49,7 +48,7 @@ class DimensionsTest {
 
   @Test
   void rotationSupportsUnsortedCargoOverrides() {
-    assertThat(new Dimensions(120, 80, 60).fitsIn(new Dimensions(60, 120, 80))).isTrue();
+    assertThat(new Dimensions(120, 80, 60).limitingDimension(new Dimensions(60, 120, 80))).isNull();
     assertThat(new Dimensions(60, 121, 80).limitingDimension(new Dimensions(60, 120, 80)))
         .isEqualTo("depth");
   }

@@ -5,6 +5,11 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.afterbooth.inventory.config.VehicleCargoProperties;
+import com.afterbooth.inventory.domain.Item;
+import com.afterbooth.inventory.domain.VehicleType;
+import com.afterbooth.inventory.repository.ItemRepository;
+import com.afterbooth.inventory.service.VehicleFitPolicy;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -30,6 +35,9 @@ import org.springframework.test.web.servlet.MockMvc;
 class DefaultVehicleHoldIntegrationTest {
   @Autowired MockMvc mvc;
   @Autowired JdbcTemplate jdbc;
+  @Autowired ItemRepository items;
+  @Autowired VehicleFitPolicy vehicleFit;
+  @Autowired VehicleCargoProperties cargo;
   @Autowired tools.jackson.databind.json.JsonMapper json;
 
   Long request(String vehicle) {
@@ -81,9 +89,16 @@ class DefaultVehicleHoldIntegrationTest {
   }
 
   @Test
-  void sedanRejectsSeedRackAndCanHoldFittingAlternativeWhileVanHoldsRack() throws Exception {
+  void sedanRejectsSeedRackHeightAndHoldsBoundaryTableWhileVanHoldsRack() throws Exception {
     Long rack = seed("DISPLAY_RACK");
     Long sedan = request("SEDAN");
+    Item rackItem = items.findById(rack).orElseThrow();
+    assertThat(vehicleFit.checkFit(rackItem, VehicleType.SEDAN).limitingDimension())
+        .isEqualTo("height");
+    Item table = items.findById(seed("FOLDING_TABLE")).orElseThrow();
+    assertThat(table.dimensions().widthCm()).isEqualTo(120);
+    assertThat(table.dimensions().widthCm())
+        .isEqualTo(cargo.dimensionsFor(VehicleType.SEDAN).widthCm());
     int before = stock(rack);
     mvc.perform(
             post("/api/reservations")
@@ -97,7 +112,7 @@ class DefaultVehicleHoldIntegrationTest {
             post("/api/reservations")
                 .contentType("application/json")
                 .header("Idempotency-Key", UUID.randomUUID())
-                .content(body(sedan, seed("STORAGE_BIN"))))
+                .content(body(sedan, table.id())))
         .andExpect(status().isCreated());
     mvc.perform(
             post("/api/reservations")

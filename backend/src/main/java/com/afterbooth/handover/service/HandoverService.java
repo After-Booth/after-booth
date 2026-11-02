@@ -26,10 +26,6 @@ public class HandoverService {
     this.completion = completion;
   }
 
-  public HandoverResult submit(Long id, byte[] bytes, String mediaType) {
-    return prepare(id, bytes, mediaType).get();
-  }
-
   public Supplier<HandoverResult> prepare(Long id, byte[] bytes, String mediaType) {
     IntakeUpload upload = new IntakeUpload(bytes, mediaType);
     var category = reservations.preparePhotoHandover(id);

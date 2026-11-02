@@ -24,6 +24,7 @@ import com.afterbooth.inventory.domain.VehicleType;
 import com.afterbooth.request.domain.PickupRequest;
 import jakarta.persistence.EntityManager;
 import java.math.BigDecimal;
+import java.sql.SQLException;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -32,6 +33,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.jdbc.core.ConnectionCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -198,6 +200,69 @@ class CoreSchemaIntegrationTest {
                 key))
         .startsWith("[")
         .contains("DISPLAY_RACK");
+  }
+
+  @Test
+  void databaseRejectsCompletedHandoverWithoutAcceptedQuantity() {
+    Instant now = Instant.parse("2026-11-01T00:00:00Z");
+    Long itemId = jdbc.queryForObject("SELECT id FROM item LIMIT 1", Long.class);
+    PickupRequest request =
+        PickupRequest.create(
+            2L, ItemCategory.DISPLAY_RACK, 1, VehicleType.VAN, null, null, null, now);
+    entityManager.persist(request);
+    Reservation reservation =
+        Reservation.hold(
+            request.id(), itemId, 2L, 1, now.plusSeconds(900), now.plusSeconds(3600), now);
+    entityManager.persist(reservation);
+    entityManager.flush();
+    String constraint =
+        jdbc.queryForObject(
+            """
+            SELECT conname FROM pg_constraint
+            WHERE conrelid = 'handover_log'::regclass AND contype = 'c'
+              AND pg_get_constraintdef(oid) LIKE '%MISMATCH%accepted_qty IS NOT NULL%'
+            """,
+            String.class);
+    assertThat(constraint).isNotBlank();
+
+    jdbc.execute(
+        (ConnectionCallback<Void>)
+            connection -> {
+              var savepoint = connection.setSavepoint();
+              try {
+                assertThatThrownBy(
+                        () ->
+                            jdbc.update(
+                                """
+                                INSERT INTO handover_log
+                                  (reservation_id, expected_qty, counted_qty, accepted_qty,
+                                   status, boxes, created_at)
+                                VALUES (?, 1, 1, NULL, 'COMPLETED', '[]'::jsonb, ?)
+                                """,
+                                reservation.id(),
+                                java.sql.Timestamp.from(now)))
+                    .isInstanceOfSatisfying(
+                        DataIntegrityViolationException.class,
+                        failure ->
+                            assertThat(failure.getMostSpecificCause())
+                                .isInstanceOfSatisfying(
+                                    SQLException.class,
+                                    sql -> {
+                                      assertThat(sql.getSQLState()).isEqualTo("23514");
+                                      assertThat(sql.getMessage()).contains(constraint);
+                                    }));
+              } finally {
+                connection.rollback(savepoint);
+                connection.releaseSavepoint(savepoint);
+              }
+              return null;
+            });
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM handover_log WHERE reservation_id = ?",
+                Long.class,
+                reservation.id()))
+        .isZero();
   }
 
   @Test

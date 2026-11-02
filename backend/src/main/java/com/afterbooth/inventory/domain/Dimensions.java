@@ -13,10 +13,6 @@ public record Dimensions(int widthCm, int depthCm, int heightCm) {
       throw new BusinessException(ErrorCode.INVALID_INPUT);
   }
 
-  public boolean fitsIn(Dimensions cargo) {
-    return limitingDimension(cargo) == null;
-  }
-
   public String limitingDimension(Dimensions cargo) {
     Axis[] itemAxes = {
       new Axis("width", widthCm, 0), new Axis("depth", depthCm, 1), new Axis("height", heightCm, 2)

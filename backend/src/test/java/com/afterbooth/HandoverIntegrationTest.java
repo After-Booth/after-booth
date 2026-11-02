@@ -322,8 +322,9 @@ class HandoverIntegrationTest {
                     List.of(new BoundingBox(.1, .1, .2, .2), new BoundingBox(.4, .4, .2, .2)),
                     true);
               });
-      var first = pool.submit(() -> attempt(() -> handovers.submit(id, photo, "image/png")));
-      var second = pool.submit(() -> attempt(() -> handovers.submit(id, photo, "image/png")));
+      var first = pool.submit(() -> attempt(() -> handovers.prepare(id, photo, "image/png").get()));
+      var second =
+          pool.submit(() -> attempt(() -> handovers.prepare(id, photo, "image/png").get()));
       var outcomes =
           java.util.Arrays.asList(
               first.get(30, TimeUnit.SECONDS), second.get(30, TimeUnit.SECONDS));
@@ -338,7 +339,7 @@ class HandoverIntegrationTest {
   void retakeRacingResolutionUsesOnlyNewestLockedEvidence() throws Exception {
     Long id = confirmed(3);
     counted(0, false);
-    handovers.submit(id, photo, "image/png");
+    handovers.prepare(id, photo, "image/png").get();
     CountDownLatch entered = new CountDownLatch(1), release = new CountDownLatch(1);
     when(counter.count(any(), anyString(), any()))
         .thenAnswer(
@@ -348,7 +349,8 @@ class HandoverIntegrationTest {
               return new HandoverPhotoCounter.Result(0, List.of(), false);
             });
     try (var pool = Executors.newSingleThreadExecutor()) {
-      var retake = pool.submit(() -> attempt(() -> handovers.submit(id, photo, "image/png")));
+      var retake =
+          pool.submit(() -> attempt(() -> handovers.prepare(id, photo, "image/png").get()));
       assertThat(entered.await(20, TimeUnit.SECONDS)).isTrue();
       handovers.resolve(id, 1);
       release.countDown();
@@ -453,11 +455,11 @@ class HandoverIntegrationTest {
         otherEvent,
         second);
     counted(2, true);
-    handovers.submit(first, photo, "image/png");
+    handovers.prepare(first, photo, "image/png").get();
     counted(0, false);
-    handovers.submit(second, photo, "image/png");
+    handovers.prepare(second, photo, "image/png").get();
     handovers.resolve(second, 1);
-    handovers.submit(pending, photo, "image/png");
+    handovers.prepare(pending, photo, "image/png").get();
     reservations.cancel(cancelled);
     var result = stats.get(null);
     assertThat(result.totalReused()).isEqualTo(3);

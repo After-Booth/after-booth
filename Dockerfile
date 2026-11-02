@@ -20,7 +20,7 @@ RUN ./gradlew --no-daemon bootJar
 
 FROM eclipse-temurin:21-jre
 WORKDIR /app
-COPY --from=backend /src/backend/build/libs/afterbooth-0.0.1-SNAPSHOT.jar app.jar
+COPY --from=backend /src/backend/build/libs/*.jar app.jar
 # Replay reads recorded responses from here (AGENTS.md hard rule 4)
 COPY fixtures/ fixtures/
 ENV AI_FIXTURES_DIR=/app/fixtures
