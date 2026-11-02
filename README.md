@@ -112,6 +112,10 @@ To start again, delete the database and restart:
 docker compose down -v
 ```
 
+```bash
+docker compose up --build
+```
+
 ### Run the whole demo automatically
 
 A Playwright test drives the same scenario through the real UI against a separate compose project on port 18080, including two browser contexts racing for the last rack ([`e2e/README.md`](e2e/README.md)). Requirements: Docker and Node 20 or later.
