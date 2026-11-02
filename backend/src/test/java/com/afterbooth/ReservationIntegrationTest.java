@@ -173,6 +173,36 @@ class ReservationIntegrationTest {
   }
 
   @Test
+  void orphanHoldRecoversWithoutDoubleDecrement() {
+    Long item = item(2);
+    Long request = request(2);
+    UUID key = UUID.randomUUID();
+    byte[] body = "orphan-hold".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+    jdbc.update(
+        "insert into idempotency_record(idempotency_key,fingerprint,state,created_at) values (?,?,'IN_PROGRESS',current_timestamp)",
+        key,
+        IdempotencyService.fingerprint("POST", "/api/reservations", body));
+    var recovered =
+        idempotency.execute(key, "POST", "/api/reservations", body, 201, () -> hold(request, item));
+    var replay =
+        idempotency.execute(
+            key,
+            "POST",
+            "/api/reservations",
+            body,
+            201,
+            () -> {
+              throw new AssertionError("Replay executed");
+            });
+    assertThatJson(replay.getBody(), recovered.getBody());
+    assertThat(stock(item)).isEqualTo(1);
+    assertThat(
+            jdbc.queryForObject(
+                "select count(*) from reservation where request_id=?", Integer.class, request))
+        .isEqualTo(1);
+  }
+
+  @Test
   void repeatedKeyReplaysStoredResponseWithoutDecrementAndRejectsDifferentBody() {
     Long item = item(2);
     Long request = request(2);
