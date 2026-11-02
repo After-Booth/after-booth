@@ -36,15 +36,13 @@ Every AI call in the product goes to the Meta Model API through one gateway (`Ai
 ## Architecture
 
 ```mermaid
-flowchart LR
-    U[Browser: React 19 UI, Korean, mobile first] -->|REST /api| API[Spring Boot 4.1 API]
-    subgraph Server
-        API --> D[Domain: inventory, intake, request, allocation, handover, stats]
-        D --> DB[(PostgreSQL 17)]
-        D --> GW[AiGateway: live / record / replay]
-        GW --> FX[(fixtures/replay: recorded responses)]
-    end
-    GW -->|live or record| META[Meta Model API: Muse Spark, SAM 3.1, Muse Voice Transcribe]
+flowchart TD
+    U["Browser<br/>React 19, Korean UI"] -->|REST /api| API["Spring Boot 4.1 API"]
+    API --> D["Domain services<br/>intake, request, allocation, handover, stats"]
+    D --> DB[("PostgreSQL 17")]
+    D --> GW["AiGateway<br/>live / record / replay"]
+    GW -->|replay| FX[("fixtures/replay<br/>recorded responses")]
+    GW -->|live or record| META["Meta Model API<br/>Muse Spark, SAM 3.1, Muse Voice Transcribe"]
 ```
 
 - `backend/`: Java 21, Spring Boot 4.1, Flyway migrations, `RestClient` to the Meta Model API behind `AiGateway`.
