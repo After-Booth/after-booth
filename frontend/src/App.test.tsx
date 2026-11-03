@@ -101,4 +101,6 @@ test('switching accounts in one tab never shows the previous member’s data', a
   await screen.findByLabelText('등록할 행사')
   expect(screen.queryByRole('option', { name: 'Member A private event' })).not.toBeInTheDocument()
   expect(screen.getAllByRole('option')).toHaveLength(1)
+  // Let the home screen's health request finish so nothing resolves after the test ends.
+  expect(await screen.findByText('서버 UP · AI replay')).toBeInTheDocument()
 })
