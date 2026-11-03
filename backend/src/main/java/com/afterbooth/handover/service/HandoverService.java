@@ -16,17 +16,27 @@ public class HandoverService {
   private final ReservationService reservations;
   private final HandoverPhotoCounter counter;
   private final HandoverCompletionService completion;
+  private final com.afterbooth.global.security.DomainAccess access;
+  private final com.afterbooth.global.security.MemberWorkRegistry work;
 
   public HandoverService(
       ReservationService reservations,
       HandoverPhotoCounter counter,
-      HandoverCompletionService completion) {
+      HandoverCompletionService completion,
+      com.afterbooth.global.security.DomainAccess access,
+      com.afterbooth.global.security.MemberWorkRegistry work) {
     this.reservations = reservations;
+    this.access = access;
+    this.work = work;
     this.counter = counter;
     this.completion = completion;
   }
 
   public Supplier<HandoverResult> prepare(Long id, byte[] bytes, String mediaType) {
+    return work.call(access.actor().memberId(), () -> prepareOwned(id, bytes, mediaType));
+  }
+
+  private Supplier<HandoverResult> prepareOwned(Long id, byte[] bytes, String mediaType) {
     IntakeUpload upload = new IntakeUpload(bytes, mediaType);
     var category = reservations.preparePhotoHandover(id);
     HandoverPhotoCounter.Result result;

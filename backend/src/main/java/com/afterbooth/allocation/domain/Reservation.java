@@ -48,6 +48,12 @@ public class Reservation {
   @Column(nullable = false)
   private Instant createdAt;
 
+  @Column private Instant retentionUntil;
+
+  public boolean retentionEnded(Instant now) {
+    return retentionUntil != null && !now.isBefore(retentionUntil);
+  }
+
   protected Reservation() {}
 
   private Reservation(

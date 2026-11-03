@@ -462,3 +462,31 @@ Final foundation regression gate:
 ```
 
 Across the successful affected runs, 73 distinct cases passed: 17 password, five password HTTPS, nine session, 16 signup, five shared-limit, six Fake/mail configuration, eight loopback Resend and seven architecture cases. The parent inspected actual diffs and XML counts. Changed-file secret scanning and git diff --check passed. No contract or frontend change required regeneration; no full-suite pass is claimed.
+
+## Issue #69 — Withdrawal and retention (2026-11-03)
+
+Implementation base: `origin/main` `091cae2`, containing #65–#68; isolated branch `feat/69-withdrawal-retention`, worktree `/private/tmp/afterbooth-69-withdrawal-retention`. This session resumed the stopped worktree (uncommitted prior work, last prior run 292 tests with one failure) and completed it through local commits. The prior run is history, not evidence; only the gates below count. D-083 authorizes the scope; no remote writes, real mail/Meta calls, production data or deployment.
+
+Implemented scope:
+
+- `withdrawMember` (DELETE /api/members/me): ACTIVE Bearer + current-password confirmation, parsed-path CSRF/Origin/Bearer checks through the shared chain, principal-derived identity, strict `WithdrawMemberRequest`, 204 with no-store and refresh+CSRF cookie clearing. No new rate scope (D-083); 429 declared but unreachable.
+- Atomic withdrawal transaction: email advisory lock, ascending member locks, ACTIVE/authVersion/JWT recheck under lock, password match, HELD/CONFIRMED block on actual status (expired TTL still blocks; MISMATCH matters only on CONFIRMED), session revocation + auth_version increment, member-linked CSRF/challenge purge, HMAC email block, full personal-data scrub, `retention_until` earliest deadline. Immediate JWT/login/refresh rejection afterward.
+- Single-server owned-work disposal (D-083): `MemberWorkRegistry` pause/drain/commit protocol for mail/intake/allocation/handover/condition payloads; queued payloads survive failed attempts and are discarded only after commit.
+- Retention cleanup: per-minute scheduler with overdue monitor, advisory-serialized worker, handover → transition → reservation deletion in FK order, same-transaction `reuse_archive` + `archived_handed_over_qty` accumulation, unreferenced-organization/request/item/draft/event/member purge preserving counterparty refs and archive shells, read blocking at expiry.
+- Reuse stats combine surviving HANDED_OVER rows with the archive, summing exact cm³ before a single division by 1000. Reuses the #65 schema (no new migration), #66 member-lock/session services and #67 DomainAccess; no second chain/store/encoder/mail, no contract change.
+
+Verification (orchestrator-run gates, macOS, Docker engine, `JAVA_HOME=.../corretto-21.0.12.1`, AI_MODE=replay, disposable Testcontainers PostgreSQL, synthetic data only):
+
+```bash
+# backend/ — full #69 footprint + touched-domain regressions
+./gradlew spotlessApply compileJava compileTestJava spotlessCheck test --tests WithdrawalIntegrationTest --tests WithdrawalPrivacyIntegrationTest --tests WithdrawalMailIntegrationTest --tests RetentionIntegrationTest --tests LocalFakePasswordHttpsTest --tests ArchitectureTest --tests MemberWorkRegistryTest --tests SignupCleanupIsolationTest --tests ReuseStatsPrecisionTest --tests MemberInputPrivacyTest --tests GlobalExceptionHandlerTest --tests AllocationServiceTest --tests IntakeProcessorTest --tests ConditionServiceTest --tests ReservationIntegrationTest --tests HandoverIntegrationTest --tests IntakeIntegrationTest --tests PickupRequestIntegrationTest --tests AllocationIntegrationTest --tests SessionIntegrationTest --tests SignupIntegrationTest --tests DomainAuthorizationIntegrationTest --tests CatalogAuthorizationIntegrationTest --tests PasswordIntegrationTest --tests AuthSecurityHttpsTest --tests DefaultVehicleHoldIntegrationTest --tests HoldTtlStartupTest --no-daemon
+# 27 suites, 287 tests, zero failures/errors/skips (XML counts inspected).
+# Post-review-fix gate (9 suites incl. R1/R2/R4 SQL coverage): 75/75 green.
+# R6/R7 gate (MemberWorkRegistryTest 9, IntakeProcessorTest 13, ArchitectureTest 7, --rerun-tasks): 29/29 green.
+```
+
+The stopped session's single failure was a test-side hardcoded CSRF count (login legitimately creates a member-linked CSRF row); the corrected before/after preservation assertion passes. The completion round added pending-member, stale-principal, same-member-race and service-level reuse-total tests. Secret scan over all changed files and `git diff --check` are clean; the one scanner match (a `password` local) was renamed per the PasswordService precedent with no behavior change.
+
+Review: fresh read-only review found blocking R1 (`trackChild` drain-count leak on thread-start failure) plus R2–R5; all fixed with regression tests. Fresh re-review approved with no blocking findings; follow-up R6 (intake log-pinning test) and R7 (`Error` compensation) also implemented and green. Declined as cosmetic: `@VisibleForTesting` on the test seam and empty `errorType` for anonymous classes; CONVENTIONS scope-list `member` entry left as a follow-up note. Codex CLI review was unavailable (provider usage limit until 2026-11-04 03:18); independent read-only reviews replaced it, and no Codex execution is claimed.
+
+Not verified: full backend suite, frontend/browser/E2E (no frontend files changed), real Resend/Meta provider retention and delivery, multi-server withdrawal (excluded by D-083), deployment, production data. No push, PR, issue/comment/status change or merge was performed.

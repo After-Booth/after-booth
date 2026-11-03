@@ -36,6 +36,7 @@ public class ConditionService {
   private final Clock clock;
   private final String reasoningEffort;
   private final LocalDate demoReferenceDate;
+  private final com.afterbooth.global.security.MemberWorkRegistry work;
 
   public ConditionService(
       AiGateway gateway,
@@ -43,8 +44,10 @@ public class ConditionService {
       Clock clock,
       @Value("${afterbooth.request.reasoning-effort:minimal}") String reasoningEffort,
       @Value("${afterbooth.demo.reference-date:}") String demoReferenceDate,
-      DomainAccess access) {
+      DomainAccess access,
+      com.afterbooth.global.security.MemberWorkRegistry work) {
     this.gateway = gateway;
+    this.work = work;
     this.access = access;
     this.references = references;
     this.clock = clock;
@@ -54,6 +57,13 @@ public class ConditionService {
   }
 
   public ConditionInterpretation interpret(
+      ConditionContext context, Long eventId, byte[] audio, String contentType, String text) {
+    return work.call(
+        access.actor().memberId(),
+        () -> interpretOwned(context, eventId, audio, contentType, text));
+  }
+
+  private ConditionInterpretation interpretOwned(
       ConditionContext context, Long eventId, byte[] audio, String contentType, String text) {
     if (context == null
         || (audio == null) == (text == null)
@@ -78,6 +88,7 @@ public class ConditionService {
       if (transcript == null) throw new BusinessException(ErrorCode.AI_UNAVAILABLE);
       if (transcript.isBlank()) {
         Conditions conditions = new Conditions(null, null, null, null, null);
+        access.actor();
         return new ConditionInterpretation(
             context, "", conditions, ConditionOutput.missingFields(context, conditions));
       }
@@ -99,6 +110,7 @@ public class ConditionService {
           if (!response.toolCalls().isEmpty() || !"stop".equals(response.finishReason()))
             throw new IllegalArgumentException("Incomplete conditions");
           Conditions conditions = ConditionOutput.parse(response.content());
+          access.actor();
           return new ConditionInterpretation(
               context, transcript, conditions, ConditionOutput.missingFields(context, conditions));
         } catch (IllegalArgumentException | JacksonException | DateTimeException e) {

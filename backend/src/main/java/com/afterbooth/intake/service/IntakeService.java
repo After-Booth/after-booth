@@ -28,6 +28,7 @@ public class IntakeService {
   private final ApplicationEventPublisher events;
   private final Clock clock;
   private final DomainAccess access;
+  private final IntakeProcessor processor;
 
   public IntakeService(
       IntakeDraftRepository drafts,
@@ -35,13 +36,15 @@ public class IntakeService {
       ItemService inventory,
       ApplicationEventPublisher events,
       Clock clock,
-      DomainAccess access) {
+      DomainAccess access,
+      IntakeProcessor processor) {
     this.drafts = drafts;
     this.lines = lines;
     this.inventory = inventory;
     this.events = events;
     this.clock = clock;
     this.access = access;
+    this.processor = processor;
   }
 
   @Transactional
@@ -53,7 +56,7 @@ public class IntakeService {
     IntakeDraft draft = drafts.saveAndFlush(IntakeDraft.start(eventId, clock.instant()));
     IntakeDraftResponse response = IntakeDraftResponse.from(draft, List.of());
     events.publishEvent(
-        new IntakeProcessor.Submitted(
+        processor.prepare(
             draft.id(), new IntakePhoto(upload.bytes(), upload.mediaType()), access.actor()));
     return response;
   }

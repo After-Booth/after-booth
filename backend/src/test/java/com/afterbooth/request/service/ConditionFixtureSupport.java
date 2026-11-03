@@ -19,6 +19,15 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.ComponentScan;
 
 final class ConditionFixtureSupport {
+  private static com.afterbooth.global.security.DomainAccess syntheticAccess() {
+    var access = org.mockito.Mockito.mock(com.afterbooth.global.security.DomainAccess.class);
+    org.mockito.Mockito.when(access.actor())
+        .thenReturn(
+            new com.afterbooth.global.security.AuthenticatedMember(
+                1L, java.util.UUID.randomUUID(), 0));
+    return access;
+  }
+
   private ConditionFixtureSupport() {}
 
   static void run(String mode) throws Exception {
@@ -37,7 +46,8 @@ final class ConditionFixtureSupport {
                       Clock.fixed(Instant.parse("2026-10-31T03:00:00Z"), ZoneOffset.UTC),
                       "minimal",
                       "2026-10-31",
-                      org.mockito.Mockito.mock(com.afterbooth.global.security.DomainAccess.class));
+                      syntheticAccess(),
+                      new com.afterbooth.global.security.MemberWorkRegistry());
               var result =
                   service.interpret(ConditionContext.RECEIVER, null, wav, "audio/wav", null);
               assertThat(result.transcript()).isNotBlank();

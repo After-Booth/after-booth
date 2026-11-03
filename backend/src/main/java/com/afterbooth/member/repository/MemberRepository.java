@@ -56,6 +56,13 @@ public class MemberRepository {
         .orElse(null);
   }
 
+  public List<String> activeBlockVersions(Instant now) {
+    return jdbc.queryForList(
+        "select distinct key_version from withdrawn_email_block where blocked_until>?",
+        String.class,
+        Timestamp.from(now));
+  }
+
   public boolean blocked(String version, byte[] digest, Instant now) {
     return Boolean.TRUE.equals(
         jdbc.queryForObject(

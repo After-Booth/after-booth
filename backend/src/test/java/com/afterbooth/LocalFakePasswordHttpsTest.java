@@ -148,6 +148,20 @@ class LocalFakePasswordHttpsTest {
       return client.send(builder.build(), HttpResponse.BodyHandlers.ofString());
     }
 
+    HttpResponse<String> delete(
+        String path, Map<String, ?> body, String origin, String token, String bearer)
+        throws Exception {
+      var builder =
+          HttpRequest.newBuilder(uri(path))
+              .header("Content-Type", "application/json")
+              .method("DELETE", HttpRequest.BodyPublishers.ofString(json.writeValueAsString(body)));
+      if (!cookies.isEmpty()) builder.header("Cookie", cookie());
+      if (origin != null) builder.header("Origin", origin);
+      if (token != null) builder.header("X-CSRF-Token", token);
+      if (bearer != null) builder.header("Authorization", "Bearer " + bearer);
+      return client.send(builder.build(), HttpResponse.BodyHandlers.ofString());
+    }
+
     void login(Account a) throws Exception {
       var response = post("/api/auth/login", Map.of("email", a.email(), "password", a.password()));
       assertThat(response.statusCode()).isEqualTo(200);
@@ -158,7 +172,11 @@ class LocalFakePasswordHttpsTest {
   }
 
   private String resetCode() throws Exception {
-    var pattern = Pattern.compile("(?m)^PASSWORD_RESET ([0-9]{6})\\r?$");
+    return deliveredCode("PASSWORD_RESET");
+  }
+
+  private String deliveredCode(String purpose) throws Exception {
+    var pattern = Pattern.compile("(?m)^" + purpose + " ([0-9]{6})\\r?$");
     long until = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
     while (System.nanoTime() < until) {
       var matcher = pattern.matcher(console.toString(StandardCharsets.UTF_8));
@@ -409,6 +427,131 @@ class LocalFakePasswordHttpsTest {
       assertThat(Long.parseLong(blocked.headers().firstValue("retry-after").orElseThrow()))
           .isBetween(1L, 3600L);
     }
+  }
+
+  @Test
+  void realFakeSignupWithdrawsOverHttpsAndEncodedDeleteHasIdenticalProtection() throws Exception {
+    String email = UUID.randomUUID() + "@example.invalid", password = UUID.randomUUID().toString();
+    var browser = new Browser();
+    browser.csrf();
+    assertThat(
+            browser
+                .post("/api/auth/registrations", Map.of("email", email, "password", password))
+                .statusCode())
+        .isEqualTo(202);
+    var challenge = browser.post("/api/auth/email-verifications/request", Map.of("email", email));
+    assertThat(challenge.statusCode()).isEqualTo(202);
+    String id = json.readTree(challenge.body()).get("challengeId").asText();
+    String code = deliveredCode("SIGNUP_VERIFY");
+    assertThat(
+            browser
+                .post(
+                    "/api/auth/email-verifications/confirm",
+                    Map.of("email", email, "password", password, "challengeId", id, "code", code))
+                .statusCode())
+        .isEqualTo(204);
+    long member =
+        jdbc.queryForObject("select id from member where email_normalized=?", Long.class, email);
+    browser.login(new Account(member, email, password));
+    var body = Map.of("password", password);
+    for (String path : new String[] {"/api/members/me", "/api/members/%6de", "/%61pi/members/me"}) {
+      error(browser.delete(path, body, null, browser.csrf, browser.access), 403, "CSRF_REJECTED");
+      error(
+          browser.delete(
+              path, body, "https://localhost:5443.evil.invalid", browser.csrf, browser.access),
+          403,
+          "CSRF_REJECTED");
+      error(
+          browser.delete(path, body, "https://localhost:5443", null, browser.access),
+          403,
+          "CSRF_REJECTED");
+      error(
+          browser.delete(path, body, "https://localhost:5443", browser.csrf, null),
+          401,
+          "UNAUTHENTICATED");
+    }
+    error(
+        browser.delete(
+            "/api/members/me",
+            Map.of("password", password, "memberId", member + 1),
+            "https://localhost:5443",
+            browser.csrf,
+            browser.access),
+        400,
+        "INVALID_INPUT");
+    error(
+        browser.delete(
+            "/api/members/me",
+            Map.of("password", password, "organizationId", member + 1),
+            "https://localhost:5443",
+            browser.csrf,
+            browser.access),
+        400,
+        "INVALID_INPUT");
+    error(
+        browser.delete(
+            "/api/members/me",
+            Map.of("password", UUID.randomUUID().toString()),
+            "https://localhost:5443",
+            browser.csrf,
+            browser.access),
+        401,
+        "UNAUTHENTICATED");
+    for (Object invalid :
+        java.util.List.of(
+            123456789012L,
+            true,
+            java.util.List.of("synthetic"),
+            java.util.Map.of("synthetic", true)))
+      error(
+          browser.delete(
+              "/api/members/me",
+              Map.of("password", invalid),
+              "https://localhost:5443",
+              browser.csrf,
+              browser.access),
+          400,
+          "INVALID_INPUT");
+    var deleted =
+        browser.delete(
+            "/api/members/%6de", body, "https://localhost:5443", browser.csrf, browser.access);
+    cleared(deleted);
+    browser.csrf();
+    error(
+        browser.delete(
+            "/api/members/me", body, "https://localhost:5443", browser.csrf, browser.access),
+        401,
+        "UNAUTHENTICATED");
+    error(browser.post("/api/auth/refresh", Map.of()), 401, "UNAUTHENTICATED");
+    error(
+        browser.post("/api/auth/login", Map.of("email", email, "password", password)),
+        401,
+        "UNAUTHENTICATED");
+    error(
+        browser.post(
+            "/api/members/me/password",
+            Map.of("currentPassword", password, "newPassword", UUID.randomUUID().toString())),
+        401,
+        "UNAUTHENTICATED");
+    assertThat(
+            jdbc.queryForObject(
+                "select count(*) from idempotency_record where actor_member_id=?",
+                Long.class,
+                member))
+        .isZero();
+    assertThat(
+            jdbc.queryForObject(
+                "select email_normalized is null and password_hash is null from member where id=?",
+                Boolean.class,
+                member))
+        .isTrue();
+    String output = console.toString(StandardCharsets.UTF_8);
+    assertThat(
+            !output.contains(email)
+                && !output.contains(password)
+                && !output.contains(browser.access)
+                && !output.contains(browser.csrf))
+        .isTrue();
   }
 
   private record Account(long id, String email, String password) {

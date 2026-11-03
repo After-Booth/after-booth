@@ -15,21 +15,41 @@ public class SignupCleanup {
   private final MemberRepository members;
   private final TransactionTemplate transactions;
   private final SessionRepository sessions;
+  private final RetentionCleanup retention;
 
   public SignupCleanup(
-      MemberRepository members, SessionRepository sessions, PlatformTransactionManager manager) {
+      MemberRepository members,
+      SessionRepository sessions,
+      PlatformTransactionManager manager,
+      RetentionCleanup retention) {
     this.members = members;
     this.sessions = sessions;
     this.transactions = new TransactionTemplate(manager);
+    this.retention = retention;
   }
 
   @Scheduled(fixedDelay = 60_000, initialDelay = 60_000)
   public void clean() {
     try {
       transactions.executeWithoutResult(status -> sessions.cleanup());
+    } catch (RuntimeException ignored) {
+      log.warn("Session cleanup unavailable; next scheduled run will retry");
+    }
+    try {
       transactions.executeWithoutResult(status -> members.cleanup());
     } catch (RuntimeException ignored) {
       log.warn("Signup cleanup unavailable; next scheduled run will retry");
+    }
+    try {
+      retention.clean();
+    } catch (RuntimeException ignored) {
+      log.warn("Retention cleanup unavailable; next scheduled run will retry");
+    }
+    try {
+      long overdue = retention.overdueCount();
+      if (overdue > 0) log.warn("Retention cleanup exceeds one hour; overdueCount={}", overdue);
+    } catch (RuntimeException ignored) {
+      log.warn("Retention cleanup monitoring unavailable; next scheduled run will retry");
     }
   }
 }

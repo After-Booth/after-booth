@@ -127,7 +127,7 @@ public class DomainAccessService implements DomainAccess {
   public List<Long> reservationOrganizations(long id) {
     return jdbc
         .query(
-            "select i.organization_id,r.organization_id from reservation r join item i on i.id=r.item_id where r.id=?",
+            "select i.organization_id,r.organization_id from reservation r join item i on i.id=r.item_id where r.id=? and (r.retention_until is null or r.retention_until>clock_timestamp())",
             (rs, n) -> List.of(rs.getLong(1), rs.getLong(2)),
             id)
         .stream()
