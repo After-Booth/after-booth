@@ -264,7 +264,8 @@ test('giver inventory, receiver request, hold, confirmation and withdrawal eligi
     );
     await page.getByRole('button', { name: '회원 탈퇴' }).click();
     const response = await answer;
-    console.log('blocked withdrawal ->', response.status(), JSON.stringify(await response.json().catch(() => null)));
+    expect(response.status()).toBe(409);
+    expect((await response.json()).code).toBe('WITHDRAWAL_BLOCKED');
     await expect(page.getByRole('alert')).toBeVisible();
     await expect(page.getByText(`이메일: ${email}`)).toBeVisible();
   }
