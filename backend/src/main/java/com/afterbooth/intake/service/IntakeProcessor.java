@@ -1,5 +1,8 @@
 package com.afterbooth.intake.service;
 
+import com.afterbooth.global.error.BusinessException;
+import com.afterbooth.global.error.ErrorCode;
+import com.afterbooth.global.security.AuthenticatedMember;
 import com.afterbooth.intake.pipeline.EstimatedLine;
 import com.afterbooth.intake.pipeline.IntakePhoto;
 import com.afterbooth.intake.pipeline.IntakePipeline;
@@ -28,7 +31,7 @@ public class IntakeProcessor {
     this.executor = executor;
   }
 
-  public record Submitted(Long draftId, IntakePhoto photo) {}
+  public record Submitted(Long draftId, IntakePhoto photo, AuthenticatedMember actor) {}
 
   @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
   public void submitted(Submitted event) {
@@ -36,18 +39,19 @@ public class IntakeProcessor {
       executor.execute(() -> process(event));
     } catch (RuntimeException e) {
       log.error("Cannot schedule intake {}", event.draftId(), e);
-      store.fail(event.draftId(), "사진 처리를 시작하지 못했어요. 다시 업로드해 주세요.");
+      fail(event, "사진 처리를 시작하지 못했어요. 다시 업로드해 주세요.");
     }
   }
 
   public void process(Submitted event) {
     try {
+      store.check(event.draftId(), event.actor());
       List<EstimatedLine> estimates = pipeline.estimate(event.photo());
       if (estimates.isEmpty()) {
-        store.ready(event.draftId(), estimates);
+        store.ready(event.draftId(), estimates, event.actor());
         return;
       }
-      store.segment(event.draftId());
+      store.segment(event.draftId(), event.actor());
       List<EstimatedLine> segmented;
       try {
         segmented = pipeline.segment(event.photo(), estimates);
@@ -55,10 +59,19 @@ public class IntakeProcessor {
         log.warn("Intake segmentation failed for {}", event.draftId(), e);
         segmented = estimates.stream().map(EstimatedLine::samFailed).toList();
       }
-      store.ready(event.draftId(), segmented);
+      store.ready(event.draftId(), segmented, event.actor());
     } catch (RuntimeException e) {
       log.warn("Intake processing failed for {}", event.draftId(), e);
-      store.fail(event.draftId(), "사진 속 물품을 처리하지 못했어요. 다시 업로드해 주세요.");
+      fail(event, "사진 속 물품을 처리하지 못했어요. 다시 업로드해 주세요.");
+    }
+  }
+
+  private void fail(Submitted event, String message) {
+    try {
+      store.fail(event.draftId(), message, event.actor());
+    } catch (BusinessException error) {
+      if (error.errorCode() != ErrorCode.UNAUTHENTICATED
+          && error.errorCode() != ErrorCode.NOT_FOUND) throw error;
     }
   }
 }

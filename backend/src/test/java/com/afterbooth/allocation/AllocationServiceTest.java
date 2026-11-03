@@ -31,6 +31,20 @@ class AllocationServiceTest {
   final JsonMapper json = JsonMapper.builder().findAndAddModules().build();
 
   AllocationService service(AiGateway ai, Instant now) {
+    var locks = mock(com.afterbooth.global.idempotency.IdempotencyLockPool.class);
+    when(locks.allocation(anyLong(), any()))
+        .thenAnswer(call -> ((java.util.function.Supplier<?>) call.getArgument(1)).get());
+    var access = mock(com.afterbooth.global.security.DomainAccess.class);
+    var finalizer =
+        new AllocationFinalizer(
+            access,
+            holds,
+            reservations,
+            requests,
+            stock,
+            inventory,
+            vehicles,
+            Clock.fixed(now, ZoneOffset.UTC));
     return new AllocationService(
         ai,
         requests,
@@ -42,7 +56,10 @@ class AllocationServiceTest {
         Clock.fixed(now, ZoneOffset.UTC),
         json,
         5,
-        Duration.ofSeconds(5));
+        Duration.ofSeconds(5),
+        access,
+        locks,
+        finalizer);
   }
 
   PickupRequest request(long id, Instant now) {
@@ -57,6 +74,7 @@ class AllocationServiceTest {
             "private request transcript",
             now);
     ReflectionTestUtils.setField(request, "id", id);
+    when(requests.findForAllocation(id)).thenReturn(request);
     when(requests.lock(id)).thenReturn(request);
     return request;
   }

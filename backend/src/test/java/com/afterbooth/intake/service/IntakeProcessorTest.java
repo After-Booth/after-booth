@@ -36,7 +36,9 @@ class IntakeProcessorTest {
   private final IntakePipeline pipeline = mock(IntakePipeline.class);
   private final IntakeProcessingStore store = mock(IntakeProcessingStore.class);
   private final IntakePhoto photo = new IntakePhoto(new byte[] {1}, "image/png");
-  private final IntakeProcessor.Submitted event = new IntakeProcessor.Submitted(1L, photo);
+  private final com.afterbooth.global.security.AuthenticatedMember actor =
+      new com.afterbooth.global.security.AuthenticatedMember(1, java.util.UUID.randomUUID(), 0);
+  private final IntakeProcessor.Submitted event = new IntakeProcessor.Submitted(1L, photo, actor);
   private final EstimatedLine line =
       new EstimatedLine(
           DraftCategory.DISPLAY_RACK,
@@ -57,9 +59,24 @@ class IntakeProcessorTest {
     processor.process(event);
     var order = inOrder(pipeline, store);
     order.verify(pipeline).estimate(photo);
-    order.verify(store).segment(1L);
+    order.verify(store).segment(1L, actor);
     order.verify(pipeline).segment(photo, List.of(line));
-    order.verify(store).ready(1L, List.of(line));
+    order.verify(store).ready(1L, List.of(line), actor);
+  }
+
+  @Test
+  void revokedSubmittedActorCannotStartModelsOrSaveFailureInput() {
+    var revoked =
+        new com.afterbooth.global.error.BusinessException(
+            com.afterbooth.global.error.ErrorCode.UNAUTHENTICATED);
+    doThrow(revoked).when(store).check(1L, actor);
+    doThrow(revoked).when(store).fail(eq(1L), anyString(), eq(actor));
+
+    processor.process(event);
+
+    verifyNoInteractions(pipeline);
+    verify(store, never()).ready(any(), any(), any());
+    verify(store, never()).segment(any(), any());
   }
 
   @Test
@@ -67,7 +84,7 @@ class IntakeProcessorTest {
     when(pipeline.estimate(photo)).thenThrow(new IllegalStateException());
     processor.process(event);
     var message = ArgumentCaptor.forClass(String.class);
-    verify(store).fail(eq(1L), message.capture());
+    verify(store).fail(eq(1L), message.capture(), eq(actor));
     assertThat(message.getValue()).matches(".*[\uac00-\ud7a3].*");
     verify(pipeline, never()).segment(any(), any());
   }
@@ -90,16 +107,17 @@ class IntakeProcessorTest {
                     180,
                     line.condition(),
                     line.confidence(),
-                    true)));
-    verify(store, never()).fail(any(), any());
+                    true)),
+            actor);
+    verify(store, never()).fail(any(), any(), any());
   }
 
   @Test
   void zeroItemsSkipsSamAndBecomesReady() {
     when(pipeline.estimate(photo)).thenReturn(List.of());
     processor.process(event);
-    verify(store).ready(1L, List.of());
-    verify(store, never()).segment(any());
+    verify(store).ready(1L, List.of(), actor);
+    verify(store, never()).segment(any(), any());
     verify(pipeline, never()).segment(any(), any());
   }
 
@@ -107,7 +125,7 @@ class IntakeProcessorTest {
   void failedSegmentTransitionFailsDraftAtTheLastPersistedStage() {
     IntakeDraft draft = trackFailure();
     when(pipeline.estimate(photo)).thenReturn(List.of(line));
-    doThrow(new IllegalStateException()).when(store).segment(1L);
+    doThrow(new IllegalStateException()).when(store).segment(1L, actor);
 
     processor.process(event);
 
@@ -115,7 +133,7 @@ class IntakeProcessorTest {
     assertThat(draft.stage()).isEqualTo(IntakeStage.ESTIMATE);
     assertThat(draft.failureMessage()).matches(".*[\uac00-\ud7a3].*");
     verify(pipeline, never()).segment(any(), any());
-    verify(store, never()).ready(any(), any());
+    verify(store, never()).ready(any(), any(), any());
   }
 
   @ParameterizedTest
@@ -129,34 +147,34 @@ class IntakeProcessorTest {
               return null;
             })
         .when(store)
-        .segment(1L);
+        .segment(1L, actor);
     if (samFails) {
       when(pipeline.segment(photo, List.of(line))).thenThrow(new IllegalStateException());
     } else {
       when(pipeline.segment(photo, List.of(line))).thenReturn(List.of(line));
     }
-    doThrow(new IllegalStateException()).when(store).ready(eq(1L), any());
+    doThrow(new IllegalStateException()).when(store).ready(eq(1L), any(), eq(actor));
 
     processor.process(event);
 
     assertThat(draft.status()).isEqualTo(IntakeStatus.FAILED);
     assertThat(draft.stage()).isEqualTo(IntakeStage.SEGMENT);
     assertThat(draft.failureMessage()).matches(".*[\uac00-\ud7a3].*");
-    verify(store).fail(eq(1L), anyString());
+    verify(store).fail(eq(1L), anyString(), eq(actor));
   }
 
   @Test
   void failedEmptyReadyWriteFailsDraftAtEstimate() {
     IntakeDraft draft = trackFailure();
     when(pipeline.estimate(photo)).thenReturn(List.of());
-    doThrow(new IllegalStateException()).when(store).ready(1L, List.of());
+    doThrow(new IllegalStateException()).when(store).ready(1L, List.of(), actor);
 
     processor.process(event);
 
     assertThat(draft.status()).isEqualTo(IntakeStatus.FAILED);
     assertThat(draft.stage()).isEqualTo(IntakeStage.ESTIMATE);
     assertThat(draft.failureMessage()).matches(".*[\uac00-\ud7a3].*");
-    verify(store, never()).segment(any());
+    verify(store, never()).segment(any(), any());
   }
 
   @Test
@@ -168,7 +186,7 @@ class IntakeProcessorTest {
               throw new RejectedExecutionException();
             })
         .submitted(event);
-    verify(store).fail(eq(1L), anyString());
+    verify(store).fail(eq(1L), anyString(), eq(actor));
     verifyNoInteractions(pipeline);
   }
 
@@ -191,14 +209,14 @@ class IntakeProcessorTest {
               return null;
             })
         .when(store)
-        .fail(eq(1L), anyString());
+        .fail(eq(1L), anyString(), eq(actor));
     new IntakeProcessor(realPipeline, store, Runnable::run).process(event);
     assertThat(draft.status()).isEqualTo(IntakeStatus.FAILED);
     assertThat(draft.stage()).isEqualTo(IntakeStage.ESTIMATE);
     assertThat(draft.failureMessage()).matches(".*[\uac00-\ud7a3].*");
     verify(gateway, times(2)).chat(any());
     verify(gateway, never()).segment(any());
-    verify(store, never()).ready(any(), any());
+    verify(store, never()).ready(any(), any(), any());
   }
 
   private IntakeDraft trackFailure() {
@@ -209,7 +227,7 @@ class IntakeProcessorTest {
               return null;
             })
         .when(store)
-        .fail(eq(1L), anyString());
+        .fail(eq(1L), anyString(), eq(actor));
     return draft;
   }
 }

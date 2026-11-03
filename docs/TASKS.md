@@ -342,3 +342,75 @@ The earlier core run passed 36/37: an expired-family fixture used separate clock
 - Not verified: full backend suite, browser/frontend token storage and single-flight, object ownership/roles/list filters or actor-bound domain idempotency (#67), password management (#68), withdrawal/retention orchestration (#69), real provider delivery/receipt/settings, deployment or live AI. The existing demo now needs configured JWT keys and an ACTIVE member before protected domain calls.
 - #67 reuses the authenticated principal/member lock; #68 and #69 reuse member locking, version/session revocation and member-linked CSRF invalidation; #70 integrates the contracted cookies/token responses and client serialization. Those issues retain their actual scope/dependencies.
 - GitHub issue-body correction needed: none. No push, PR, merge, issue/comment/status/checkbox change or deployment was performed.
+
+## Issue #67 — Member accounts, owned events and domain authorization (2026-11-03)
+
+Implementation base: fetched origin/main 0539cdb, containing #65/#66; isolated branch feat/67-member-authorization and worktree .claude/worktrees/67-member-authorization. Issue #68 is implemented in its own worktree. D-081 records the transaction, lock and authorization choices. Existing main and unrelated worktrees were preserved.
+
+Implemented scope:
+
+- Read-only current account and principal-owned event creation with strict fields, future deadline validation and actor-bound idempotency.
+- Own organizations/events/intake drafts/pickup requests; reservation party reads, receiver confirmation/cancellation and giver handover writes. Active authenticated members can view tradable business fields, while raw conditions remain owner-only and unclaimed/withdrawn providers are hidden.
+- Shared ACTIVE/session checks and sorted member-first locks before domain writes, explicit async intake actors, scheduler lock ordering and original-resource authorization before idempotent replay. Every represented response provider/receiver is recorded for subsequent withdrawal invalidation.
+- AI allocation preparation runs outside transactions. Actual proposals are revalidated and written together with the idempotency response, preserving partial model-failure behavior and rollback after a final database failure. The model prompt/payload and contract are unchanged.
+
+Verification notes so far:
+
+- The first compile gate passed production compilation and caught a negative mock assertion with the wrong AiGateway.segment signature. Corrected the test; subsequent compileJava, compileTestJava, spotlessApply and spotlessCheck passed.
+- The initial new authorization run passed seven architecture cases, then failed six catalog cases because a test helper changed the global SecurityContextHolder strategy after filters cached it. Removed that test-only global mutation and explicitly propagated contexts in test executors. No production authentication bypass was introduced.
+- Windows native allocation/page-file failures also terminated Gradle test workers. Parent separated compilation from test execution and used a temporary direct JUnit Platform launcher with the exact Gradle worker runtime classpath, Mockito startup agent, replay mode, 256 MiB test heap and Serial GC. These are direct JUnit executions, not a successful Gradle test-task claim.
+- Current new tests passed six catalog and eleven domain authorization cases, including actual signup/verification/login services followed by MockMvc HTTP, cross-actor/legacy replay protection, actual member-lock waits, withdrawn preparation rejection and a database trigger proving final HOLD/idempotency rollback together. Real email, browser or live AI is not implied.
+- AllocationIntegrationTest passed all 15 cases. ReservationIntegrationTest passed 32/33; the remaining clock-controlled case now observes INVALID_TRANSITION as a thrown typed domain error after earlier member serialization rather than the older update-race return value. The test was adjusted to the same public error and unchanged final state/quantity/history; re-execution and remaining affected suites are recorded below.
+- Independent read-only security/adversarial review found R1 (unrecognized mutation aliases falling back to organization-only permission) and R2 (insufficiently synchronized final-lock/rollback regressions). Both were fixed and static re-review approved with no blocking findings. Allocation response-provider metadata, lock ordering and wrong organization 404 were also corrected during initial review. No Claude reviewer or companion tool run is claimed.
+
+Not verified: full backend suite, frontend/browser authentication integration, actual #69 withdrawal/retention orchestration, real delivery/receipt/provider settings, deployment and live Meta AI. Withdrawal tests simulate member state/version transitions under the shared protocol; new signup tests use captured synthetic mail. Remaining current checks and exact counts follow below.
+
+### Executed commands and final correction boundary
+
+Compilation/formatting in PowerShell, backend/:
+
+```powershell
+.\gradlew.bat '-Dorg.gradle.jvmargs=-Xms32m -Xmx192m -XX:MaxMetaspaceSize=192m -XX:ActiveProcessorCount=2 -XX:TieredStopAtLevel=1 -XX:ReservedCodeCacheSize=48m -XX:+UseSerialGC' --init-script C:\Users\ehddu\AppData\Local\Temp\afterbooth-agent-tests.gradle spotlessApply compileJava compileTestJava spotlessCheck --no-daemon --max-workers=1
+# BUILD SUCCESSFUL after the last production/test corrections.
+```
+
+The first affected regression pass found that finalRowLockProtectsCommitWhenSessionDies blocked behind the newly introduced member lock before reaching the existing NOWAIT row check. A short isolated preflight probe fixes the actual duplicate-request regression; the original test expectation is preserved. Review also found a same-item trace correction: final revalidation of a later failed proposal must not erase an earlier accepted HOLD trace. A focused AllocationFinalizerTest checks one actual accepted quantity and separate OK/REJECTED outcomes. Independent static re-review approved both changes without blocking findings.
+
+Direct JUnit execution uses an external AfterboothSelectedTests launcher and afterbooth-selected-test.ps1, each under C:\Users\ehddu\AppData\Local\Temp. The script uses the exact classpath from Gradle's test-worker argument file, sets AI_MODE=replay, starts the existing Mockito JAR as an agent and runs one class with heap 256 MiB/Serial GC. It invokes JUnit's LauncherFactory and SummaryGeneratingListener without mocks around the test runner or disabled product security. Commands take this form:
+
+```powershell
+& 'C:\Users\ehddu\AppData\Local\Temp\afterbooth-selected-test.ps1' -TestClass 'com.afterbooth.DomainAuthorizationIntegrationTest'
+```
+
+Synthetic server logs and per-class summaries remain outside the repository. The launcher reports test/container failures through its exit code. These runs include disposable PostgreSQL, actual Spring/MockMvc and existing raw-HTTP intake cases where present; mocks and loopback AI fixtures retain their explicit boundaries. No full backend/Gradle test-task success or browser/live-model success is inferred.
+
+### Final affected verification
+
+All 218 distinct tests in 20 affected classes passed, with zero failures/skips/aborts in their final runs:
+
+| Test class | Passed |
+|---|---:|
+| CatalogAuthorizationIntegrationTest | 6 |
+| DomainAuthorizationIntegrationTest | 35 |
+| ReservationIntegrationTest | 33 |
+| IdempotencyRecoveryIntegrationTest | 7 |
+| AllocationFinalizerTest | 1 |
+| AllocationIntegrationTest | 15 |
+| DefaultVehicleHoldIntegrationTest | 2 |
+| HandoverIntegrationTest | 15 |
+| IntakeIntegrationTest | 10 |
+| IntakeProcessorTest | 11 |
+| PickupRequestIntegrationTest | 4 |
+| PickupRequestServiceTest | 14 |
+| ConditionServiceTest | 27 |
+| ConditionInterpretationReplayTest | 1 |
+| AllocationServiceTest | 7 |
+| RequestControllerTest | 10 |
+| OrganizationControllerTest | 2 |
+| SystemControllerTest | 1 |
+| IntakeControllerTest | 10 |
+| ArchitectureTest | 7 |
+
+The 35-case authorization suite includes 22 separately parameterized anonymous-route checks, forbidden giver cancellation/unrelated confirmation, foreign allocation, owned/foreign GIVER condition interpretation and ACTIVE/revoked RECEIVER checks. Catalog coverage also rejects foreign intake confirmation. The final reservation and idempotency recovery runs resolve the earlier failures; actual successful quantities, party roles, state transitions, stock restoration and response atomicity are verified rather than inferred from mocks.
+
+The parent checked the actual implementation/test diff, per-class summaries and exit codes. Compilation/formatting and independent re-review passed. Changed-file secret scanning, whitespace and local PR-body validation are checked before commit. The 218-case total combines final affected runs on the unchanged relevant code; it is not an additional full-suite execution. No test pass is attributed to the aborted Gradle workers.

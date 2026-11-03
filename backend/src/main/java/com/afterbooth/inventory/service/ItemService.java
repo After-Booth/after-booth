@@ -2,6 +2,7 @@ package com.afterbooth.inventory.service;
 
 import com.afterbooth.global.error.BusinessException;
 import com.afterbooth.global.error.ErrorCode;
+import com.afterbooth.global.security.DomainAccess;
 import com.afterbooth.inventory.domain.Condition;
 import com.afterbooth.inventory.domain.Dimensions;
 import com.afterbooth.inventory.domain.Event;
@@ -20,14 +21,17 @@ import org.springframework.transaction.annotation.Transactional;
 public class ItemService {
   private final ItemRepository items;
   private final EventRepository events;
+  private final DomainAccess access;
 
-  public ItemService(ItemRepository items, EventRepository events) {
+  public ItemService(ItemRepository items, EventRepository events, DomainAccess access) {
     this.items = items;
     this.events = events;
+    this.access = access;
   }
 
   @Transactional(readOnly = true)
   public void requireEvent(Long id) {
+    access.event(id);
     findEvent(id);
   }
 
@@ -39,6 +43,8 @@ public class ItemService {
       Instant deadline,
       VehicleType vehicle,
       String transcript) {
+    long organizationId = access.event(eventId);
+    access.lockOrganizations(List.of(organizationId));
     Event event = findEvent(eventId);
     Instant effective = event.intakePickupDeadline(deadline);
     return lines.stream()
@@ -62,13 +68,19 @@ public class ItemService {
 
   @Transactional(readOnly = true)
   public ItemResponse get(Long id) {
-    return ItemResponse.from(
-        items.findById(id).orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND)));
+    access.actor();
+    Item item = items.findById(id).orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+    if (!access.activeOrganization(item.organizationId()))
+      throw new BusinessException(ErrorCode.NOT_FOUND);
+    return ItemResponse.from(item, access.owner(item.organizationId()));
   }
 
   @Transactional(readOnly = true)
   public List<Item> candidates() {
-    return items.findAll(org.springframework.data.domain.Sort.by("id"));
+    access.actor();
+    return items.findAll(org.springframework.data.domain.Sort.by("id")).stream()
+        .filter(i -> access.activeOrganization(i.organizationId()))
+        .toList();
   }
 
   @Transactional(readOnly = true)
@@ -76,7 +88,7 @@ public class ItemService {
     return candidates().stream()
         .filter(i -> eventId == null || eventId.equals(i.eventId()))
         .filter(i -> !availableOnly || (i.availableQty() > 0 && !i.isPickupClosed(now)))
-        .map(ItemResponse::from)
+        .map(i -> ItemResponse.from(i, access.owner(i.organizationId())))
         .toList();
   }
 

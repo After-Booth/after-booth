@@ -40,6 +40,14 @@ class PickupRequestIntegrationTest {
   @Autowired JdbcTemplate jdbc;
   @Autowired PlatformTransactionManager transactions;
   @Autowired MockMvc mvc;
+  @Autowired java.time.Clock clock;
+  private com.afterbooth.global.security.AuthenticatedMember actor;
+
+  @org.junit.jupiter.api.BeforeEach
+  void installOwner() {
+    actor = com.afterbooth.DomainAuthTestSupport.seedOwner(jdbc, clock, 2L);
+  }
+
   private static final String BODY =
       "{\"organizationId\":2,\"category\":\"DISPLAY_RACK\",\"quantity\":2,\"vehicleType\":\"SEDAN\",\"purpose\":\"주말"
           + " 행사\",\"transcript\":\"진열대 두 개\"}";
@@ -55,9 +63,9 @@ class PickupRequestIntegrationTest {
         .isNotEmpty()
         .containsExactlyElementsOf(
             jdbc.query(
-                "select id, name from organization order by id",
-                (row, index) ->
-                    new OrganizationResponse(row.getLong("id"), row.getString("name"))));
+                "select id, name from organization where primary_member_id=? order by id",
+                (row, index) -> new OrganizationResponse(row.getLong("id"), row.getString("name")),
+                actor.memberId()));
     Long organizationId = organizations[0].id();
     var response =
         mvc.perform(
@@ -114,7 +122,9 @@ class PickupRequestIntegrationTest {
                   "select pg_advisory_xact_lock(?)",
                   Object.class,
                   key.getMostSignificantBits() ^ key.getLeastSignificantBits());
-              var executor = java.util.concurrent.Executors.newSingleThreadExecutor();
+              var executor =
+                  com.afterbooth.DomainAuthTestSupport.executor(
+                      java.util.concurrent.Executors.newSingleThreadExecutor());
               try {
                 var call =
                     executor.submit(
@@ -138,6 +148,7 @@ class PickupRequestIntegrationTest {
   }
 
   private ResponseEntity<String> create(UUID key, String body) {
+    com.afterbooth.DomainAuthTestSupport.use(actor);
     return idempotency.execute(
         key,
         "POST",
@@ -151,11 +162,12 @@ class PickupRequestIntegrationTest {
   void committedOrphanRequestRecoversAndReplays() {
     UUID key = UUID.randomUUID();
     jdbc.update(
-        "insert into idempotency_record(idempotency_key,fingerprint,state,created_at) values"
-            + " (?,?,'IN_PROGRESS',current_timestamp)",
+        "insert into idempotency_record(idempotency_key,fingerprint,state,created_at,actor_member_id,related_organization_ids) values"
+            + " (?,?,'IN_PROGRESS',current_timestamp,?,ARRAY[2]::bigint[])",
         key,
         IdempotencyService.fingerprint(
-            "POST", "/api/pickup-requests", BODY.getBytes(StandardCharsets.UTF_8)));
+            "POST", "/api/pickup-requests", BODY.getBytes(StandardCharsets.UTF_8)),
+        actor.memberId());
     var first = create(key, BODY);
     assertThat(first.getStatusCode().value()).isEqualTo(201);
     var replay = create(key, BODY);

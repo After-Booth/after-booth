@@ -7,6 +7,7 @@ import com.afterbooth.ai.ChatResponse;
 import com.afterbooth.ai.MissingFixtureException;
 import com.afterbooth.global.error.BusinessException;
 import com.afterbooth.global.error.ErrorCode;
+import com.afterbooth.global.security.DomainAccess;
 import com.afterbooth.request.domain.ConditionContext;
 import com.afterbooth.request.domain.ConditionOutput;
 import com.afterbooth.request.domain.ConditionPrompt;
@@ -30,6 +31,7 @@ public class ConditionService {
   private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
   private static final JsonMapper JSON = JsonMapper.builder().build();
   private final AiGateway gateway;
+  private final DomainAccess access;
   private final RequestReferences references;
   private final Clock clock;
   private final String reasoningEffort;
@@ -40,8 +42,10 @@ public class ConditionService {
       RequestReferences references,
       Clock clock,
       @Value("${afterbooth.request.reasoning-effort:minimal}") String reasoningEffort,
-      @Value("${afterbooth.demo.reference-date:}") String demoReferenceDate) {
+      @Value("${afterbooth.demo.reference-date:}") String demoReferenceDate,
+      DomainAccess access) {
     this.gateway = gateway;
+    this.access = access;
     this.references = references;
     this.clock = clock;
     this.reasoningEffort = reasoningEffort;
@@ -55,10 +59,12 @@ public class ConditionService {
         || (audio == null) == (text == null)
         || (text != null && (text.isBlank() || text.length() > 500)))
       throw new BusinessException(ErrorCode.INVALID_INPUT);
+    access.actor();
     LocalDate referenceDate =
         demoReferenceDate == null ? clock.instant().atZone(SEOUL).toLocalDate() : demoReferenceDate;
     if (context == ConditionContext.GIVER) {
       if (eventId == null) throw new BusinessException(ErrorCode.INVALID_INPUT);
+      access.event(eventId);
       referenceDate =
           references
               .eventDeadline(eventId)

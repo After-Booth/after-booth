@@ -102,6 +102,7 @@ class IntakeIntegrationTest {
   @MockitoBean IntakePipeline pipeline;
   private byte[] photo;
   private Long eventId;
+  private com.afterbooth.global.security.AuthenticatedMember actor;
 
   @BeforeEach
   void setup() throws Exception {
@@ -109,6 +110,12 @@ class IntakeIntegrationTest {
     ImageIO.write(new BufferedImage(2, 2, BufferedImage.TYPE_INT_RGB), "png", output);
     photo = output.toByteArray();
     eventId = jdbc.queryForObject("SELECT id FROM event LIMIT 1", Long.class);
+    actor =
+        com.afterbooth.DomainAuthTestSupport.seedOwner(
+            jdbc,
+            clock,
+            jdbc.queryForObject(
+                "select organization_id from event where id=?", Long.class, eventId));
   }
 
   @Test
@@ -139,7 +146,7 @@ class IntakeIntegrationTest {
     assertThatThrownBy(() -> create(key, eventId + 10000, photo, "image/png"))
         .isInstanceOf(BusinessException.class)
         .extracting(e -> ((BusinessException) e).errorCode())
-        .isEqualTo(ErrorCode.IDEMPOTENCY_CONFLICT);
+        .isEqualTo(ErrorCode.NOT_FOUND);
     assertThatThrownBy(() -> create(key, eventId, new byte[] {1}, "image/png"))
         .isInstanceOf(BusinessException.class)
         .extracting(e -> ((BusinessException) e).errorCode())
@@ -307,7 +314,8 @@ class IntakeIntegrationTest {
     ready(draft.id());
     Long line = lines.findByDraftIdOrderById(draft.id()).getFirst().id();
     var start = new CountDownLatch(1);
-    try (var pool = Executors.newFixedThreadPool(2)) {
+    try (var pool =
+        com.afterbooth.DomainAuthTestSupport.executor(Executors.newFixedThreadPool(2))) {
       Callable<Boolean> confirm =
           () -> {
             start.await();
@@ -338,7 +346,8 @@ class IntakeIntegrationTest {
     Long line = lines.findByDraftIdOrderById(draft.id()).getFirst().id();
     UUID key = UUID.randomUUID();
     // Holding the draft lock blocks the first confirm after its idempotency claim is committed.
-    try (var pool = Executors.newSingleThreadExecutor();
+    try (var pool =
+            com.afterbooth.DomainAuthTestSupport.executor(Executors.newSingleThreadExecutor());
         var connection = jdbc.getDataSource().getConnection()) {
       connection.setAutoCommit(false);
       try (var statement =
@@ -381,6 +390,7 @@ class IntakeIntegrationTest {
   }
 
   private java.net.http.HttpResponse<String> upload(byte[] bytes) throws Exception {
+    com.afterbooth.DomainAuthTestSupport.use(actor);
     String boundary = "AfterBoothTestBoundary";
     String prefix =
         "--"
@@ -403,10 +413,7 @@ class IntakeIntegrationTest {
             .timeout(Duration.ofSeconds(30))
             .header("Content-Type", "multipart/form-data; boundary=" + boundary)
             .header("Idempotency-Key", UUID.randomUUID().toString())
-            .header(
-                "Authorization",
-                com.afterbooth.SyntheticAuthSupport.bearer(
-                    jdbc, jwt, clock, passwords.encode(UUID.randomUUID().toString())))
+            .header("Authorization", com.afterbooth.DomainAuthTestSupport.bearer(jwt, clock))
             .POST(body)
             .build();
     try (var client = java.net.http.HttpClient.newHttpClient()) {
@@ -415,6 +422,7 @@ class IntakeIntegrationTest {
   }
 
   private IntakeDraftResponse create(UUID key, Long eventId, byte[] photo, String mediaType) {
+    com.afterbooth.DomainAuthTestSupport.use(actor);
     try {
       var response =
           mvc.perform(
@@ -434,6 +442,7 @@ class IntakeIntegrationTest {
   }
 
   private List<ItemResponse> confirm(UUID key, Long id, ConfirmIntakeRequest request) {
+    com.afterbooth.DomainAuthTestSupport.use(actor);
     try {
       var response =
           mvc.perform(
@@ -467,6 +476,7 @@ class IntakeIntegrationTest {
   }
 
   private void ready(Long id) {
+    com.afterbooth.DomainAuthTestSupport.use(actor);
     store.ready(
         id,
         List.of(
@@ -479,7 +489,8 @@ class IntakeIntegrationTest {
                 180,
                 Condition.GOOD,
                 new BigDecimal("0.9"),
-                false)));
+                false)),
+        actor);
   }
 
   private ConfirmIntakeRequest request(Long lineId, int qty) {
