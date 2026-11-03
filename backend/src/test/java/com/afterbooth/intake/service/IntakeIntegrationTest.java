@@ -63,8 +63,11 @@ import tools.jackson.databind.json.JsonMapper;
 @SpringBootTest(
     webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
     properties = "afterbooth.ai.mode=replay")
-@Import(IntakeIntegrationTest.PostgresConfiguration.class)
-@AutoConfigureMockMvc
+@Import({
+  com.afterbooth.AuthenticatedMockMvcConfiguration.class,
+  IntakeIntegrationTest.PostgresConfiguration.class
+})
+@AutoConfigureMockMvc(print = org.springframework.boot.webmvc.test.autoconfigure.MockMvcPrint.NONE)
 class IntakeIntegrationTest {
   @TestConfiguration(proxyBeanMethods = false)
   static class PostgresConfiguration {
@@ -84,6 +87,14 @@ class IntakeIntegrationTest {
   @Autowired MockMvc mvc;
   @Autowired JsonMapper json;
   @Autowired JdbcTemplate jdbc;
+  @Autowired com.afterbooth.global.security.JwtService jwt;
+  @Autowired java.time.Clock clock;
+  @Autowired org.springframework.security.crypto.password.PasswordEncoder passwords;
+
+  @org.springframework.test.context.DynamicPropertySource
+  static void syntheticJwt(org.springframework.test.context.DynamicPropertyRegistry registry) {
+    com.afterbooth.SyntheticAuthSupport.configure(registry);
+  }
 
   @MockitoBean(name = "intakeExecutor")
   ThreadPoolTaskExecutor executor;
@@ -392,6 +403,10 @@ class IntakeIntegrationTest {
             .timeout(Duration.ofSeconds(30))
             .header("Content-Type", "multipart/form-data; boundary=" + boundary)
             .header("Idempotency-Key", UUID.randomUUID().toString())
+            .header(
+                "Authorization",
+                com.afterbooth.SyntheticAuthSupport.bearer(
+                    jdbc, jwt, clock, passwords.encode(UUID.randomUUID().toString())))
             .POST(body)
             .build();
     try (var client = java.net.http.HttpClient.newHttpClient()) {

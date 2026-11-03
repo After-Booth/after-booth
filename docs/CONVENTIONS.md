@@ -168,7 +168,7 @@ Do not write:
 
 ## What not to write
 
-- Do not implement features outside `docs/SPEC.md`. Maps, general notifications and payments remain out of scope. D-076 explicitly authorizes #65 signup/common security/mail implementation now; the original #63 restriction applied to design only. Login/session, password management, withdrawal and existing-domain authorization remain later work.
+- Do not implement features outside `docs/SPEC.md`. Maps, general notifications and payments remain out of scope. D-076 explicitly authorizes #65 signup/common security/mail implementation now; the original #63 restriction applied to design only. D-079 authorizes #66 login/session implementation and common existing-domain Bearer authentication. Object authorization, password management, withdrawal and frontend remain later work.
 - Unused parameters, unused config, "just in case" utilities.
 - Generic base classes (`BaseService<T>`) or deep inheritance. Prefer composition.
 - Defensive null checks for values that validation already guarantees.

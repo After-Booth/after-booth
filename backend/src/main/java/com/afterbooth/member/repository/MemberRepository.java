@@ -48,6 +48,14 @@ public class MemberRepository {
     return rows.isEmpty() ? null : rows.getFirst();
   }
 
+  public Member findByIdForUpdate(long id) {
+    return jdbc
+        .query("SELECT * FROM member WHERE id=? FOR UPDATE", MemberRepository::member, id)
+        .stream()
+        .findFirst()
+        .orElse(null);
+  }
+
   public boolean blocked(String version, byte[] digest, Instant now) {
     return Boolean.TRUE.equals(
         jdbc.queryForObject(

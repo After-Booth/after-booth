@@ -23,6 +23,36 @@ public class CsrfSessionService {
   }
 
   public Issued issue() {
+    return issue(null, null);
+  }
+
+  @org.springframework.transaction.annotation.Transactional
+  public Issued reissue(String previousId) {
+    try {
+      Long memberId = null;
+      if (previousId != null && previousId.matches("[A-Za-z0-9_-]{43}")) {
+        var ids =
+            jdbc.queryForList(
+                "select member_id from csrf_session where id_hash=? and expires_at>clock_timestamp() and member_id is not null",
+                Long.class,
+                hash(previousId));
+        if (!ids.isEmpty()) {
+          long id = ids.getFirst();
+          jdbc.queryForList("select id from member where id=? for update", Long.class, id);
+          if (Boolean.TRUE.equals(
+              jdbc.queryForObject(
+                  "select exists(select 1 from csrf_session c join member m on m.id=c.member_id where c.id_hash=? and c.expires_at>clock_timestamp() and m.state='ACTIVE')",
+                  Boolean.class,
+                  hash(previousId)))) memberId = id;
+        }
+      }
+      return issue(memberId, previousId);
+    } catch (DataAccessException e) {
+      throw new BusinessException(ErrorCode.AUTH_UNAVAILABLE);
+    }
+  }
+
+  public Issued issue(Long memberId, String previousId) {
     String id = randomToken();
     String token = randomToken();
     try {
@@ -30,12 +60,15 @@ public class CsrfSessionService {
       jdbc.update(
           """
           insert into csrf_session(id_hash,token_hash,member_id,created_at,expires_at)
-          values(?,?,null,?,?)
+          values(?,?,?,?,?)
           """,
           hash(id),
           hash(token),
+          memberId,
           Timestamp.from(now),
           Timestamp.from(now.plusSeconds(3600)));
+      if (previousId != null && previousId.matches("[A-Za-z0-9_-]{43}"))
+        jdbc.update("delete from csrf_session where id_hash=?", hash(previousId));
       return new Issued(id, token);
     } catch (DataAccessException e) {
       throw new BusinessException(ErrorCode.AUTH_UNAVAILABLE);
@@ -57,6 +90,10 @@ public class CsrfSessionService {
     } catch (DataAccessException e) {
       throw new BusinessException(ErrorCode.AUTH_UNAVAILABLE);
     }
+  }
+
+  public void invalidateMember(long memberId) {
+    jdbc.update("delete from csrf_session where member_id=?", memberId);
   }
 
   public int cleanupExpired() {
@@ -81,5 +118,10 @@ public class CsrfSessionService {
     return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
   }
 
-  public record Issued(String sessionId, String csrfToken) {}
+  public record Issued(String sessionId, String csrfToken) {
+    @Override
+    public String toString() {
+      return "Issued[redacted]";
+    }
+  }
 }

@@ -43,8 +43,13 @@ import org.springframework.jdbc.core.JdbcTemplate;
       "afterbooth.vehicle-cargo.sedan.depth-cm=100",
       "afterbooth.vehicle-cargo.sedan.height-cm=100"
     })
-@org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
-@Import({TestcontainersConfiguration.class, ReservationIntegrationTest.TimeConfiguration.class})
+@org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc(
+    print = org.springframework.boot.webmvc.test.autoconfigure.MockMvcPrint.NONE)
+@Import({
+  com.afterbooth.AuthenticatedMockMvcConfiguration.class,
+  TestcontainersConfiguration.class,
+  ReservationIntegrationTest.TimeConfiguration.class
+})
 class ReservationIntegrationTest {
   static final Instant NOW = Instant.parse("2026-11-01T00:00:00Z");
   @Autowired org.springframework.test.web.servlet.MockMvc mvc;

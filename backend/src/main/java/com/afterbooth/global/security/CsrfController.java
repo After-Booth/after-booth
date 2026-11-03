@@ -15,8 +15,16 @@ class CsrfController {
   }
 
   @GetMapping("/api/auth/csrf")
-  ResponseEntity<TokenResponse> getCsrfToken() {
-    var issued = sessions.issue();
+  ResponseEntity<TokenResponse> getCsrfToken(jakarta.servlet.http.HttpServletRequest request) {
+    String previous = null;
+    if (request.getCookies() != null) {
+      var cookies =
+          java.util.Arrays.stream(request.getCookies())
+              .filter(c -> CsrfSessionService.COOKIE.equals(c.getName()))
+              .toList();
+      if (cookies.size() == 1) previous = cookies.getFirst().getValue();
+    }
+    var issued = sessions.reissue(previous);
     var cookie =
         ResponseCookie.from(CsrfSessionService.COOKIE, issued.sessionId())
             .httpOnly(true)
@@ -31,5 +39,10 @@ class CsrfController {
         .body(new TokenResponse(issued.csrfToken()));
   }
 
-  record TokenResponse(String csrfToken) {}
+  record TokenResponse(String csrfToken) {
+    @Override
+    public String toString() {
+      return "TokenResponse[redacted]";
+    }
+  }
 }

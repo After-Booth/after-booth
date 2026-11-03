@@ -247,7 +247,7 @@ A debug-logged rerun of the twelve-preparation test passed. Its log shows 16 `id
 - [x] #65 single common chain, anonymous CSRF, exact-Origin and PostgreSQL request limits.
 - [x] #65 local Fake/deployment Resend, default disabled; actual sending excluded.
 - [x] #65 protected loopback HTTPS signup → confirmation → ACTIVE and password matching; regression gates and independent review. Local commits use repository hooks after the final staged-content scan.
-- [ ] #66 reuses #65 for login/JWT/refresh/sessions and final signup → verification → login integration; excluded here.
+- [x] #66 reused #65 for login/JWT/refresh/sessions and completed the final signup → verification → login integration; completed under #66, outside #65 scope.
 
 Explicit authorization supersedes the historical post-submission schedule without changing prior verification evidence. Existing-domain authorization, frontend and deployment remain later work. Mark completion only with current evidence.
 
@@ -288,3 +288,57 @@ Exact backend selections used (from backend/ with Java 21):
 ```
 
 Fresh independent read-only review and the installed Codex CLI adversarial re-review both approved R1 as resolved with no blockers. Final changed-file/staged-content scanning and repository hooks apply before local commit. Tests use generated synthetic material and disposable PostgreSQL; available XML/Gradle outputs contain zero generated Fake-code lines. No real secrets, user data or provider calls were accessed. Not verified in this correction: full backend/frontend suite, browser UI, additional context-path deployment, real mail, deployment or updated remote CI. No push, GitHub comment/review/status modification or merge is included.
+
+## Issue #66 login/session implementation
+
+- [x] Login, RS256 JWT and per-request database authentication, extending #65.
+- [x] Shared member locking, refresh rotation/reuse, current/all-session logout and expiry cleanup.
+- [x] Authenticated CSRF, exact-Origin, durable login limits and parsed-path regression protection.
+- [x] Current PostgreSQL/concurrency/real loopback HTTPS and affected regression gates.
+- [x] Independent adversarial review and sensitive-data scan; local commit uses repository hooks. No remote writes.
+
+Implementation base: `origin/main` `4e10f10f51a09d7808ca58c84156072df52b4a70`; branch `feat/66-login-refresh-logout`, worktree `/private/tmp/afterbooth-66-login-refresh-logout`. Fetched origin/main before branching; the shared main checkout and other worktrees were preserved. Historical #63/#65 results above are not evidence for this implementation.
+
+### Current acceptance evidence (2026-11-03)
+
+| #66 acceptance group | Current evidence |
+|---|---|
+| Shared foundations | Extended the existing AuthSecurityConfiguration/Properties, AuthRateLimiter/HmacKeyRing, CsrfSessionService/Controller/HashedCsrfRepository, MemberRepository, single Argon2id encoder and cleanup scheduler. Reused signup credentials/services and existing Fake/MailGateway for final flow; no second chain/store/encoder/mail implementation |
+| Login credentials and member state | SessionIntegrationTest checks ACTIVE, absent/wrong/WITHDRAWN generic errors, correct-password-only EMAIL_NOT_VERIFIED, normalized email and original whitespace/Unicode password |
+| Login limits | LoginRateLimitIntegrationTest checks rolling 15-minute failures, fifth-failure restriction/Retry-After, expired windows, old/current HMAC aliases and rollback independence. LoginSmallPoolIntegrationTest forces three occupied connections/eight waiting logins, then five 401 and three 429, no 503 or sessions; correct credentials remain restricted |
+| RS256/JWT/configuration | JwtServiceTest signs synthetic adversarial tokens for issuer/audience, algorithm/kid/key, missing/wrong-type claims, numeric/UUID boundaries, duplicate/trailing JSON, tampering, rotation overlap/retirement and malformed/weak/mismatched key configuration. Exact 600-second expiry; no external key fetching or fallback |
+| Every-request DB validation | Actual LocalFakeSignupHttpsTest changes synthetic member auth_version/state and family ownership, then observes immediate 401. Renaming the disposable test session table temporarily produces HTTP 503 AUTH_UNAVAILABLE; restoration runs in finally. No authentication cache |
+| Refresh lifetime/rotation/reuse | SessionIntegrationTest checks SHA-256-only storage, stable family ID, exact seven-day expiry, atomic rotation, retained used hashes, concurrent winner/loser and committed reuse revocation. Actual HTTPS reuse returns 401 and invalidates the winner JWT and refresh |
+| Current/all logout and idempotency | Service and HTTPS tests distinguish family-only revocation from all-family/version invalidation; current logout tolerates missing/repeated cookies and incidental expired Bearer. Logout-all retry with invalid JWT returns 401 after valid CSRF. Authentication flow leaves idempotency_record empty |
+| Common member locking and stale credentials | Common MemberLockService locks ascending IDs before family/domain locks. Tests queue login/refresh behind real row locks, mutate password/version, then prove stale credentials cannot issue new sessions. Refresh/logout concurrency completes without a surviving valid family |
+| Authenticated CSRF | Login/refresh replace and link CSRF state; GET reissues while retaining a valid member link under member lock. Logout-all removes member-linked rows while preserving unrelated anonymous state. Explicit linked expiry cleanup preserves member/anonymous data |
+| HTTP security/cookies | Actual loopback HTTPS exercises signup/login/refresh/logout/all, missing/wrong/expired CSRF, absent/non-exact Origin, encoded path aliases, canonical/encoded twenty/IP quota and Retry-After, no-store, separate secure cookie headers/deletions and refresh-cookie-only domain rejection. Existing signup HTTPS regressions remain passing |
+| Key configuration and rotation | Runtime RSA/TLS/HMAC generation only; malformed/missing key configuration fails closed. Public-key overlap and old/current HMAC consistency tested without real key files or secrets |
+| Expiry cleanup | Existing scheduler removes expired families/tokens and delegates existing foundation cleanup, preserving used hashes until family expiry. Expired records fail authentication before physical deletion |
+| Durable/shared rate storage | Same PostgreSQL auth_rate_limit table and cleanup; independent instances, rolling failures, previous keys, transaction rejection and concurrency tests. Existing hourly/issuance limit regression tests retained |
+| Final local flow | Real server + disposable PostgreSQL + runtime loopback TLS/RSA/HMAC + explicitly enabled local Fake: signup → captured code confirmation → login → protected API → refresh → current/all logout. Synthetic code captured privately; no actual mailbox/delivery claim |
+
+### Commands and outcomes
+
+All commands below ran in backend/ with `JAVA_HOME=/Users/jeong/Library/Java/JavaVirtualMachines/corretto-21.0.12.1/Contents/Home`, AI_MODE=replay and Docker-backed disposable PostgreSQL. No PowerShell is required on this current macOS host; the earlier warning concerns Windows/Git Bash.
+
+```bash
+./gradlew spotlessApply compileJava compileTestJava spotlessCheck test --tests 'com.afterbooth.SessionIntegrationTest' --tests 'com.afterbooth.LoginRateLimitIntegrationTest' --tests 'com.afterbooth.global.security.*Test' --tests '*Signup*Test' --tests 'com.afterbooth.member.mail.*Test' --tests 'com.afterbooth.ArchitectureTest' --tests 'com.afterbooth.AuthSchemaUpgradeTest' --tests 'com.afterbooth.CoreSchemaIntegrationTest' --tests 'com.afterbooth.ReservationIntegrationTest' --tests 'com.afterbooth.DefaultVehicleHoldIntegrationTest' --tests 'com.afterbooth.AllocationIntegrationTest' --tests 'com.afterbooth.HandoverIntegrationTest' --tests '*IntakeIntegrationTest' --tests '*PickupRequestIntegrationTest' --tests 'com.afterbooth.IdempotencyRecoveryIntegrationTest' --tests '*ControllerTest' --tests '*GlobalExceptionHandlerTest' --tests '*SpaShellTest' --tests '*HoldItemValidationTest' --tests '*HandoverResolveValidationTest' --no-daemon
+# 219 tests: 209 passed, ten intake fixture failures corrected below.
+./gradlew spotlessApply compileJava compileTestJava spotlessCheck test --tests 'com.afterbooth.SessionIntegrationTest' --tests 'com.afterbooth.LoginRateLimitIntegrationTest' --tests 'com.afterbooth.LoginSmallPoolIntegrationTest' --tests 'com.afterbooth.global.security.*Test' --tests '*Signup*Test' --tests 'com.afterbooth.member.mail.*Test' --tests 'com.afterbooth.ArchitectureTest' --tests '*IntakeIntegrationTest' --no-daemon
+# 88 tests passed; zero failures/errors/skips. Includes corrected intake and final login transaction protocol.
+./gradlew spotlessApply compileJava compileTestJava spotlessCheck --no-daemon
+# Final lexical-only scanner correction; no behavior change.
+```
+
+The earlier core run passed 36/37: an expired-family fixture used separate clock_timestamp calls and violated the exact seven-day CHECK. Fixed only synthetic SQL to use one statement_timestamp. The broad run's intake failures came from late dynamic-property binding during real-server startup and absent Bearer headers on its two raw HTTP upload tests. Explicit early synthetic JWT properties and genuine member/session/signature headers corrected them. Preserve all production security checks; no test authentication bypass was added. The final 88-case run verifies these corrections and the changed authentication/limit code; unaffected passing domain cases from the broad run were not repeated. This is not a full backend-suite pass.
+
+### Review and sensitive-data checks
+
+- Fresh independent read-only adversarial review found R1 queued login quota bypass, R2 incidental expired Bearer blocking refresh/logout, R3 missing signed adversarial JWT coverage and R4 nested transaction pool exhaustion. All were fixed; final re-review approved without blocking findings.
+- The installed Codex CLI completed an additional read-only static review with no actionable findings; it ran during the initial corrections and is not final execution evidence. The repository-specific companion script was unavailable; no Claude reviewer run is claimed. No review was posted remotely.
+- Main session inspected actual production/test diffs and XML counts, ran every gate reported here and verified no credential dumps. A scanner false positive on a long Java identifier was removed by a local-variable rename without scanner exceptions. Changed-file scan, private-key/JWT literal and credential-logging checks, and git diff --check passed. Generated Fake-code lines in the checked test XML/Gradle logs: zero. Repository pre-commit and commit-msg hooks apply again to the staged commit.
+- No contract, dependency or migration changes. Consequently API generation/frontend checks were not repeated; frontend sources are unchanged.
+- Not verified: full backend suite, browser/frontend token storage and single-flight, object ownership/roles/list filters or actor-bound domain idempotency (#67), password management (#68), withdrawal/retention orchestration (#69), real provider delivery/receipt/settings, deployment or live AI. The existing demo now needs configured JWT keys and an ACTIVE member before protected domain calls.
+- #67 reuses the authenticated principal/member lock; #68 and #69 reuse member locking, version/session revocation and member-linked CSRF invalidation; #70 integrates the contracted cookies/token responses and client serialization. Those issues retain their actual scope/dependencies.
+- GitHub issue-body correction needed: none. No push, PR, merge, issue/comment/status/checkbox change or deployment was performed.

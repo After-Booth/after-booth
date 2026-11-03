@@ -27,14 +27,20 @@ import java.util.function.Supplier;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
-@WebMvcTest(IntakeController.class)
+@org.springframework.boot.test.context.SpringBootTest(
+    properties = "spring.docker.compose.enabled=false")
+@org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc(
+    print = org.springframework.boot.webmvc.test.autoconfigure.MockMvcPrint.NONE)
+@org.springframework.context.annotation.Import({
+  com.afterbooth.AuthenticatedMockMvcConfiguration.class,
+  com.afterbooth.TestcontainersConfiguration.class
+})
 class IntakeControllerTest {
   @Autowired MockMvc mvc;
   @MockitoBean IntakeService service;

@@ -21,8 +21,12 @@ import org.springframework.test.web.servlet.ResultActions;
 
 @SpringBootTest(
     properties = {"spring.docker.compose.enabled=false", "afterbooth.reservation-sweep-ms=3600000"})
-@AutoConfigureMockMvc
-@Import({TestcontainersConfiguration.class, ReservationIntegrationTest.TimeConfiguration.class})
+@AutoConfigureMockMvc(print = org.springframework.boot.webmvc.test.autoconfigure.MockMvcPrint.NONE)
+@Import({
+  com.afterbooth.AuthenticatedMockMvcConfiguration.class,
+  TestcontainersConfiguration.class,
+  ReservationIntegrationTest.TimeConfiguration.class
+})
 class HoldItemValidationTest {
   static final Instant NOW = ReservationIntegrationTest.NOW;
   @Autowired MockMvc mvc;

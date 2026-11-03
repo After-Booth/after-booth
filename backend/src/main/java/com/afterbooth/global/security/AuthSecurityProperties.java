@@ -24,5 +24,10 @@ public record AuthSecurityProperties(String allowedOrigin, Hmac hmac) {
   }
 
   public record Hmac(
-      String currentVersion, Map<String, String> keys, Map<String, Instant> previousValidUntil) {}
+      String currentVersion, Map<String, String> keys, Map<String, Instant> previousValidUntil) {
+    @Override
+    public String toString() {
+      return "Hmac[redacted]";
+    }
+  }
 }
