@@ -40,7 +40,11 @@ export function EventPicker({
     onBusyChange?.(true)
     setMessage('')
     try {
-      const data = { name, venue, teardownDeadline: new Date(deadline).toISOString() }
+      const data = {
+        name,
+        venue,
+        teardownDeadline: new Date(`${deadline.slice(0, 16)}:00+09:00`).toISOString(),
+      }
       const payload = JSON.stringify(data)
       if (attempt.current?.payload !== payload)
         attempt.current = { payload, key: crypto.randomUUID() }
@@ -118,7 +122,7 @@ export function EventPicker({
             />
           </label>
           <label className="block">
-            철수 마감 시간
+            철수 마감 시간 (한국 시간)
             <input
               type="datetime-local"
               className={field}

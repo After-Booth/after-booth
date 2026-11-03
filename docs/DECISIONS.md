@@ -126,3 +126,8 @@ The user explicitly selected a single-server guarantee for queued/running mail a
 ## D-084 — [Muse Code] #69 resumed and completed through local commit (2026-11-03)
 
 Muse Code orchestrated the stopped #69 worktree to completion: backend-domain subagents fixed the one failing privacy test at its test-side root cause, closed the remaining acceptance gaps, and corrected review findings R1–R7; the orchestrator ran all verification gates itself (287 + 75 + 29 tests green), confirmed the secret scan and diff hygiene, and recorded this log. Fresh independent read-only review and re-review approved with no blocking findings; the Codex CLI review was unavailable (provider usage limit), so no Codex execution is claimed. Local commit only; no push, PR, issue write or deployment.
+
+## D-085 — #70 frontend authentication scope calls (2026-11-04)
+
+Logout always clears the in-memory token and signed-in UI, even when the server call fails (AUTH_DESIGN: clear token memory on logout); the error is not retried from a signed-in screen. Passwords are cleared on success and on mode switch, not after every failed attempt, so a mistyped code or password can be retried without retyping; they stay in memory only. A login 401 is shown as "check your email or password" because the server returns the same UNAUTHENTICATED text for every login failure. The event deadline field is read as Korea time. The visual refresh of every screen stays in the #70 branch because the work was commissioned as the frontend design improvement for #70; a reviewer may ask to split it.
+

@@ -26,13 +26,15 @@ async function fillForm() {
   await userEvent.click(screen.getByText('새 행사 만들기'))
   await userEvent.type(screen.getByLabelText('행사 이름'), 'Spring Expo')
   await userEvent.type(screen.getByLabelText('장소'), 'COEX')
-  await userEvent.type(screen.getByLabelText('철수 마감 시간'), '2026-11-07T18:00')
+  await userEvent.type(screen.getByLabelText('철수 마감 시간 (한국 시간)'), '2026-11-07T18:00')
 }
 
 test('creates an event, selects it and reports the new id', async () => {
+  let posted: { teardownDeadline: string } | undefined
   server.use(
-    http.post('*/api/events', ({ request }) => {
+    http.post('*/api/events', async ({ request }) => {
       keys.push(request.headers.get('Idempotency-Key') ?? '')
+      posted = (await request.json()) as { teardownDeadline: string }
       return HttpResponse.json(created, { status: 201 })
     }),
   )
@@ -45,6 +47,8 @@ test('creates an event, selects it and reports the new id', async () => {
   expect(screen.getByLabelText('등록할 행사')).toHaveValue('9')
   expect(keys).toHaveLength(1)
   expect(keys[0]).not.toBe('')
+  // The deadline is typed in Korea time regardless of the browser's time zone.
+  expect(posted?.teardownDeadline).toBe('2026-11-07T09:00:00.000Z')
 })
 
 test('keeps the typed event and reuses the idempotency key when a failed create is retried', async () => {

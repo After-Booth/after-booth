@@ -21,6 +21,10 @@ export function setAccessToken(token?: string, sameSession = false) {
   if (!sameSession) generation += 1
 }
 
+export function getAccessToken() {
+  return accessToken
+}
+
 export function installRefresh(handler: () => Promise<boolean>, onInvalid: () => void) {
   refresh = handler
   invalidate = onInvalid

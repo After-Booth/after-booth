@@ -1,9 +1,9 @@
 import { http as mockHttp, HttpResponse } from 'msw'
 import { setupServer } from 'msw/node'
-import { afterAll, afterEach, beforeAll, expect, test } from 'vitest'
+import { afterAll, afterEach, beforeAll, expect, test, vi } from 'vitest'
 import { http, setAccessToken } from '../../api/http'
 import { changePassword } from '../../api/generated/afterbooth'
-import { authOperation, clearSession, signOut } from './session'
+import { authOperation, clearSession, onSessionEnd, signOut } from './session'
 
 let refreshes = 0
 const server = setupServer(
@@ -114,23 +114,21 @@ test('a temporary refresh failure reports the error without clearing the current
   expect(authorization).toBe('Bearer expired-token')
 })
 
-test('logout failure keeps the session available for retry until the server confirms logout', async () => {
-  let logoutCalls = 0
+test('logout clears the access token locally even when the server call fails', async () => {
   server.use(
-    mockHttp.post('*/api/auth/logout', () => {
-      logoutCalls += 1
-      return logoutCalls === 1
-        ? HttpResponse.json(
-            { code: 'AUTH_UNAVAILABLE', message: '잠시 후 다시 시도해 주세요.' },
-            { status: 503 },
-          )
-        : new HttpResponse(null, { status: 204 })
-    }),
+    mockHttp.post('*/api/auth/logout', () =>
+      HttpResponse.json(
+        { code: 'AUTH_UNAVAILABLE', message: '잠시 후 다시 시도해 주세요.' },
+        { status: 503 },
+      ),
+    ),
   )
+  const ended = vi.fn()
+  const unsubscribe = onSessionEnd(ended)
   setAccessToken('new-token')
   await expect(signOut()).rejects.toMatchObject({ status: 503 })
-  await expect(http('/api/private')).resolves.toMatchObject({ status: 200 })
-  await signOut()
+  expect(ended).toHaveBeenCalledOnce()
+  unsubscribe()
   let authorization: string | null = 'unknown'
   server.use(
     mockHttp.get('*/api/private', ({ request }) => {
@@ -140,7 +138,52 @@ test('logout failure keeps the session available for retry until the server conf
   )
   await http('/api/private')
   expect(authorization).toBeNull()
-  expect(logoutCalls).toBe(2)
+})
+
+test('a 401 that persists after a successful refresh ends the session without more retries', async () => {
+  let protectedCalls = 0
+  server.use(
+    mockHttp.get('*/api/private', () => {
+      protectedCalls += 1
+      return HttpResponse.json(
+        { code: 'UNAUTHENTICATED', message: '로그인이 필요해요.' },
+        { status: 401 },
+      )
+    }),
+  )
+  const ended = vi.fn()
+  const unsubscribe = onSessionEnd(ended)
+  setAccessToken('expired-token')
+  await expect(http('/api/private')).rejects.toMatchObject({ status: 401 })
+  expect(refreshes).toBe(1)
+  expect(protectedCalls).toBe(2)
+  expect(ended).toHaveBeenCalledOnce()
+  unsubscribe()
+})
+
+test('an authentication retry does not refresh again when the token was already renewed', async () => {
+  let attempts = 0
+  server.use(
+    mockHttp.post('*/api/members/me/password', () =>
+      ++attempts === 1
+        ? HttpResponse.json(
+            { code: 'UNAUTHENTICATED', message: '로그인이 필요해요.' },
+            { status: 401 },
+          )
+        : new HttpResponse(null, { status: 204 }),
+    ),
+  )
+  setAccessToken('expired-token')
+  await authOperation(async (csrf) => {
+    // Another request renews the session while this action is in flight.
+    if (attempts === 0) setAccessToken('new-token', true)
+    return changePassword(
+      { currentPassword: 'synthetic-old-password', newPassword: 'synthetic-new-password' },
+      csrf,
+    )
+  }, true)
+  expect(refreshes).toBe(0)
+  expect(attempts).toBe(2)
 })
 
 test('a protected authentication mutation refreshes once and obtains a fresh CSRF token before retry', async () => {

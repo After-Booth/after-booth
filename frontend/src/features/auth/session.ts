@@ -6,7 +6,7 @@ import {
   logoutSession,
 } from '../../api/generated/afterbooth'
 import type { MemberView } from '../../api/generated/model'
-import { ApiError, installRefresh, setAccessToken } from '../../api/http'
+import { ApiError, getAccessToken, installRefresh, setAccessToken } from '../../api/http'
 
 let epoch = 0
 let pendingRefresh: Promise<boolean> | undefined
@@ -31,6 +31,7 @@ export async function authOperation<T>(
   retryOn401 = false,
 ): Promise<T> {
   const operationEpoch = epoch
+  const startedToken = getAccessToken()
   const run = async () => {
     const response = await getCsrfToken()
     if (response.status !== 200) throw new Error('보안 정보를 가져오지 못했어요.')
@@ -50,7 +51,8 @@ export async function authOperation<T>(
       error.status === 401 &&
       operationEpoch === epoch
     ) {
-      if ((await renewSession()) && operationEpoch === epoch) return authOperation(action)
+      const renewed = getAccessToken() !== startedToken || (await renewSession())
+      if (renewed && operationEpoch === epoch) return authOperation(action)
     }
     throw error
   }
@@ -111,8 +113,11 @@ export async function restoreSession(): Promise<MemberView | undefined> {
 }
 
 export async function signOut() {
-  await authOperation((csrf) => logoutSession(csrf))
-  clearSession()
+  try {
+    await authOperation((csrf) => logoutSession(csrf))
+  } finally {
+    clearSession()
+  }
 }
 
 installRefresh(renewSession, clearSession)

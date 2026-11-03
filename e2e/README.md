@@ -26,9 +26,15 @@ npm run install-browsers
 npm run test:auth
 ```
 
-This was run once on 2026-11-04 on the developer PC: 2 tests passed. The withdrawal,
-password and two-member allocation/handover flows are covered by component tests
-only, not by this browser run.
+Last run on 2026-11-04 (the head SHA is recorded in PR #76) on the developer PC: 3 tests passed (single
+member flow, cross-member denial, giver/receiver request, hold, confirmation and withdrawal
+eligibility). The photo, voice and handover AI steps of the demo cannot replay for new
+members: the recorded fixtures depend on the seeded database, so allocation and handover
+photo recounts need new recordings (a human-approved live run). Password change and reset
+are covered by component tests only.
+
+> `tests/demo.spec.ts` (issue #12) is skipped until it is rewritten for authenticated
+> members. Run it from the history of #12 only if you need its old evidence.
 
 ### Manual setup
 

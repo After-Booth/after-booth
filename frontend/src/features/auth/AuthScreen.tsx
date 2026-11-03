@@ -17,8 +17,9 @@ const button =
   'min-h-12 w-full rounded-xl bg-emerald-800 px-5 py-3 font-semibold text-white disabled:opacity-50'
 type Mode = 'login' | 'register' | 'verify' | 'forgot' | 'reset'
 
-function errorMessage(error: unknown) {
+function errorMessage(error: unknown, loginAttempt = false) {
   if (error instanceof ApiError) {
+    if (loginAttempt && error.status === 401) return '이메일 또는 비밀번호를 확인해 주세요.'
     if (error.code === 'CSRF_REJECTED') return '보안 확인이 만료되었어요. 다시 시도해 주세요.'
     if (error.status === 429) return '요청이 너무 많아요. 잠시 후 다시 시도해 주세요.'
     if (error.status === 503) return '서비스를 잠시 이용할 수 없어요. 잠시 후 다시 시도해 주세요.'
@@ -92,7 +93,7 @@ export function AuthScreen({ onLogin }: { onLogin: (member: MemberView) => void 
         setMessage('비밀번호를 변경했어요. 다시 로그인해 주세요.')
       }
     } catch (error) {
-      setMessage(errorMessage(error))
+      setMessage(errorMessage(error, mode === 'login'))
     } finally {
       setBusy(false)
     }
