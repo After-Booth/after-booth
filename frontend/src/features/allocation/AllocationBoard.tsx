@@ -15,7 +15,8 @@ export function AllocationBoard({ requestId }: { requestId?: number }) {
   return (
     <main className="min-h-dvh bg-stone-50 px-4 py-8 text-slate-900">
       <div className="mx-auto max-w-2xl space-y-6">
-        <header>
+        <header className="page-intro">
+          <p className="section-kicker">필요한 곳으로 연결하기</p>
           <a href="#/request" className="text-emerald-800 underline">
             픽업 요청하기
           </a>
@@ -34,7 +35,10 @@ export function AllocationBoard({ requestId }: { requestId?: number }) {
           </p>
         )}
         {board.request && <AllocationProposal key={board.request.id} request={board.request} />}
-        <section aria-labelledby="stock-heading">
+        <section
+          className="rounded-2xl border border-stone-200 bg-white p-5 sm:p-7"
+          aria-labelledby="stock-heading"
+        >
           <h2 id="stock-heading" className="text-xl font-bold">
             남은 물품
           </h2>
@@ -66,7 +70,10 @@ export function AllocationBoard({ requestId }: { requestId?: number }) {
             ))}
           </ul>
         </section>
-        <section aria-labelledby="results-heading">
+        <section
+          className="rounded-2xl border border-stone-200 bg-white p-5 sm:p-7"
+          aria-labelledby="results-heading"
+        >
           <h2 id="results-heading" className="text-xl font-bold">
             요청별 배정 결과
           </h2>

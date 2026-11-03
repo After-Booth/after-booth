@@ -21,7 +21,8 @@ export function HandoverScreen() {
   return (
     <main className="min-h-dvh bg-stone-50 px-4 py-8 text-slate-900">
       <div className="mx-auto max-w-2xl space-y-8">
-        <header>
+        <header className="page-intro">
+          <p className="section-kicker">물품의 새로운 시작</p>
           <a href="#/allocation" className="text-emerald-800 underline">
             배정 보드
           </a>
@@ -41,7 +42,10 @@ export function HandoverScreen() {
             </button>
           </div>
         )}
-        <section className="space-y-4" aria-labelledby="handover-heading">
+        <section
+          className="space-y-4 rounded-2xl border border-stone-200 bg-white p-5 sm:p-7"
+          aria-labelledby="handover-heading"
+        >
           <h2 id="handover-heading" className="text-xl font-bold">
             인계할 예약 선택
           </h2>
@@ -214,7 +218,7 @@ export function HandoverScreen() {
           {handover.cancelled && <p role="status">예약을 취소하고 수량을 재고로 돌려놓았어요.</p>}
         </section>
         <section
-          className="space-y-4 border-t border-stone-300 pt-6"
+          className="space-y-4 rounded-2xl border border-stone-200 bg-white p-5 sm:p-7"
           aria-labelledby="stats-heading"
         >
           <h2 id="stats-heading" className="text-2xl font-bold">

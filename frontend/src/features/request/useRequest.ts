@@ -42,12 +42,14 @@ function messageOf(error: unknown) {
   return '요청을 처리하지 못했어요. 연결을 확인하고 다시 시도해 주세요.'
 }
 
-export function useRequest() {
+export function useRequest(ownedOrganizationId?: number) {
   const [status, setStatus] = useState<Status>('idle')
   const [message, setMessage] = useState('')
   const [organizations, setOrganizations] = useState<Organization[]>([])
   const [catalogStatus, setCatalogStatus] = useState<'loading' | 'ready' | 'error'>('loading')
-  const [organizationId, setOrganizationId] = useState('')
+  const [organizationId, setOrganizationId] = useState(
+    ownedOrganizationId ? String(ownedOrganizationId) : '',
+  )
   const [interpretation, setInterpretation] = useState<ConditionInterpretation>()
   const [saved, setSaved] = useState<PickupRequest>()
   const [fields, setFields] = useState<RequestFields>({

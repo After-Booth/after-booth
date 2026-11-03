@@ -11,8 +11,49 @@ export class ApiError extends Error {
   }
 }
 
+let accessToken: string | undefined
+let generation = 0
+let refresh: (() => Promise<boolean>) | undefined
+let invalidate: (() => void) | undefined
+
+export function setAccessToken(token?: string, sameSession = false) {
+  accessToken = token
+  if (!sameSession) generation += 1
+}
+
+export function installRefresh(handler: () => Promise<boolean>, onInvalid: () => void) {
+  refresh = handler
+  invalidate = onInvalid
+}
+
 export async function http<T>(url: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(url, options)
+  const publicRequest =
+    !url.startsWith('/api/') || url.startsWith('/api/auth/') || url === '/api/health'
+  const authMutation =
+    url === '/api/members/me/password' ||
+    (url === '/api/members/me' && options?.method === 'DELETE')
+  const send = () => {
+    const headers = new Headers(options?.headers)
+    if (!publicRequest && accessToken) headers.set('Authorization', `Bearer ${accessToken}`)
+    return fetch(url, { ...options, headers, credentials: 'same-origin', cache: 'no-store' })
+  }
+  const startedGeneration = generation
+  const startedToken = accessToken
+  let res = await send()
+  if (
+    res.status === 401 &&
+    !publicRequest &&
+    !authMutation &&
+    accessToken &&
+    refresh &&
+    generation === startedGeneration
+  ) {
+    const renewed = accessToken !== startedToken ? true : await refresh()
+    if (renewed && accessToken && generation === startedGeneration) {
+      res = await send()
+      if (res.status === 401 && generation === startedGeneration) invalidate?.()
+    }
+  }
   const body = res.status === 204 ? undefined : await res.json().catch(() => undefined)
   if (!res.ok) {
     throw new ApiError(

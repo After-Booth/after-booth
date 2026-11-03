@@ -59,6 +59,18 @@ async function uploadPhoto() {
   )
 }
 
+test('keeps the selected event fixed once a photo draft has started', async () => {
+  createReturns(draft())
+  render(<IntakeScreen showEvents />)
+  await screen.findByRole('option', { name: 'Demo' })
+  const selector = screen.getByLabelText('등록할 행사')
+  await userEvent.selectOptions(selector, '7')
+  await uploadPhoto()
+  expect(await screen.findByText('진열대 4개')).toBeInTheDocument()
+  expect(selector).toBeDisabled()
+  expect(selector).toHaveValue('7')
+})
+
 test('polls while processing, showing the stage, until the draft is ready', async () => {
   createReturns(draft({ status: 'PROCESSING', stage: 'ESTIMATE', lines: [] }))
   let polls = 0

@@ -6,6 +6,14 @@ import App from './App'
 
 const server = setupServer(
   http.get('*/api/health', () => HttpResponse.json({ status: 'UP', aiMode: 'replay' })),
+  http.get('*/api/auth/csrf', () => HttpResponse.json({ csrfToken: 'test-csrf' })),
+  http.post('*/api/auth/refresh', () =>
+    HttpResponse.json({ accessToken: 'test-token', tokenType: 'Bearer', expiresIn: 600 }),
+  ),
+  http.get('*/api/members/me', () =>
+    HttpResponse.json({ id: 1, email: 'test@example.test', state: 'ACTIVE', organizationId: 1 }),
+  ),
+  http.get('*/api/events', () => HttpResponse.json([])),
 )
 
 beforeAll(() => server.listen())
@@ -18,7 +26,7 @@ test('shows the server status in Korean', async () => {
 
 test('puts the photo capture first, links the screens and keeps one main landmark', async () => {
   render(<App />)
-  const capture = screen.getByLabelText('부스 사진 찍기')
+  const capture = await screen.findByLabelText('부스 사진 찍기')
   const health = await screen.findByText('서버 UP · AI replay')
   expect(capture.compareDocumentPosition(health) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   expect(screen.getAllByRole('main')).toHaveLength(1)
