@@ -273,3 +273,18 @@ Exact backend selections used (from backend/ with Java 21):
 ./gradlew spotlessApply compileJava compileTestJava spotlessCheck --no-daemon
 # Final lexical-only scanner correction: passed; no behavior change.
 ```
+
+## PR #71 review correction — R1 encoded signup paths
+
+- [x] Confirmed the remote review targets the clean local head `583fc51`; reused the existing signup worktree without changing the shared checkout.
+- [x] Reproduced R1 with three new actual loopback HTTPS/PostgreSQL regressions before production changes: missing security checks, successful-response no-store and canonical/encoded IP-quota sharing all failed. An initial mistyped method filter selected no tests; it is not reproduction evidence.
+- [x] Reused parsed-path POST matcher objects for signup authorization, CSRF, exact-Origin enforcement and IP-scope selection; authentication no-store uses parsed namespace matchers too (D-078). No firewall relaxation, dependency, schema, API contract or policy-limit changes.
+- [x] Protected encoded paths with valid synthetic business bodies: missing/wrong Origin, cookie and CSRF return 403 without member/organization/challenge mutations, activation, attempt consumption or password-hash changes. Valid encoded signup/verification still works. Canonical and encoded aliases share each API's twenty/IP/hour quota and return Retry-After on exhaustion.
+- [x] Main-session final gate below passed: 38 tests across six suites, zero failures/errors/skips, including seven real HTTPS security cases, PostgreSQL rate/key-rotation checks, signup/final-password checks, actual local Fake HTTPS flow and ArchitectureTest.
+
+```bash
+# backend/, Java 21
+./gradlew spotlessApply compileJava compileTestJava spotlessCheck test --tests 'com.afterbooth.global.security.AuthSecurityHttpsTest' --tests 'com.afterbooth.global.security.AuthRateLimiterIntegrationTest' --tests 'com.afterbooth.global.security.AuthSecurityPropertiesTest' --tests 'com.afterbooth.LocalFakeSignupHttpsTest' --tests 'com.afterbooth.SignupIntegrationTest' --tests 'com.afterbooth.ArchitectureTest' --no-daemon
+```
+
+Fresh independent read-only review and the installed Codex CLI adversarial re-review both approved R1 as resolved with no blockers. Final changed-file/staged-content scanning and repository hooks apply before local commit. Tests use generated synthetic material and disposable PostgreSQL; available XML/Gradle outputs contain zero generated Fake-code lines. No real secrets, user data or provider calls were accessed. Not verified in this correction: full backend/frontend suite, browser UI, additional context-path deployment, real mail, deployment or updated remote CI. No push, GitHub comment/review/status modification or merge is included.

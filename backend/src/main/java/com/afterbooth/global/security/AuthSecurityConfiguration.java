@@ -18,6 +18,9 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.csrf.CsrfFilter;
+import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
+import org.springframework.security.web.util.matcher.OrRequestMatcher;
+import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.web.filter.OncePerRequestFilter;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -25,11 +28,27 @@ import tools.jackson.databind.json.JsonMapper;
 @EnableWebSecurity
 @EnableConfigurationProperties(AuthSecurityProperties.class)
 class AuthSecurityConfiguration {
-  private static final List<String> SIGNUP =
+  private static final List<SignupEndpoint> SIGNUP =
       List.of(
-          "/api/auth/registrations",
-          "/api/auth/email-verifications/request",
-          "/api/auth/email-verifications/confirm");
+          new SignupEndpoint(
+              PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/auth/registrations"),
+              "signup:registration"),
+          new SignupEndpoint(
+              PathPatternRequestMatcher.pathPattern(
+                  HttpMethod.POST, "/api/auth/email-verifications/request"),
+              "signup:issue"),
+          new SignupEndpoint(
+              PathPatternRequestMatcher.pathPattern(
+                  HttpMethod.POST, "/api/auth/email-verifications/confirm"),
+              "signup:confirm"));
+  private static final RequestMatcher SIGNUP_REQUESTS =
+      new OrRequestMatcher(SIGNUP.stream().map(SignupEndpoint::matcher).toList());
+  private static final RequestMatcher AUTH_RESPONSES =
+      new OrRequestMatcher(
+          PathPatternRequestMatcher.pathPattern("/api/auth/**"),
+          PathPatternRequestMatcher.pathPattern("/api/members/**"));
+
+  private record SignupEndpoint(RequestMatcher matcher, String scope) {}
 
   @Bean
   SecurityFilterChain securityFilterChain(
@@ -46,26 +65,23 @@ class AuthSecurityConfiguration {
             csrf ->
                 csrf.csrfTokenRepository(new HashedCsrfRepository(sessions))
                     .csrfTokenRequestHandler(HashedCsrfRepository.requestHandler())
-                    .requireCsrfProtectionMatcher(AuthSecurityConfiguration::isSignup))
+                    .requireCsrfProtectionMatcher(SIGNUP_REQUESTS))
         .addFilterBefore(
             new OncePerRequestFilter() {
               @Override
               protected void doFilterInternal(
                   HttpServletRequest request, HttpServletResponse response, FilterChain chain)
                   throws ServletException, IOException {
-                boolean auth =
-                    request.getRequestURI().startsWith("/api/auth/")
-                        || request.getRequestURI().startsWith("/api/members/");
-                if (auth) response.setHeader("Cache-Control", "no-store");
+                if (AUTH_RESPONSES.matches(request))
+                  response.setHeader("Cache-Control", "no-store");
                 try {
-                  if (isSignup(request)) {
-                    String scope =
-                        switch (request.getRequestURI()) {
-                          case "/api/auth/registrations" -> "signup:registration";
-                          case "/api/auth/email-verifications/request" -> "signup:issue";
-                          default -> "signup:confirm";
-                        };
-                    limiter.checkIp(scope, request.getRemoteAddr());
+                  SignupEndpoint endpoint =
+                      SIGNUP.stream()
+                          .filter(candidate -> candidate.matcher().matches(request))
+                          .findFirst()
+                          .orElse(null);
+                  if (endpoint != null) {
+                    limiter.checkIp(endpoint.scope(), request.getRemoteAddr());
                     String origin = request.getHeader("Origin");
                     if (!properties.validOrigin())
                       throw new BusinessException(ErrorCode.AUTH_UNAVAILABLE);
@@ -88,7 +104,7 @@ class AuthSecurityConfiguration {
             auth ->
                 auth.requestMatchers(HttpMethod.GET, "/api/auth/csrf")
                     .permitAll()
-                    .requestMatchers(HttpMethod.POST, SIGNUP.toArray(String[]::new))
+                    .requestMatchers(SIGNUP_REQUESTS)
                     .permitAll()
                     .requestMatchers(
                         HttpMethod.GET,
@@ -139,10 +155,6 @@ class AuthSecurityConfiguration {
                                     : ErrorCode.FORBIDDEN,
                                 json)));
     return http.build();
-  }
-
-  private static boolean isSignup(HttpServletRequest request) {
-    return "POST".equals(request.getMethod()) && SIGNUP.contains(request.getRequestURI());
   }
 
   private static void write(HttpServletResponse response, ErrorCode code, JsonMapper json)
