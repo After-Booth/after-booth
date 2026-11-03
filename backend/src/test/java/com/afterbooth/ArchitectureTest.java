@@ -84,10 +84,10 @@ class ArchitectureTest {
   }
 
   @Test
-  void only_ai_package_uses_an_http_client() {
+  void only_ai_and_mail_packages_use_an_http_client() {
     noClasses()
         .that()
-        .resideOutsideOfPackage("com.afterbooth.ai..")
+        .resideOutsideOfPackages("com.afterbooth.ai..", "com.afterbooth.member.mail..")
         .should()
         .dependOnClassesThat()
         .resideInAnyPackage(

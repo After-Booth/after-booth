@@ -83,7 +83,11 @@ class CoreSchemaIntegrationTest {
     assertThat(
             jdbc.queryForObject(
                 "SELECT count(*) FROM flyway_schema_history WHERE success", Long.class))
-        .isEqualTo(1);
+        .isEqualTo(2);
+    assertThat(
+            jdbc.queryForList(
+                "SELECT version FROM flyway_schema_history WHERE success", String.class))
+        .containsExactlyInAnyOrder("202610311200", "202611031200");
   }
 
   @Test

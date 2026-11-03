@@ -1,5 +1,6 @@
 package com.afterbooth.global.error;
 
+import com.afterbooth.global.security.RateLimitedException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.TypeMismatchException;
@@ -21,6 +22,12 @@ class GlobalExceptionHandler {
 
   @ExceptionHandler(BusinessException.class)
   ResponseEntity<ErrorResponse> handleBusiness(BusinessException e) {
+    if (e instanceof RateLimitedException limited) {
+      return ResponseEntity.status(e.errorCode().status())
+          .header("Retry-After", Long.toString(limited.retryAfter()))
+          .header("Cache-Control", "no-store")
+          .body(new ErrorResponse(e.errorCode().name(), e.errorCode().message()));
+    }
     return respond(e.errorCode().status(), e.errorCode().name(), e.getMessage());
   }
 
@@ -37,11 +44,17 @@ class GlobalExceptionHandler {
   }
 
   @ExceptionHandler(Exception.class)
-  ResponseEntity<ErrorResponse> handleUnexpected(Exception e) {
+  ResponseEntity<ErrorResponse> handleUnexpected(
+      Exception e, jakarta.servlet.http.HttpServletRequest request) {
     // Spring MVC exceptions such as 405, 415 and 404 (unknown path) keep their own 4xx status
     if (e instanceof org.springframework.web.ErrorResponse framework
         && framework.getStatusCode().is4xxClientError()) {
       return handleClientError(framework.getStatusCode());
+    }
+    if (request.getRequestURI().startsWith("/api/auth/")
+        || request.getRequestURI().startsWith("/api/members/")) {
+      log.error("Authentication request failed");
+      return respond(ErrorCode.AUTH_UNAVAILABLE);
     }
     log.error("Unhandled exception", e);
     return respond(ErrorCode.INTERNAL_ERROR);
