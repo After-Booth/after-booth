@@ -76,6 +76,8 @@ export async function startAuthStack(): Promise<AuthStack> {
     },
     afterbooth: {
       mail: { 'fake-enabled': true },
+      // Pins the request reference date so the recorded replay prompts match (docker-compose.yml).
+      demo: { 'reference-date': '2026-10-31' },
       auth: {
         'allowed-origin': AUTH_ORIGIN,
         hmac: { 'current-version': 'synthetic', keys: { synthetic: randomBytes(32).toString('base64') } },

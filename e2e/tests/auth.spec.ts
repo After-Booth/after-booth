@@ -36,6 +36,26 @@ async function apiGet<T = unknown>(page: Page, url: string, authorization?: stri
   );
 }
 
+// Mutating call inside the page; only the status and parsed body leave the browser.
+async function call<T = any>(page: Page, method: string, url: string, body?: unknown) {
+  const authorization = tokens.get(page);
+  return page.evaluate(
+    async ([verb, target, header, payload, key]) => {
+      const response = await fetch(target, {
+        method: verb,
+        headers: {
+          authorization: header,
+          'Idempotency-Key': key,
+          ...(payload ? { 'Content-Type': 'application/json' } : {}),
+        },
+        body: payload || undefined,
+      });
+      return { status: response.status, body: (await response.json().catch(() => undefined)) as T };
+    },
+    [method, url, authorization ?? '', body ? JSON.stringify(body) : '', crypto.randomUUID()] as const,
+  );
+}
+
 async function signUp(page: Page, email: string) {
   await page.goto('/');
   await page.getByRole('button', { name: '회원가입' }).click();
@@ -48,7 +68,13 @@ async function signUp(page: Page, email: string) {
   await expect(page.getByText('이메일 인증이 완료되었어요. 로그인해 주세요.')).toBeVisible();
 }
 
+const tokens = new WeakMap<Page, string>();
+
 async function logIn(page: Page, email: string) {
+  page.on('request', (request) => {
+    const header = request.headers()['authorization'];
+    if (header && request.url().includes('/api/')) tokens.set(page, header);
+  });
   await page.getByLabel('이메일', { exact: true }).fill(email);
   await page.getByLabel('비밀번호').fill(PASSWORD);
   await page.getByRole('button', { name: '로그인', exact: true }).click();
@@ -149,4 +175,120 @@ test('a second member cannot see or read the first member’s event', async () =
 
   await first.close();
   await second.close();
+});
+
+
+test('giver inventory, receiver request, hold, confirmation and withdrawal eligibility', async () => {
+  const giverContext = await browser.newContext({ baseURL: AUTH_ORIGIN });
+  const receiverContext = await browser.newContext({ baseURL: AUTH_ORIGIN });
+  const giver = await giverContext.newPage();
+  const receiver = await receiverContext.newPage();
+  const giverEmail = uniqueEmail();
+  const receiverEmail = uniqueEmail();
+
+  await signUp(giver, giverEmail);
+  await logIn(giver, giverEmail);
+  await createEvent(giver, 'Giver Expo');
+  await giver.locator('input[type="file"][accept="image/jpeg,image/png"]').setInputFiles(PHOTO_BINS);
+  await expect(giver.getByLabel('분류별 수량').getByText('수납함 4개')).toBeVisible({
+    timeout: AI_TIMEOUT_MS,
+  });
+  await giver.getByRole('button', { name: '재고로 등록' }).click();
+  await expect(giver.getByText('재고로 등록했어요.')).toBeVisible();
+  const giverOrg = (await call(giver, 'GET', '/api/members/me')).body.organizationId as number;
+
+  await signUp(receiver, receiverEmail);
+  await logIn(receiver, receiverEmail);
+  const receiverOrg = (await call(receiver, 'GET', '/api/members/me')).body.organizationId as number;
+  expect(receiverOrg).not.toBe(giverOrg);
+
+  const saved = await call(receiver, 'POST', '/api/pickup-requests', {
+    organizationId: receiverOrg,
+    category: 'STORAGE_BIN',
+    quantity: 2,
+    vehicleType: 'VAN',
+    transcript: 'synthetic request',
+  });
+  expect(saved.status).toBe(201);
+  const requestId = saved.body.id as number;
+  // A member cannot file a request for another member's organization.
+  const foreign = await call(receiver, 'POST', '/api/pickup-requests', {
+    organizationId: giverOrg,
+    category: 'STORAGE_BIN',
+    quantity: 1,
+    vehicleType: 'VAN',
+  });
+  expect([403, 404]).toContain(foreign.status);
+
+  const items = (await call(receiver, 'GET', '/api/items?availableOnly=true')).body as Array<{
+    id: number;
+    organizationId: number;
+    category: string;
+  }>;
+  const bins = items.find((item) => item.organizationId === giverOrg && item.category === 'STORAGE_BIN');
+  expect(bins, 'the giver bins are available to the receiver').toBeDefined();
+  const hold = await call(receiver, 'POST', '/api/reservations', {
+    requestId,
+    itemId: bins!.id,
+    quantity: 2,
+  });
+  expect(hold.status).toBe(201);
+  expect(hold.body.status).toBe('HELD');
+  const reservationId = hold.body.id as number;
+
+  // The giver is not the receiver organization's owner and cannot confirm.
+  const foreignConfirm = await call(giver, 'POST', `/api/reservations/${reservationId}/confirm`);
+  expect([403, 404]).toContain(foreignConfirm.status);
+
+  await receiver.goto(`/#/allocation?requestId=${requestId}`);
+  await receiver.getByRole('button', { name: /예약 확정하기$/ }).click();
+  await expect
+    .poll(async () => (await call(receiver, 'GET', `/api/reservations/${reservationId}`)).body.status)
+    .toBe('CONFIRMED');
+
+  await giver.goto('/#/handover');
+  await expect(
+    giver.getByRole('option', { name: new RegExp(`예약 #${reservationId} `) }),
+  ).toHaveCount(1);
+
+  // Withdrawal is rejected while a CONFIRMED reservation exists, for either side.
+  for (const [page, email] of [
+    [receiver, receiverEmail],
+    [giver, giverEmail],
+  ] as const) {
+    await page.goto('/#/account');
+    page.once('dialog', (dialog) => void dialog.accept());
+    await page.getByLabel('현재 비밀번호').fill(PASSWORD);
+    const answer = page.waitForResponse(
+      (r) => r.url().endsWith('/api/members/me') && r.request().method() === 'DELETE',
+    );
+    await page.getByRole('button', { name: '회원 탈퇴' }).click();
+    const response = await answer;
+    console.log('blocked withdrawal ->', response.status(), JSON.stringify(await response.json().catch(() => null)));
+    await expect(page.getByRole('alert')).toBeVisible();
+    await expect(page.getByText(`이메일: ${email}`)).toBeVisible();
+  }
+
+  // After the receiver cancels, both members can withdraw and cannot log in again.
+  expect((await call(receiver, 'POST', `/api/reservations/${reservationId}/cancel`)).status).toBe(
+    200,
+  );
+  for (const [page, email] of [
+    [receiver, receiverEmail],
+    [giver, giverEmail],
+  ] as const) {
+    await page.goto('/#/account');
+    page.once('dialog', (dialog) => void dialog.accept());
+    await page.getByLabel('현재 비밀번호').fill(PASSWORD);
+    await page.getByRole('button', { name: '회원 탈퇴' }).click();
+    await expect(page.getByRole('heading', { name: '다시 만나요' })).toBeVisible();
+    await page.getByLabel('이메일', { exact: true }).fill(email);
+    await page.getByLabel('비밀번호').fill(PASSWORD);
+    await page.getByRole('button', { name: '로그인', exact: true }).click();
+    await expect(page.getByRole('heading', { name: '다시 만나요' })).toBeVisible();
+    await expect(page.getByRole('navigation', { name: '주요 메뉴' })).toHaveCount(0);
+  }
+
+  await giverContext.close();
+  await receiverContext.close();
 });
