@@ -171,13 +171,16 @@ public class MemberWorkRegistry {
       try {
         action.accept(input);
       } finally {
-        if (previous == null) OWNED.remove();
-        else OWNED.set(previous);
-        synchronized (MemberWorkRegistry.this) {
-          owner.active--;
-          MemberWorkRegistry.this.notifyAll();
+        try {
+          erase.accept(input);
+        } finally {
+          if (previous == null) OWNED.remove();
+          else OWNED.set(previous);
+          synchronized (MemberWorkRegistry.this) {
+            owner.active--;
+            MemberWorkRegistry.this.notifyAll();
+          }
         }
-        erase.accept(input);
       }
     }
 

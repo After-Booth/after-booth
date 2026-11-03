@@ -4,9 +4,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.afterbooth.global.security.MemberWorkRegistry;
+import java.util.Arrays;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.Test;
 
@@ -178,6 +180,59 @@ class MemberWorkRegistryTest {
         .isInstanceOf(IllegalStateException.class);
     assertThat(MemberWorkRegistry.memberOwnedWork()).isFalse();
     try (var ignored = registry.erase(1)) {}
+  }
+
+  @Test
+  void withdrawalWaitsForPayloadErasureAfterActionReturns() throws Exception {
+    var registry = new MemberWorkRegistry();
+    CountDownLatch actionDone = new CountDownLatch(1);
+    CountDownLatch eraserEntered = new CountDownLatch(1);
+    CountDownLatch releaseEraser = new CountDownLatch(1);
+    AtomicBoolean payloadErased = new AtomicBoolean();
+    AtomicBoolean withdrawalReturned = new AtomicBoolean();
+    byte[] input = new byte[] {7};
+    try (var threads = Executors.newFixedThreadPool(2)) {
+      var active =
+          threads.submit(
+              () ->
+                  registry
+                      .register(
+                          1,
+                          input,
+                          bytes -> {
+                            eraserEntered.countDown();
+                            try {
+                              if (!releaseEraser.await(5, TimeUnit.SECONDS))
+                                throw new IllegalStateException("timeout");
+                            } catch (InterruptedException failure) {
+                              Thread.currentThread().interrupt();
+                              throw new IllegalStateException("interrupted");
+                            }
+                            Arrays.fill(bytes, (byte) 0);
+                            payloadErased.set(true);
+                          })
+                      .run(payload -> actionDone.countDown()));
+      assertThat(actionDone.await(5, TimeUnit.SECONDS)).isTrue();
+      assertThat(eraserEntered.await(5, TimeUnit.SECONDS)).isTrue();
+      var withdrawal =
+          threads.submit(
+              () -> {
+                try (var guard = registry.erase(1)) {
+                  withdrawalReturned.set(true);
+                  guard.commit();
+                }
+              });
+      assertThatThrownBy(() -> withdrawal.get(200, TimeUnit.MILLISECONDS))
+          .isInstanceOf(TimeoutException.class);
+      assertThat(withdrawalReturned).isFalse();
+      assertThat(payloadErased).isFalse();
+      releaseEraser.countDown();
+      active.get(5, TimeUnit.SECONDS);
+      withdrawal.get(5, TimeUnit.SECONDS);
+      assertThat(payloadErased).isTrue();
+      assertThat(input[0]).isZero();
+      assertThat(withdrawalReturned).isTrue();
+    }
   }
 
   @Test
