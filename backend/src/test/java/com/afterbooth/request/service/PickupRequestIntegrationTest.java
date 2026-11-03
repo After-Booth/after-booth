@@ -28,8 +28,11 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 import tools.jackson.databind.json.JsonMapper;
 
 @SpringBootTest(properties = "spring.docker.compose.enabled=false")
-@AutoConfigureMockMvc
-@Import(PickupRequestIntegrationTest.Database.class)
+@AutoConfigureMockMvc(print = org.springframework.boot.webmvc.test.autoconfigure.MockMvcPrint.NONE)
+@Import({
+  com.afterbooth.AuthenticatedMockMvcConfiguration.class,
+  PickupRequestIntegrationTest.Database.class
+})
 class PickupRequestIntegrationTest {
   @Autowired PickupRequestService service;
   @Autowired IdempotencyService idempotency;

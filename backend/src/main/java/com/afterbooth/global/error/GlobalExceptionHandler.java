@@ -18,6 +18,13 @@ import org.springframework.web.multipart.support.MissingServletRequestPartExcept
 @RestControllerAdvice
 class GlobalExceptionHandler {
 
+  private static final org.springframework.security.web.util.matcher.RequestMatcher AUTH_REQUESTS =
+      new org.springframework.security.web.util.matcher.OrRequestMatcher(
+          org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher
+              .pathPattern("/api/auth/**"),
+          org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher
+              .pathPattern("/api/members/**"));
+
   private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
   @ExceptionHandler(BusinessException.class)
@@ -51,8 +58,7 @@ class GlobalExceptionHandler {
         && framework.getStatusCode().is4xxClientError()) {
       return handleClientError(framework.getStatusCode());
     }
-    if (request.getRequestURI().startsWith("/api/auth/")
-        || request.getRequestURI().startsWith("/api/members/")) {
+    if (AUTH_REQUESTS.matches(request)) {
       log.error("Authentication request failed");
       return respond(ErrorCode.AUTH_UNAVAILABLE);
     }

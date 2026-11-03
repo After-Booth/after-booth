@@ -26,7 +26,7 @@ import tools.jackson.databind.json.JsonMapper;
 
 @Configuration(proxyBeanMethods = false)
 @EnableWebSecurity
-@EnableConfigurationProperties(AuthSecurityProperties.class)
+@EnableConfigurationProperties({AuthSecurityProperties.class, JwtProperties.class})
 class AuthSecurityConfiguration {
   private static final List<SignupEndpoint> SIGNUP =
       List.of(
@@ -41,12 +41,48 @@ class AuthSecurityConfiguration {
               PathPatternRequestMatcher.pathPattern(
                   HttpMethod.POST, "/api/auth/email-verifications/confirm"),
               "signup:confirm"));
+  private static final RequestMatcher LOGIN =
+      PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/auth/login");
+  private static final RequestMatcher REFRESH =
+      PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/auth/refresh");
+  private static final RequestMatcher LOGOUT =
+      PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/auth/logout");
+  private static final RequestMatcher LOGOUT_ALL =
+      PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/auth/logout-all");
   private static final RequestMatcher SIGNUP_REQUESTS =
       new OrRequestMatcher(SIGNUP.stream().map(SignupEndpoint::matcher).toList());
+  private static final RequestMatcher AUTH_POSTS =
+      new OrRequestMatcher(SIGNUP_REQUESTS, LOGIN, REFRESH, LOGOUT, LOGOUT_ALL);
   private static final RequestMatcher AUTH_RESPONSES =
       new OrRequestMatcher(
           PathPatternRequestMatcher.pathPattern("/api/auth/**"),
           PathPatternRequestMatcher.pathPattern("/api/members/**"));
+
+  private static final RequestMatcher BEARER_REQUESTS =
+      new OrRequestMatcher(
+          LOGOUT_ALL,
+          PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/api/organizations"),
+          PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/api/items"),
+          PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/api/items/{id}"),
+          PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/api/events"),
+          PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/api/events/{id}"),
+          PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/api/stats/reuse"),
+          PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/api/intake/drafts/{id}"),
+          PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/api/pickup-requests/{id}"),
+          PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/api/reservations"),
+          PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/api/reservations/{id}"),
+          PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/intake/drafts"),
+          PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/intake/drafts/{id}/confirm"),
+          PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/conditions/interpret"),
+          PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/pickup-requests"),
+          PathPatternRequestMatcher.pathPattern(
+              HttpMethod.POST, "/api/pickup-requests/{id}/allocation"),
+          PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/reservations"),
+          PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/reservations/{id}/confirm"),
+          PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/reservations/{id}/cancel"),
+          PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/reservations/{id}/handover"),
+          PathPatternRequestMatcher.pathPattern(
+              HttpMethod.POST, "/api/reservations/{id}/handover/resolve"));
 
   private record SignupEndpoint(RequestMatcher matcher, String scope) {}
 
@@ -56,7 +92,9 @@ class AuthSecurityConfiguration {
       CsrfSessionService sessions,
       AuthRateLimiter limiter,
       AuthSecurityProperties properties,
-      JsonMapper json)
+      JsonMapper json,
+      JwtService jwt,
+      java.time.Clock clock)
       throws Exception {
     http.sessionManagement(
             session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -65,7 +103,7 @@ class AuthSecurityConfiguration {
             csrf ->
                 csrf.csrfTokenRepository(new HashedCsrfRepository(sessions))
                     .csrfTokenRequestHandler(HashedCsrfRepository.requestHandler())
-                    .requireCsrfProtectionMatcher(SIGNUP_REQUESTS))
+                    .requireCsrfProtectionMatcher(AUTH_POSTS))
         .addFilterBefore(
             new OncePerRequestFilter() {
               @Override
@@ -80,8 +118,9 @@ class AuthSecurityConfiguration {
                           .filter(candidate -> candidate.matcher().matches(request))
                           .findFirst()
                           .orElse(null);
-                  if (endpoint != null) {
-                    limiter.checkIp(endpoint.scope(), request.getRemoteAddr());
+                  if (endpoint != null) limiter.checkIp(endpoint.scope(), request.getRemoteAddr());
+                  if (LOGIN.matches(request)) limiter.checkIp("login", request.getRemoteAddr());
+                  if (AUTH_POSTS.matches(request)) {
                     String origin = request.getHeader("Origin");
                     if (!properties.validOrigin())
                       throw new BusinessException(ErrorCode.AUTH_UNAVAILABLE);
@@ -89,6 +128,21 @@ class AuthSecurityConfiguration {
                       write(response, ErrorCode.CSRF_REJECTED, json);
                       return;
                     }
+                  }
+                  var authorization =
+                      java.util.Collections.list(request.getHeaders("Authorization"));
+                  if (BEARER_REQUESTS.matches(request) && !authorization.isEmpty()) {
+                    if (authorization.size() != 1
+                        || !authorization.getFirst().startsWith("Bearer "))
+                      throw new BusinessException(ErrorCode.UNAUTHENTICATED);
+                    var principal =
+                        jwt.verify(authorization.getFirst().substring(7), clock.instant());
+                    var authentication =
+                        org.springframework.security.authentication
+                            .UsernamePasswordAuthenticationToken.authenticated(
+                            principal, null, java.util.List.of());
+                    org.springframework.security.core.context.SecurityContextHolder.getContext()
+                        .setAuthentication(authentication);
                   }
                   chain.doFilter(request, response);
                 } catch (RateLimitedException e) {
@@ -104,13 +158,20 @@ class AuthSecurityConfiguration {
             auth ->
                 auth.requestMatchers(HttpMethod.GET, "/api/auth/csrf")
                     .permitAll()
-                    .requestMatchers(SIGNUP_REQUESTS)
+                    .requestMatchers(SIGNUP_REQUESTS, LOGIN, REFRESH, LOGOUT)
                     .permitAll()
                     .requestMatchers(
                         HttpMethod.GET,
                         "/api/health",
                         "/actuator/health",
                         "/actuator/info",
+                        "/",
+                        "/index.html",
+                        "/assets/**",
+                        "/favicon.ico")
+                    .permitAll()
+                    .requestMatchers(
+                        HttpMethod.GET,
                         "/api/organizations",
                         "/api/items",
                         "/api/items/{id}",
@@ -120,12 +181,8 @@ class AuthSecurityConfiguration {
                         "/api/intake/drafts/{id}",
                         "/api/pickup-requests/{id}",
                         "/api/reservations",
-                        "/api/reservations/{id}",
-                        "/",
-                        "/index.html",
-                        "/assets/**",
-                        "/favicon.ico")
-                    .permitAll()
+                        "/api/reservations/{id}")
+                    .authenticated()
                     .requestMatchers(
                         HttpMethod.POST,
                         "/api/intake/drafts",
@@ -138,14 +195,17 @@ class AuthSecurityConfiguration {
                         "/api/reservations/{id}/cancel",
                         "/api/reservations/{id}/handover",
                         "/api/reservations/{id}/handover/resolve")
-                    .permitAll()
+                    .authenticated()
+                    .requestMatchers(LOGOUT_ALL)
+                    .authenticated()
                     .anyRequest()
                     .denyAll())
         .exceptionHandling(
             errors ->
                 errors
                     .authenticationEntryPoint(
-                        (request, response, error) -> write(response, ErrorCode.FORBIDDEN, json))
+                        (request, response, error) ->
+                            write(response, ErrorCode.UNAUTHENTICATED, json))
                     .accessDeniedHandler(
                         (request, response, error) ->
                             write(

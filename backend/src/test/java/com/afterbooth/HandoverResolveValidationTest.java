@@ -27,8 +27,13 @@ import org.springframework.test.web.servlet.MockMvc;
 
 @SpringBootTest(
     properties = {"spring.docker.compose.enabled=false", "afterbooth.reservation-sweep-ms=3600000"})
-@org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
-@Import({TestcontainersConfiguration.class, ReservationIntegrationTest.TimeConfiguration.class})
+@org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc(
+    print = org.springframework.boot.webmvc.test.autoconfigure.MockMvcPrint.NONE)
+@Import({
+  com.afterbooth.AuthenticatedMockMvcConfiguration.class,
+  TestcontainersConfiguration.class,
+  ReservationIntegrationTest.TimeConfiguration.class
+})
 class HandoverResolveValidationTest {
   @Autowired MockMvc mvc;
   @Autowired JdbcTemplate jdbc;

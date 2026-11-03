@@ -29,8 +29,12 @@ import org.springframework.test.web.servlet.MockMvc;
       "afterbooth.allocation.max-turns=3",
       "afterbooth.allocation.timeout=PT2S"
     })
-@AutoConfigureMockMvc
-@Import({TestcontainersConfiguration.class, AllocationIntegrationTest.Config.class})
+@AutoConfigureMockMvc(print = org.springframework.boot.webmvc.test.autoconfigure.MockMvcPrint.NONE)
+@Import({
+  com.afterbooth.AuthenticatedMockMvcConfiguration.class,
+  TestcontainersConfiguration.class,
+  AllocationIntegrationTest.Config.class
+})
 class AllocationIntegrationTest {
   private static final Instant NOW = Instant.parse("2026-11-01T00:00:00Z");
   @Autowired AllocationService allocations;

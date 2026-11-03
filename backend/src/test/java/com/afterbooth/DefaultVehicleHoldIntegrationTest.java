@@ -27,8 +27,9 @@ import org.springframework.test.web.servlet.MockMvc;
 
 @SpringBootTest(
     properties = {"spring.docker.compose.enabled=false", "afterbooth.reservation-sweep-ms=3600000"})
-@AutoConfigureMockMvc
+@AutoConfigureMockMvc(print = org.springframework.boot.webmvc.test.autoconfigure.MockMvcPrint.NONE)
 @Import({
+  com.afterbooth.AuthenticatedMockMvcConfiguration.class,
   TestcontainersConfiguration.class,
   DefaultVehicleHoldIntegrationTest.TimeConfiguration.class
 })

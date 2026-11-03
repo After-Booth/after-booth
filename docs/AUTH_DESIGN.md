@@ -7,8 +7,8 @@ This document defines the target authentication design and the current #65/#66 i
 - D-069 records the historical #63 design-only schedule. The user explicitly authorizes #65 implementation now (D-076), preserving the existing demo and recorded fixtures. Historical verification records below remain evidence for #63 only.
 - The flow is email/password registration → signup email verification → login. Email-based login is not introduced. Password reset emails serve a separate purpose.
 - The user selected “delete, 30 days, 30 days”: allow registration with the same email after 30 days, use email verification for signup, and use the Resend API for delivery. Earlier explanations of terms and a lack of response were not approval; the one-year and permanent-retention recommendations were not adopted (D-070).
-- Historical #63 authorization covered design verification and one combined local commit including password change; its migration restriction applied only to that task. Current #65 permits implementation, disposable-test migration and local commits, excluding remote writes and actual mail.
-- OpenAPI 0.3.0 is the target contract. #65 covers signup/common foundations only; login, sessions, existing-domain member authorization and screens remain later work. Successful client generation alone is not runtime evidence.
+- Historical #63 authorization covered design verification and one combined local commit including password change; its migration restriction applied only to that task. Current #65 permits implementation, disposable-test migration and local commits, excluding remote writes and actual mail. Current #66 authorization covers login/session implementation, disposable-test verification, independent review and local commits (D-079).
+- OpenAPI 0.3.0 is the target contract. #65 covers signup/common foundations only. #66 implements login and sessions plus common authentication on existing domain endpoints; object authorization and screens remain later work. Successful client generation alone is not runtime evidence.
 
 ## Members and email
 
@@ -170,7 +170,7 @@ The latest issue split supersedes the original D-074 assignment; preserve that d
 | #66; after #65 | Login/JWT/refresh/reuse/logout, member locking, session cleanup and authenticated CSRF | Complete final signup → verification → login integration here |
 | Later domain/frontend work | Ownership/principal/final-write checks, authenticated idempotency and screens | Remain unimplemented under #65 |
 
-#65 transition boundary: explicitly preserve main's existing domain routes and regression behavior while protecting anonymous signup and CSRF endpoints. Deny unimplemented authentication routes. This incomplete rollout does not implement existing-domain member authorization and must not be represented as completed authentication. No global permitAll, wildcard Origin or security-disable switch. #66 extends this same chain before later domain authorization applies the target permission matrix.
+#65 transition boundary: explicitly preserve main's existing domain routes and regression behavior while protecting anonymous signup and CSRF endpoints. Deny unimplemented authentication routes. This historical #65 boundary did not implement existing-domain member authorization. #66 replaces anonymous access on implemented domain APIs with common Bearer authentication through this same chain. Object ownership, roles, list filtering, final domain-write checks and actor-bound domain idempotency remain #67. No global permitAll, wildcard Origin or security-disable switch. Unimplemented future operations remain denied.
 
 Request counters commit independently of rejected business mutations. PostgreSQL atomic increments and still-valid previous HMAC versions preserve live-window quotas across instances and rotation. Write each request to every valid key alias under sorted advisory locks and enforce the maximum alias count, so old-current and new-current instances share quotas in either traffic direction. Store issuance intervals under the same aliases. Retain the old key throughout the rolling overlap and until old instances are drained and their latest live hourly/60-second windows expire; all concurrently serving versions must share a valid overlap key. Recheck expiry using database time after lock acquisition. Registration/confirmation never inherit the issuance-only 60-second interval. Cleanup runs every minute; expired records are unusable immediately and CSRF/rate/challenge physical deletion completes within one hour after expiry. Pending members expire after 24 hours; preserve referenced organizations/domain data.
 
@@ -300,3 +300,23 @@ All rows below refer to current local execution with synthetic data. Actual emai
 | Local flow and reporting | LocalFakeSignupHttpsTest boots actual local/Fake configuration, captures the real adapter code, calls protected HTTPS APIs, proves ACTIVE/final hash, rejects reuse and verifies generic DB-failure rollback; no UI or login implementation |
 
 The corrected related run passed 60 tests; the broader run and correction together cover 195 distinct backend tests with all three initial fixture failures corrected. Frontend checks passed 118 tests. Generated Fake-code lines in XML/Gradle test output: zero. Full backend suite was not run. See TASKS for executed checks and unavailable review tooling.
+
+## #66 local session configuration and integration boundary
+
+The existing #65 Origin/HMAC and explicit local Fake settings still apply. Supply JWT configuration externally; no key files or private settings are committed or inspected by agents.
+
+| Setting | Required format |
+|---|---|
+| `afterbooth.auth.jwt.issuer` | Fixed nonblank issuer used for issuance and validation |
+| `afterbooth.auth.jwt.audience` | Fixed nonblank audience used for issuance and validation |
+| `afterbooth.auth.jwt.current-kid` | Current signing-key identifier present in the allowed public-key map |
+| `afterbooth.auth.jwt.private-key` | Externally supplied standard Base64 PKCS8 DER RSA private key, at least 2048 bits |
+| `afterbooth.auth.jwt.public-keys.<kid>` | Standard Base64 X509 DER RSA public keys; include current and still-valid previous signing keys during rotation overlap |
+
+Missing or malformed configuration closes authentication with `503 AUTH_UNAVAILABLE`; it never creates temporary signing keys or selects an external key URL. Retain an old public key for the maximum remaining Access JWT lifetime while switching signing keys. HMAC overlap separately preserves still-live request/failure windows across serving instances.
+
+Login and refresh return exactly the contracted AccessTokenResponse. Their refresh and member-linked CSRF cookies are separate secure Set-Cookie headers. Fetch getCsrfToken again with the replacement CSRF cookie before the next authentication POST; it issues a usable synchronizer token while retaining a still-valid ACTIVE member association. The reissue uses the member-row lock and rechecks persisted CSRF state so logout-all cannot resurrect invalidated member-linked state. Client JWT storage and request serialization remain #70.
+
+The common member-row locking service is reusable by #67 final write checks, #68 credential changes and #69 withdrawal. Acquire member rows in ascending ID order before session-family locks or domain locks. Login checks the original password under the final member lock; refresh and logout re-read family/token state after locking. Expired families retain used-token evidence until expiry and are removed by the existing cleanup scheduler. Domain object permissions, actor-bound domain idempotency and withdrawal retention remain follow-up work; common Bearer authentication alone does not complete those protections.
+
+Current execution and review evidence is recorded in TASKS. No real mailbox receipt, frontend UI, password-change/reset, withdrawal or deployment is certified by this local session work.
