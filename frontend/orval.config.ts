@@ -11,7 +11,16 @@ export default defineConfig({
       client: 'fetch',
       // makes the required Idempotency-Key header a typed argument, so a forgotten key fails at compile time
       headers: true,
-      override: { mutator: { path: 'src/api/http.ts', name: 'http' } },
+      override: {
+        mutator: { path: 'src/api/http.ts', name: 'http' },
+        // These reads use http's thrown errors; other operations retain explicit status narrowing.
+        operations: {
+          listOrganizations: { fetch: { forceSuccessResponse: true } },
+          listEvents: { fetch: { forceSuccessResponse: true } },
+          listItems: { fetch: { forceSuccessResponse: true } },
+          listReservations: { fetch: { forceSuccessResponse: true } },
+        },
+      },
       mock: true,
       clean: true,
     },

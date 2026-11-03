@@ -167,7 +167,7 @@ Do not write:
 
 ## What not to write
 
-- Code for features not in `docs/SPEC.md`: no auth, maps, notifications or payments.
+- Do not implement features outside `docs/SPEC.md`. Maps, general notifications and payments remain out of scope. Implement member authentication and signup/password-reset email after submission under SPEC §Member authentication rollout scope (#63); #63 itself is limited to documentation and contract design.
 - Unused parameters, unused config, "just in case" utilities.
 - Generic base classes (`BaseService<T>`) or deep inheritance. Prefer composition.
 - Defensive null checks for values that validation already guarantees.
@@ -179,3 +179,7 @@ Do not write:
 - Controllers: `@WebMvcTest` for validation and error mapping.
 - Test names say the behavior in English: `holdFailsWhenQuantityIsNotAvailable`, `'shows counts per category after upload'`.
 - Tests never call the Meta API. `AI_MODE=replay` with fixtures.
+
+## Issue #63 documentation and contract scope
+
+The user's latest instruction requires the documentation and comments written for #63 to be in English, superseding the earlier request for Korean operating documents. Preserve OpenAPI identifiers, code conventions and Korean product UI/error messages. This task covers local changes and verification; the user subsequently authorized local commits after a sensitive-data check. Pushes, pull requests and issue closure remain out of scope. For #63 only, the user explicitly requested one combined local commit after canceling the earlier two commits and adding the omitted password-change specification. This overrides the contract-only split rule for this task; retain Conventional Commit formatting.

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: AfterBooth API
-  version: 0.2.0
+  version: 0.3.0
   description: |
     API contract of record. The frontend generates its client and MSW mocks from this file (frontend `npm run gen:api`).
     Contract changes go in a separate commit that touches only contract/, recorded in docs/DECISIONS.md.
@@ -20,7 +20,18 @@ info:
     - Errors use the `Error` schema. `message` is Korean and safe to show to users. Any operation may also return
       500 `INTERNAL_ERROR`, and 405/415 `UNSUPPORTED_REQUEST` for a wrong method or content type (for example an
       audio format Voice Transcribe does not accept).
-    - There is no sign-in. Screens pick the organization from `listOrganizations`.
+    - Version 0.3.0 is the target authentication contract for a single rollout after hackathon submission; distinguish it from the current runtime implementation.
+      Do not provide a configuration switch that disables authentication. Every API requires an ACTIVE member except getHealth and explicitly public authentication operations.
+    - Authentication APIs, withdrawMember, and changePassword are exempt from Idempotency-Key. Never store requests or responses containing tokens, verification codes, or passwords in idempotency_record. Existing rules apply to other domain writes.
+    - Before replaying a domain idempotency response, authenticate the member and check current authorization on the original resource. Scope keys by the server-derived member ID and record related_organization_ids for all givers and receivers represented in the response. Do not replay withdrawn or deleted responses.
+    - On every JWT check, query DB member state, authVersion, unrevoked and unexpired sid, and organization membership. Fail closed with 503 AUTH_UNAVAILABLE on lookup failures. Withdrawal, logout-all, password reset, and password change immediately invalidate existing JWTs.
+    - Determine organization ownership from organization.primary_member_id. Registration creates a private organization; joining existing shared or seeded organizations is unsupported. Unclaimed organizations and their data remain inaccessible until an explicit reviewed ownership assignment. Request organizationId or role is not proof of authorization.
+    - Object-authorization failures return 404 NOT_FOUND without revealing existence. Lists return authorized rows only. Shared 401/403 responses also apply to domain APIs.
+    - Clean up unverified registrations and their private organizations after 24 hours. New ACTIVE members can create their own events with createEvent.
+    - Authentication responses use Cache-Control: no-store. Do not log authentication or mail-provider request bodies or Cookie/Authorization headers in logs, traces, or errors.
+    - Cookie-based authentication POSTs, registration/login/verification/reset POSTs, membership withdrawal DELETE, and changePassword POST require both the exact allowed Origin and X-CSRF-Token. Missing Origin also returns CSRF_REJECTED. Use a synchronizer token bound to a server-issued CSRF session; SameSite alone is insufficient.
+      Use HTTPS for deployment and authentication integration tests. Bearer-authenticated domain writes do not authenticate through cookies and do not require a CSRF header. CORS permits only the exact frontend Origin with credentials; wildcards are forbidden.
+    - Withdrawal immediately removes personal information and revokes all sessions. Retain only minimal transaction history and a keyed normalized-email HMAC for 30 days from withdrawal. Delete the block information after 30 days and allow registration with the same email. Manage the HMAC key outside the DB.
     - Photo counting (intake and handover): Muse Spark finds and counts items and returns a box per item; SAM 3.1
       then segments each box (box prompts). "SAM segmented an item" means SAM returned a mask for its box with a
       score at or above the configured `afterbooth.ai.sam.min-score`. A completed SAM call may segment none of the
@@ -30,7 +41,13 @@ info:
       call is validated by the same rules as `holdItem`.
 servers:
   - url: /
+security:
+  - bearerAuth: []
 tags:
+  - name: auth
+    description: Registration email verification, login, sessions, and password reset
+  - name: members
+    description: Current member information, password change, and membership withdrawal
   - name: system
   - name: catalog
     description: Seeded organizations and events
@@ -44,12 +61,592 @@ tags:
   - name: reservations
   - name: handover
   - name: stats
-
 paths:
+  /api/auth/csrf:
+    get:
+      operationId: getCsrfToken
+      tags:
+        - auth
+      summary: Issue a CSRF session and token
+      description: >-
+        Public endpoint. Return a random 256-bit token in the response body and bind it to a server session. Keep
+        it in frontend memory and send it as X-CSRF-Token on every authentication POST member withdrawal DELETE,
+        and changePassword POST. Login rotates the session and token; fetch a new token after login.
+      security: []
+      responses:
+        '503':
+          $ref: '#/components/responses/AuthUnavailable'
+        '200':
+          description: Request completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CsrfTokenResponse'
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+              description: Do not store authentication responses
+            Set-Cookie:
+              description: >-
+                __Host-afterbooth-csrf-session; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=3600. No Domain
+                attribute. Absolute server-session lifetime is 1 hour. An opaque identifier independent of the authentication
+                cookie.
+              schema:
+                type: string
+  /api/auth/registrations:
+    post:
+      operationId: registerMember
+      tags:
+        - auth
+      summary: Register with email and password
+      description: >-
+        Email verification is used only for registration. Create a PENDING_VERIFICATION member and a private organization
+        with a fixed generic name; never copy the email into its name. Do not issue JWTs before verification. Duplicate
+        accounts, the 30-day re-registration block, and existing pending accounts receive the same generic 202 without
+        a member ID or challengeId. Do not overwrite an existing password. Apply identical limits to real and dummy
+        accounts: 5 requests per email per hour and 20 per IP per hour. Email limits retain the same 202; only IP
+        limits return 429. Call requestEmailVerification separately to send the code. Authentication APIs do not
+        use Idempotency-Key.
+      security: []
+      responses:
+        '503':
+          $ref: '#/components/responses/AuthUnavailable'
+        '202':
+          description: Request completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthAccepted'
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+              description: Do not store authentication responses
+        '400':
+          $ref: '#/components/responses/AuthBadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterMemberRequest'
+  /api/auth/email-verifications/request:
+    post:
+      operationId: requestEmailVerification
+      tags:
+        - auth
+      summary: Request a registration verification code
+      description: >-
+        Call the Resend API on the server. Per email and purpose: a 60-second issuance interval and 5 requests per
+        hour; per IP: 20 per hour. Return the same 202 and an equivalent random challengeId regardless of account
+        existence, state, or email limit. Missing or already verified accounts and exceeded email limits receive
+        a dummy challengeId without sending mail. Only IP limits return 429. Six-digit codes expire after 10 minutes
+        and allow at most 5 verification attempts. A new request invalidates the previous code for the same purpose.
+        Never log mail bodies, codes, or recipients.
+      security: []
+      responses:
+        '503':
+          $ref: '#/components/responses/AuthUnavailable'
+        '202':
+          description: Request completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChallengeIssued'
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+              description: Do not store authentication responses
+        '400':
+          $ref: '#/components/responses/AuthBadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmailChallengeRequest'
+  /api/auth/email-verifications/confirm:
+    post:
+      operationId: verifyEmail
+      tags:
+        - auth
+      summary: Complete registration email verification
+      description: >-
+        Validate challengeId, normalized email, purpose, and code together. Expired, incorrect, consumed, dummy,
+        and over-attempt challenges return the same 400 INVALID_AUTH_CHALLENGE. On success, atomically consume the
+        code and, only for a PENDING_VERIFICATION member, hash and set this request's password before changing the
+        state to ACTIVE. Do not retain a password previously set by an attacker for a pending account. This API
+        never changes an ACTIVE member's password. Keep the password entered at registration only in the in-memory
+        form until verification; never log, cache, or persist it in browser storage. Return 204 without automatic
+        login. Apply 5 attempts per challenge and a shared IP limit of 20 per hour. Confirmation requests do not
+        use the 60-second issuance interval.
+      security: []
+      responses:
+        '503':
+          $ref: '#/components/responses/AuthUnavailable'
+        '204':
+          description: Request completed
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+              description: Do not store authentication responses
+        '400':
+          $ref: '#/components/responses/AuthBadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyEmailRequest'
+  /api/auth/login:
+    post:
+      operationId: loginMember
+      tags:
+        - auth
+      summary: Log in with email and password
+      description: >-
+        Return 403 EMAIL_NOT_VERIFIED only for a PENDING_VERIFICATION member after verifying the correct password.
+        Missing accounts, incorrect passwords, and WITHDRAWN accounts receive the same 401 UNAUTHENTICATED. Only
+        ACTIVE members receive an access JWT and a new opaque refresh-token session. JWT lifetime is 10 minutes;
+        store it only in frontend memory, never localStorage or sessionStorage. Refresh tokens use at least 256
+        CSPRNG bits; store only their hashes in refresh_token. refresh_session is a stable family row whose ID is
+        the JWT sid. Rotation creates a new token row under the same session and records used_at on the previous
+        token. Absolute family lifetime is 7 days. Login limits are 20 per IP per hour and a temporary restriction
+        after 5 failures per email in 15 minutes; no permanent lockout. Login also rotates the CSRF session and
+        sets __Host-afterbooth-csrf-session in a separate Set-Cookie header with the same attributes as getCsrfToken.
+      security: []
+      responses:
+        '503':
+          $ref: '#/components/responses/AuthUnavailable'
+        '200':
+          description: Request completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessTokenResponse'
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+              description: Do not store authentication responses
+            Set-Cookie:
+              schema:
+                type: string
+              description: >-
+                __Host-afterbooth-refresh; HttpOnly; Secure; SameSite=Lax; Path=/. Max-Age is the remaining absolute
+                session-family lifetime in seconds, at most 604800. No Domain attribute. Set on issuance and rotation;
+                use Max-Age=0 on revocation. Never record cookie values in documentation or logs.
+        '400':
+          $ref: '#/components/responses/AuthBadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginMemberRequest'
+  /api/auth/refresh:
+    post:
+      operationId: refreshSession
+      tags:
+        - auth
+      summary: Rotate the refresh token and reissue an access JWT
+      description: >-
+        Require the refresh cookie. Atomically invalidate the previous token and issue a new token on each use.
+        Rotation does not extend the absolute expiry of 7 days from initial family issuance. Reuse of a consumed
+        token revokes the entire family. Check member state, authVersion, and family expiry; on failure return 401
+        and clear the cookie. Serialize refresh requests on the client. Require CSRF and Origin validation. An access
+        JWT alone cannot refresh a session.
+      security:
+        - refreshCookie: []
+      responses:
+        '503':
+          $ref: '#/components/responses/AuthUnavailable'
+        '200':
+          description: Request completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessTokenResponse'
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+              description: Do not store authentication responses
+            Set-Cookie:
+              schema:
+                type: string
+              description: >-
+                __Host-afterbooth-refresh; HttpOnly; Secure; SameSite=Lax; Path=/. Max-Age is the remaining absolute
+                session-family lifetime in seconds, at most 604800. No Domain attribute. Set on issuance and rotation;
+                use Max-Age=0 on revocation. Never record cookie values in documentation or logs.
+        '400':
+          $ref: '#/components/responses/AuthBadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+  /api/auth/logout:
+    post:
+      operationId: logoutSession
+      tags:
+        - auth
+      summary: Log out of the current session
+      description: >-
+        Revoke the current refresh-token family and clear the refresh cookie. Missing or expired cookies and repeated
+        calls return 204. Check session sid revocation on every request to reject the access JWT immediately. Always
+        validate CSRF and Origin. The frontend also clears its in-memory JWT.
+      security: []
+      responses:
+        '503':
+          $ref: '#/components/responses/AuthUnavailable'
+        '204':
+          description: Request completed
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+              description: Do not store authentication responses
+            Set-Cookie:
+              schema:
+                type: string
+              description: >-
+                __Host-afterbooth-refresh; HttpOnly; Secure; SameSite=Lax; Path=/. Max-Age is the remaining absolute
+                session-family lifetime in seconds, at most 604800. No Domain attribute. Set on issuance and rotation;
+                use Max-Age=0 on revocation. Never record cookie values in documentation or logs.
+        '400':
+          $ref: '#/components/responses/AuthBadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+  /api/auth/logout-all:
+    post:
+      operationId: logoutAllSessions
+      tags:
+        - auth
+      summary: Log out of all sessions
+      description: >-
+        Revoke every refresh-token family for the ACTIVE member and increment authVersion to reject all existing
+        JWTs immediately. Clear the current refresh cookie. A repeated call without a valid JWT returns 401; do
+        not replay credential responses.
+      security:
+        - bearerAuth: []
+      responses:
+        '503':
+          $ref: '#/components/responses/AuthUnavailable'
+        '204':
+          description: Request completed
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+              description: Do not store authentication responses
+            Set-Cookie:
+              schema:
+                type: string
+              description: >-
+                __Host-afterbooth-refresh; HttpOnly; Secure; SameSite=Lax; Path=/. Max-Age is the remaining absolute
+                session-family lifetime in seconds, at most 604800. No Domain attribute. Set on issuance and rotation;
+                use Max-Age=0 on revocation. Never record cookie values in documentation or logs.
+        '400':
+          $ref: '#/components/responses/AuthBadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+  /api/auth/password-resets/request:
+    post:
+      operationId: requestPasswordReset
+      tags:
+        - auth
+      summary: Request a password reset code
+      description: >-
+        Use the PASSWORD_RESET purpose, separate from registration verification. Send through Resend only for ACTIVE
+        accounts. Return the same 202 and equivalent random challengeId regardless of account existence, state,
+        or email limit. Per email and purpose: a 60-second interval and 5 requests per hour; per IP: 20 per hour,
+        with 429 only for IP limits. Six-digit codes expire in 10 minutes and allow 5 attempts. New issuance invalidates
+        the previous code for the same purpose.
+      security: []
+      responses:
+        '503':
+          $ref: '#/components/responses/AuthUnavailable'
+        '202':
+          description: Request completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChallengeIssued'
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+              description: Do not store authentication responses
+        '400':
+          $ref: '#/components/responses/AuthBadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmailChallengeRequest'
+  /api/auth/password-resets/confirm:
+    post:
+      operationId: resetPassword
+      tags:
+        - auth
+      summary: Complete password reset
+      description: >-
+        Validate and atomically consume challengeId, email, PASSWORD_RESET purpose, and code. Return the same 400
+        INVALID_AUTH_CHALLENGE on failure. On success, replace the password hash, increment authVersion, and revoke
+        all refresh tokens to reject existing JWTs immediately. Return 204 without automatic login. Apply 5 attempts
+        per challenge and a shared IP limit of 20 per hour. Confirmation does not use the 60-second issuance interval.
+        Acquire the same member-row lock used by changePassword and recheck the ACTIVE member and challenge after
+        locking. In the password-update transaction, invalidate every outstanding PASSWORD_RESET challenge and all
+        member-linked CSRF sessions so older codes cannot restore an earlier password after a later change. Expire
+        both the refresh and CSRF-session cookies using separate Set-Cookie headers. The client clears authenticated
+        caches and its token and must log in again.
+      security: []
+      responses:
+        '503':
+          $ref: '#/components/responses/AuthUnavailable'
+        '204':
+          description: Request completed
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+              description: Do not store authentication responses
+            Set-Cookie:
+              schema:
+                type: string
+              description: |-
+                Send two separate Set-Cookie headers; never combine them into one comma-separated header:
+                __Host-afterbooth-refresh=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0
+                __Host-afterbooth-csrf-session=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0
+                Both omit Domain. Clear both cookies with the same names, paths, and security attributes used for issuance. Never log cookie values.
+        '400':
+          $ref: '#/components/responses/AuthBadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetPasswordRequest'
+  /api/members/me:
+    get:
+      operationId: getCurrentMember
+      tags:
+        - members
+      summary: Get the current member
+      description: >-
+        Return only the ACTIVE member's own information. Withdrawn members receive 401 without email or withdrawal
+        time.
+      security:
+        - bearerAuth: []
+      responses:
+        '503':
+          $ref: '#/components/responses/AuthUnavailable'
+        '200':
+          description: Request completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemberView'
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+              description: Do not store authentication responses
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+    delete:
+      operationId: withdrawMember
+      tags:
+        - members
+      summary: Withdraw membership
+      description: >-
+        Require password confirmation. Return 409 WITHDRAWAL_BLOCKED for a HELD or CONFIRMED reservation involving
+        the member as giver or receiver, or a MISMATCH handover attached to a currently CONFIRMED reservation. HELD
+        blocks withdrawal even after its TTL until an actual EXPIRED transition. Check and withdraw atomically against
+        new transactions. HANDED_OVER, RELEASED, and EXPIRED reservations, COMPLETED handovers, and historical MISMATCH
+        records on terminal reservations do not block withdrawal. On success, set WITHDRAWN, immediately delete
+        personal fields, revoke all refresh tokens, increment authVersion, and clear the refresh cookie. Retain
+        only minimal transaction history and the normalized-email HMAC for 30 days from withdrawal, then delete
+        them. Reject registration with the same email for 30 days and allow it afterward. Repeated calls return
+        401 because the previous JWT is immediately invalid.
+      security:
+        - bearerAuth: []
+      responses:
+        '503':
+          $ref: '#/components/responses/AuthUnavailable'
+        '204':
+          description: Request completed
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+              description: Do not store authentication responses
+            Set-Cookie:
+              schema:
+                type: string
+              description: >-
+                __Host-afterbooth-refresh; HttpOnly; Secure; SameSite=Lax; Path=/. Max-Age is the remaining absolute
+                session-family lifetime in seconds, at most 604800. No Domain attribute. Set on issuance and rotation;
+                use Max-Age=0 on revocation. Never record cookie values in documentation or logs.
+        '400':
+          $ref: '#/components/responses/AuthBadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '409':
+          $ref: '#/components/responses/WithdrawalBlocked'
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WithdrawMemberRequest'
+  /api/members/me/password:
+    post:
+      operationId: changePassword
+      tags:
+        - members
+      summary: Change the current password
+      description: |-
+        Only the current ACTIVE member may change their own password. Require Bearer authentication, X-CSRF-Token, and an exact allowed Origin; reject a missing Origin with 403 CSRF_REJECTED. No email confirmation, verification code, or email delivery is involved.
+        Acquire the member-row lock for the final mutation and recheck ACTIVE state, authVersion, and the submitted current credential. A wrong currentPassword returns 403 INVALID_CURRENT_PASSWORD. Apply a 15-minute block after 5 failed current-password checks per member within 15 minutes, and 20 requests per IP per hour; rate limits return 429 RATE_LIMITED with Retry-After.
+        In the same transaction, store the newPassword hash prepared with the shared Argon2id policy, replace password_hash, increment auth_version, revoke ALL refresh-token families and therefore every existing JWT including the caller, invalidate every outstanding PASSWORD_RESET challenge, and invalidate all member-linked CSRF sessions. Serialize with password reset under the same member-row lock so an old code cannot undo a newer password change.
+        Return 204 with no automatic login. Expire the refresh and CSRF-session cookies using separate Set-Cookie headers. The client clears its access token and authenticated caches and requires login again. Do not require Idempotency-Key, store credential requests or responses in idempotency_record, or replay a credential response. A repeated request with the old JWT returns 401.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+      responses:
+        '204':
+          description: Password changed; all sessions require authentication again
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+              description: Do not store authentication responses
+            Set-Cookie:
+              schema:
+                type: string
+              description: |-
+                Send two separate Set-Cookie headers; never combine them into one comma-separated header:
+                __Host-afterbooth-refresh=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0
+                __Host-afterbooth-csrf-session=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0
+                Both omit Domain. Clear both cookies with the same names, paths, and security attributes used for issuance. Never log cookie values.
+        '400':
+          $ref: '#/components/responses/AuthBadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          description: >-
+            Wrong current password returns INVALID_CURRENT_PASSWORD. Invalid or missing CSRF token or exact Origin: CSRF_REJECTED.
+            Other access denial: FORBIDDEN.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/AuthUnavailable'
   /api/health:
     get:
       operationId: getHealth
-      tags: [system]
+      security: []
+      tags:
+        - system
       summary: Server status
       responses:
         '200':
@@ -58,13 +655,22 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Health'
-
   /api/organizations:
     get:
       operationId: listOrganizations
-      tags: [catalog]
+      tags:
+        - catalog
       summary: Seeded organizations (givers and receivers)
+      description: Return only organizations owned by the current member. Exclude unclaimed seeded or shared organizations.
       responses:
+        '503':
+          $ref: '#/components/responses/AuthUnavailable'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '200':
           description: OK
           content:
@@ -73,13 +679,57 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Organization'
-
   /api/events:
+    post:
+      operationId: createEvent
+      tags:
+        - catalog
+      summary: Create an event for the current organization
+      description: >-
+        Create the event only in the organization derived from the ACTIVE member principal. Do not accept organizationId
+        in the request. teardownDeadline must be after the server time. New members can start event and inventory
+        registration without ownership assignment of seeded organizations. Apply existing domain Idempotency-Key
+        rules and authenticate and authorize resources before replay.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateEventRequest'
+      responses:
+        '201':
+          description: Event created for the current organization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Event'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/AuthUnavailable'
     get:
       operationId: listEvents
-      tags: [catalog]
+      tags:
+        - catalog
       summary: Seeded events with their teardown deadlines
+      description: Return only events belonging to the current member's organization.
       responses:
+        '503':
+          $ref: '#/components/responses/AuthUnavailable'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '200':
           description: OK
           content:
@@ -88,15 +738,22 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Event'
-
   /api/events/{eventId}:
     parameters:
       - $ref: '#/components/parameters/EventId'
     get:
       operationId: getEvent
-      tags: [catalog]
+      tags:
+        - catalog
       summary: One event
+      description: Only the event giver organization's owner may read it. Return 404 for other or unclaimed events.
       responses:
+        '503':
+          $ref: '#/components/responses/AuthUnavailable'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '200':
           description: OK
           content:
@@ -105,11 +762,11 @@ paths:
                 $ref: '#/components/schemas/Event'
         '404':
           $ref: '#/components/responses/NotFound'
-
   /api/intake/drafts:
     post:
       operationId: createIntakeDraft
-      tags: [intake]
+      tags:
+        - intake
       summary: Upload a booth photo and start the counting pipeline
       description: |
         Returns immediately with status PROCESSING. Poll `getIntakeDraft` (about once a second) until READY or FAILED.
@@ -117,6 +774,7 @@ paths:
         confidence) → SEGMENT (SAM 3.1 segments each item from Spark's boxes). A Spark failure makes the draft FAILED
         at stage ESTIMATE. A SAM failure does not: the draft becomes READY with Spark's boxes and every line has
         `needsReview` true. On FAILED, upload again with a new Idempotency-Key.
+        Access: Accept only eventId belonging to the current member's organization; otherwise return 404.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -125,7 +783,9 @@ paths:
           multipart/form-data:
             schema:
               type: object
-              required: [eventId, photo]
+              required:
+                - eventId
+                - photo
               properties:
                 eventId:
                   type: integer
@@ -135,6 +795,12 @@ paths:
                   format: binary
                   description: JPEG or PNG, up to 10 MB
       responses:
+        '503':
+          $ref: '#/components/responses/AuthUnavailable'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '202':
           description: Accepted, processing
           content:
@@ -147,15 +813,22 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
-
   /api/intake/drafts/{draftId}:
     parameters:
       - $ref: '#/components/parameters/DraftId'
     get:
       operationId: getIntakeDraft
-      tags: [intake]
+      tags:
+        - intake
       summary: Draft with its current pipeline status
+      description: Only the owner of the draft event's giver organization may read it.
       responses:
+        '503':
+          $ref: '#/components/responses/AuthUnavailable'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '200':
           description: OK
           content:
@@ -164,13 +837,13 @@ paths:
                 $ref: '#/components/schemas/IntakeDraft'
         '404':
           $ref: '#/components/responses/NotFound'
-
   /api/intake/drafts/{draftId}/confirm:
     parameters:
       - $ref: '#/components/parameters/DraftId'
     post:
       operationId: confirmIntakeDraft
-      tags: [intake]
+      tags:
+        - intake
       summary: Confirm the human-reviewed draft into inventory items
       description: |
         The person may edit category, quantity, size and condition, or drop lines. Only lines sent here become items.
@@ -178,6 +851,7 @@ paths:
         `Item.label` is derived from the confirmed category (see `ItemCategory`), not copied from the draft line.
         On success the draft becomes CONFIRMED. A draft can be confirmed once (DRAFT_ALREADY_CONFIRMED). A draft that
         is not READY fails with DRAFT_NOT_READY.
+        Access: Only the owner of the draft event's giver organization may confirm it.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -187,6 +861,12 @@ paths:
             schema:
               $ref: '#/components/schemas/ConfirmIntakeRequest'
       responses:
+        '503':
+          $ref: '#/components/responses/AuthUnavailable'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '201':
           description: Items created
           content:
@@ -201,23 +881,25 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
-
   /api/conditions/interpret:
     post:
       operationId: interpretConditions
-      tags: [conditions]
+      tags:
+        - conditions
       summary: Turn spoken or typed conditions into structured fields
       description: |
         Send exactly one of `audio` or `text`. Audio goes through Voice Transcribe first.
         Muse Spark maps the transcript to `Conditions`. Nothing is saved; the person reviews the result,
         then uses it in `confirmIntakeDraft` (GIVER) or `createPickupRequest` (RECEIVER).
+        Access: GIVER requires an event owned by the member. RECEIVER is available to ACTIVE members. Do not expose raw transcripts to others.
       requestBody:
         required: true
         content:
           multipart/form-data:
             schema:
               type: object
-              required: [context]
+              required:
+                - context
               properties:
                 context:
                   $ref: '#/components/schemas/ConditionContext'
@@ -240,6 +922,12 @@ paths:
               audio:
                 contentType: audio/wav
       responses:
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '200':
           description: OK
           content:
@@ -250,12 +938,16 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '503':
           $ref: '#/components/responses/AiUnavailable'
-
   /api/items:
     get:
       operationId: listItems
-      tags: [inventory]
+      tags:
+        - inventory
       summary: Inventory items, optionally for one event
+      description: >-
+        Expose only tradable items whose giver organization has an ACTIVE owner; exclude unclaimed or withdrawn
+        givers. Provide only public business fields to ACTIVE members. Include raw conditionsTranscript only for
+        the giver organization's owner.
       parameters:
         - name: eventId
           in: query
@@ -269,6 +961,14 @@ paths:
             type: boolean
             default: false
       responses:
+        '503':
+          $ref: '#/components/responses/AuthUnavailable'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '200':
           description: OK
           content:
@@ -277,15 +977,25 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Item'
-
   /api/items/{itemId}:
     parameters:
       - $ref: '#/components/parameters/ItemId'
     get:
       operationId: getItem
-      tags: [inventory]
+      tags:
+        - inventory
       summary: One item with live quantities
+      description: >-
+        Expose only tradable items whose giver organization has an ACTIVE owner; exclude unclaimed or withdrawn
+        givers. Provide only public business fields to ACTIVE members. Include raw conditionsTranscript only for
+        the giver organization's owner.
       responses:
+        '503':
+          $ref: '#/components/responses/AuthUnavailable'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '200':
           description: OK
           content:
@@ -294,13 +1004,15 @@ paths:
                 $ref: '#/components/schemas/Item'
         '404':
           $ref: '#/components/responses/NotFound'
-
   /api/pickup-requests:
     post:
       operationId: createPickupRequest
-      tags: [requests]
+      tags:
+        - requests
       summary: Save a receiver's pickup request
-      description: The receiver picks their organization from `listOrganizations` (there is no sign-in); speech never sets it.
+      description: |
+        The receiver may specify only their own organization. The server verifies ownership of organizationId; speech never sets it.
+        Access: The requested organizationId must be owned by the member; otherwise return 404.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -310,6 +1022,14 @@ paths:
             schema:
               $ref: '#/components/schemas/CreatePickupRequest'
       responses:
+        '503':
+          $ref: '#/components/responses/AuthUnavailable'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '201':
           description: Created
           content:
@@ -320,15 +1040,22 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '409':
           $ref: '#/components/responses/Conflict'
-
   /api/pickup-requests/{requestId}:
     parameters:
       - $ref: '#/components/parameters/RequestId'
     get:
       operationId: getPickupRequest
-      tags: [requests]
+      tags:
+        - requests
       summary: One pickup request
+      description: Only the receiver request organization's owner may read it.
       responses:
+        '503':
+          $ref: '#/components/responses/AuthUnavailable'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '200':
           description: OK
           content:
@@ -337,13 +1064,13 @@ paths:
                 $ref: '#/components/schemas/PickupRequest'
         '404':
           $ref: '#/components/responses/NotFound'
-
   /api/pickup-requests/{requestId}/allocation:
     parameters:
       - $ref: '#/components/parameters/RequestId'
     post:
       operationId: runAllocationAgent
-      tags: [requests]
+      tags:
+        - requests
       summary: Run the allocation agent for a request
       description: |
         Muse Spark calls the server tools `searchCandidates`, `checkVehicleFit` and `holdQuantity`.
@@ -367,9 +1094,14 @@ paths:
 
         Allocation runs are not stored. A same-key retry replays the stored response from the idempotency record;
         after a page reload, holds come from `listReservations?requestId=`.
+        Access: Only the receiver request organization's owner may execute this operation. Recheck the giver member's ACTIVE state and organization ownership immediately before a new HOLD. Agent tools enforce the same ownership and state rules.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       responses:
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '200':
           description: Agent finished
           content:
@@ -384,12 +1116,15 @@ paths:
           $ref: '#/components/responses/Conflict'
         '503':
           $ref: '#/components/responses/AiUnavailable'
-
   /api/reservations:
     get:
       operationId: listReservations
-      tags: [reservations]
+      tags:
+        - reservations
       summary: Reservations, filtered by request and/or event (filters combine with AND; no transition history)
+      description: >-
+        Return only reservations where the member's organization is the giver or receiver. Filters cannot expand
+        access to others' transactions.
       parameters:
         - name: requestId
           in: query
@@ -402,6 +1137,14 @@ paths:
             type: integer
             format: int64
       responses:
+        '503':
+          $ref: '#/components/responses/AuthUnavailable'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '200':
           description: OK
           content:
@@ -412,12 +1155,14 @@ paths:
                   $ref: '#/components/schemas/Reservation'
     post:
       operationId: holdItem
-      tags: [reservations]
+      tags:
+        - reservations
       summary: Hold a specific item, e.g. an alternative the agent offered
       description: |
         Applies the hold rules in `HoldItemRequest`. Unlike the agent, any category may be held here, because
         alternatives can be a different category. Fails with QTY_UNAVAILABLE, PICKUP_CLOSED, VEHICLE_TOO_SMALL
         or QTY_EXCEEDS_REQUEST.
+        Access: Only the receiver request organization's owner may execute this operation. Recheck the giver member's ACTIVE state and organization ownership immediately before a new HOLD.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -427,6 +1172,12 @@ paths:
             schema:
               $ref: '#/components/schemas/HoldItemRequest'
       responses:
+        '503':
+          $ref: '#/components/responses/AuthUnavailable'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '201':
           description: Held
           content:
@@ -439,15 +1190,23 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
-
   /api/reservations/{reservationId}:
     parameters:
       - $ref: '#/components/parameters/ReservationId'
     get:
       operationId: getReservation
-      tags: [reservations]
+      tags:
+        - reservations
       summary: One reservation with its transition history
+      description: Only the giver event organization's owner or the receiver request organization's owner may read
+        it.
       responses:
+        '503':
+          $ref: '#/components/responses/AuthUnavailable'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '200':
           description: OK
           content:
@@ -456,22 +1215,29 @@ paths:
                 $ref: '#/components/schemas/Reservation'
         '404':
           $ref: '#/components/responses/NotFound'
-
   /api/reservations/{reservationId}/confirm:
     parameters:
       - $ref: '#/components/parameters/ReservationId'
     post:
       operationId: confirmReservation
-      tags: [reservations]
+      tags:
+        - reservations
       summary: The receiver confirms a HELD reservation (HELD → CONFIRMED)
       description: |
         Succeeds only while the server clock is before `holdExpiresAt`. Confirm and expiry are both conditional state
         updates on the same row, so exactly one wins. If expiry wins (or the time has passed but the scheduler has
         not run yet), the reservation becomes EXPIRED, its quantity is restored once, and the call fails with
         409 HOLD_EXPIRED.
+        Access: Only the receiver request organization's owner may confirm it.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       responses:
+        '503':
+          $ref: '#/components/responses/AuthUnavailable'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '200':
           description: Confirmed
           content:
@@ -484,18 +1250,26 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
-
   /api/reservations/{reservationId}/cancel:
     parameters:
       - $ref: '#/components/parameters/ReservationId'
     post:
       operationId: cancelReservation
-      tags: [reservations]
+      tags:
+        - reservations
       summary: Cancel a HELD or CONFIRMED reservation (→ RELEASED) and restore its quantity
-      description: Any other status fails with 409 INVALID_TRANSITION.
+      description: |
+        Any other status fails with 409 INVALID_TRANSITION.
+        Access: Only the receiver request organization's owner may cancel it.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       responses:
+        '503':
+          $ref: '#/components/responses/AuthUnavailable'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '200':
           description: Released
           content:
@@ -508,13 +1282,13 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
-
   /api/reservations/{reservationId}/handover:
     parameters:
       - $ref: '#/components/parameters/ReservationId'
     post:
       operationId: submitHandoverPhoto
-      tags: [handover]
+      tags:
+        - handover
       summary: Recount a CONFIRMED reservation from one pickup photo
       description: |
         Muse Spark counts the items of the reserved category in the photo, SAM 3.1 segments each counted item from
@@ -528,6 +1302,7 @@ paths:
           (a new call with a new Idempotency-Key; the newest log row supersedes older ones) or settles it with
           `resolveHandover`.
         Only CONFIRMED reservations (INVALID_TRANSITION otherwise) before their pickup deadline (PICKUP_CLOSED).
+        Access: Only the giver event organization's owner may execute this operation.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -536,12 +1311,17 @@ paths:
           multipart/form-data:
             schema:
               type: object
-              required: [photo]
+              required:
+                - photo
               properties:
                 photo:
                   type: string
                   format: binary
       responses:
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '200':
           description: Counted
           content:
@@ -556,13 +1336,13 @@ paths:
           $ref: '#/components/responses/Conflict'
         '503':
           $ref: '#/components/responses/AiUnavailable'
-
   /api/reservations/{reservationId}/handover/resolve:
     parameters:
       - $ref: '#/components/parameters/ReservationId'
     post:
       operationId: resolveHandover
-      tags: [handover]
+      tags:
+        - handover
       summary: A person settles a count mismatch and completes the handover
       description: |
         Only after a photo count: the reservation must be CONFIRMED and its newest `handover_log` row must be
@@ -577,6 +1357,7 @@ paths:
         with `handedOverQty` = `acceptedQty`, the unreceived remainder (quantity − acceptedQty) returns to the
         item's availableQty, and the reuse of `acceptedQty` is recorded. The result status is always COMPLETED.
         If nothing was received, use `cancelReservation` instead.
+        Access: Only the giver event organization's owner may execute this operation.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -586,6 +1367,12 @@ paths:
             schema:
               $ref: '#/components/schemas/ResolveHandoverRequest'
       responses:
+        '503':
+          $ref: '#/components/responses/AuthUnavailable'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '200':
           description: Handed over
           content:
@@ -598,12 +1385,15 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
-
   /api/stats/reuse:
     get:
       operationId: getReuseStats
-      tags: [stats]
+      tags:
+        - stats
       summary: Reused quantities per category and per event
+      description: >-
+        Provide ACTIVE members only global aggregates without personal identifiers. eventId filters may reference
+        only their own events; return 404 for others.
       parameters:
         - name: eventId
           in: query
@@ -612,15 +1402,44 @@ paths:
             type: integer
             format: int64
       responses:
+        '503':
+          $ref: '#/components/responses/AuthUnavailable'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '200':
           description: OK
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ReuseStats'
-
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >-
+        10-minute JWT. Pin RS256 and validate iss, aud, exp, iat, jti, sub, sid, and authVersion. On every request,
+        check ACTIVE state, authVersion, and an unrevoked, unexpired sid in the DB. Fail closed with 503 AUTH_UNAVAILABLE
+        on DB lookup failure. Use an allowlist of kid values for key rotation.
+    refreshCookie:
+      type: apiKey
+      in: cookie
+      name: __Host-afterbooth-refresh
+      description: Opaque refresh token with at least 256 bits. Require CSRF and exact Origin validation together.
   parameters:
+    CsrfToken:
+      name: X-CSRF-Token
+      in: header
+      required: true
+      description: Server-session-bound token returned by getCsrfToken. An exact allowed Origin is also required.
+      schema:
+        type: string
+        minLength: 1
     IdempotencyKey:
       name: Idempotency-Key
       in: header
@@ -664,8 +1483,53 @@ components:
       schema:
         type: integer
         format: int64
-
   responses:
+    AuthUnavailable:
+      description: Authentication-store lookup failure. Fail closed rather than bypassing authentication (AUTH_UNAVAILABLE).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthenticated:
+      description: >-
+        Missing, expired, revoked, or withdrawn authentication, or an incorrect password: UNAUTHENTICATED. Do not
+        distinguish account existence or withdrawal.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Forbidden:
+      description: >-
+        Access denied: FORBIDDEN. CSRF or Origin failure: CSRF_REJECTED. Only login may return EMAIL_NOT_VERIFIED
+        after verifying the correct password.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    AuthBadRequest:
+      description: 'Invalid input: INVALID_INPUT, or uniformly handled INVALID_AUTH_CHALLENGE.'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    WithdrawalBlocked:
+      description: 'An ongoing transaction prevents withdrawal: WITHDRAWAL_BLOCKED.'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    RateLimited:
+      description: 'Request limit exceeded: RATE_LIMITED. Wait for Retry-After before retrying.'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+      headers:
+        Retry-After:
+          description: Seconds to wait before retrying
+          schema:
+            type: integer
+            minimum: 1
     BadRequest:
       description: Invalid input or missing Idempotency-Key (INVALID_INPUT)
       content:
@@ -688,30 +1552,244 @@ components:
           schema:
             $ref: '#/components/schemas/Error'
     AiUnavailable:
-      description: The Meta model call failed or timed out and no replay fixture exists (AI_UNAVAILABLE)
+      description: >-
+        A Meta call failed or no replay fixture exists (AI_UNAVAILABLE), or the shared authentication DB lookup
+        failed (AUTH_UNAVAILABLE). Neither failure permits access.
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/Error'
-
   schemas:
+    CreateEventRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - venue
+        - teardownDeadline
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        venue:
+          type: string
+          minLength: 1
+          maxLength: 200
+        teardownDeadline:
+          type: string
+          format: date-time
+          description: Event teardown deadline after the current server time. Do not enter personal information.
+    MemberState:
+      type: string
+      enum:
+        - PENDING_VERIFICATION
+        - ACTIVE
+        - WITHDRAWN
+    NormalizedEmail:
+      type: string
+      format: email
+      maxLength: 254
+      description: >-
+        Accept ASCII email addresses only. Limit the local part to 64 characters; reject display names, comments,
+        control characters, and non-ASCII addresses. Trim outer ASCII spaces (U+0020), then lowercase the entire
+        address. Disallow internal spaces. Do not normalize plus or dot aliases. Use the normalized value for duplicate,
+        verification, and re-registration-block comparisons.
+    MemberPassword:
+      type: string
+      format: password
+      minLength: 12
+      maxLength: 128
+      writeOnly: true
+      description: >-
+        12 to 128 characters; do not trim, change case, or normalize Unicode. Initial Argon2id parameters: 19 MiB
+        memory, 2 iterations, parallelism 1. Verify support and load during subsequent implementation.
+    RegisterMemberRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - email
+        - password
+      properties:
+        email:
+          $ref: '#/components/schemas/NormalizedEmail'
+        password:
+          $ref: '#/components/schemas/MemberPassword'
+    LoginMemberRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - email
+        - password
+      properties:
+        email:
+          $ref: '#/components/schemas/NormalizedEmail'
+        password:
+          $ref: '#/components/schemas/MemberPassword'
+    EmailChallengeRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - email
+      properties:
+        email:
+          $ref: '#/components/schemas/NormalizedEmail'
+    VerifyEmailRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - email
+        - challengeId
+        - code
+        - password
+      properties:
+        password:
+          $ref: '#/components/schemas/MemberPassword'
+        email:
+          $ref: '#/components/schemas/NormalizedEmail'
+        challengeId:
+          type: string
+          description: >-
+            Opaque identifier with at least 256 CSPRNG bits. Real and dummy identifiers use the same format. This
+            is not the verification code.
+        code:
+          type: string
+          pattern: ^[0-9]{6}$
+          writeOnly: true
+          description: >-
+            Valid for 10 minutes, at most 5 attempts, and one-time consumption. Store only a keyed HMAC of challengeId,
+            purpose, normalized email, and code on the server.
+    ResetPasswordRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - email
+        - challengeId
+        - code
+        - newPassword
+      properties:
+        email:
+          $ref: '#/components/schemas/NormalizedEmail'
+        challengeId:
+          type: string
+          description: >-
+            Opaque identifier with at least 256 CSPRNG bits. Real and dummy identifiers use the same format. This
+            is not the verification code.
+        code:
+          type: string
+          pattern: ^[0-9]{6}$
+          writeOnly: true
+          description: >-
+            Valid for 10 minutes, at most 5 attempts, and one-time consumption. Store only a keyed HMAC of challengeId,
+            purpose, normalized email, and code on the server.
+        newPassword:
+          $ref: '#/components/schemas/MemberPassword'
+    WithdrawMemberRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - password
+      properties:
+        password:
+          $ref: '#/components/schemas/MemberPassword'
+    AuthAccepted:
+      type: object
+      additionalProperties: false
+      required:
+        - message
+      properties:
+        message:
+          type: string
+          description: The same Korean guidance without distinguishing account existence, duplicates, or re-registration
+            blocks
+    ChallengeIssued:
+      type: object
+      additionalProperties: false
+      required:
+        - message
+        - challengeId
+      properties:
+        message:
+          type: string
+          description: The same guidance without distinguishing delivery, account state, or email limits
+        challengeId:
+          type: string
+          description: >-
+            Opaque identifier with at least 256 CSPRNG bits. Real and dummy identifiers use the same format. This
+            is not the verification code.
+    AccessTokenResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - accessToken
+        - tokenType
+        - expiresIn
+      properties:
+        accessToken:
+          type: string
+          description: Access JWT stored only in memory. Do not include actual token examples.
+        tokenType:
+          type: string
+          enum:
+            - Bearer
+        expiresIn:
+          type: integer
+          enum:
+            - 600
+    CsrfTokenResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - csrfToken
+      properties:
+        csrfToken:
+          type: string
+          description: Token with at least 256 CSPRNG bits, bound to a server CSRF session. Keep it in memory.
+    MemberView:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - email
+        - state
+        - organizationId
+      properties:
+        id:
+          type: integer
+          format: int64
+        email:
+          $ref: '#/components/schemas/NormalizedEmail'
+        state:
+          $ref: '#/components/schemas/MemberState'
+        organizationId:
+          type: integer
+          format: int64
+      description: >-
+        Return only the current ACTIVE member's information. Never expose personal fields from WITHDRAWN rows through
+        the API.
     Health:
       type: object
-      required: [status, aiMode]
+      required:
+        - status
+        - aiMode
       properties:
         status:
           type: string
-          enum: [UP]
+          enum:
+            - UP
         aiMode:
           $ref: '#/components/schemas/AiMode'
-
     AiMode:
       type: string
-      enum: [live, record, replay]
-
+      enum:
+        - live
+        - record
+        - replay
     Error:
       type: object
-      required: [code, message]
+      required:
+        - code
+        - message
       properties:
         code:
           $ref: '#/components/schemas/ErrorCode'
@@ -719,7 +1797,6 @@ components:
           type: string
           description: Korean message shown to the user
           example: 남은 수량이 부족해요.
-
     ErrorCode:
       type: string
       enum:
@@ -738,7 +1815,15 @@ components:
         - DRAFT_ALREADY_CONFIRMED
         - IDEMPOTENCY_CONFLICT
         - AI_UNAVAILABLE
-
+        - AUTH_UNAVAILABLE
+        - UNAUTHENTICATED
+        - FORBIDDEN
+        - CSRF_REJECTED
+        - EMAIL_NOT_VERIFIED
+        - INVALID_AUTH_CHALLENGE
+        - RATE_LIMITED
+        - WITHDRAWAL_BLOCKED
+        - INVALID_CURRENT_PASSWORD
     ItemCategory:
       type: string
       description: |
@@ -749,28 +1834,41 @@ components:
         | DISPLAY_RACK | 진열대 |
         | STORAGE_BIN | 수납함 |
         | FOLDING_TABLE | 접이식 테이블 |
-      enum: [DISPLAY_RACK, STORAGE_BIN, FOLDING_TABLE]
-
+      enum:
+        - DISPLAY_RACK
+        - STORAGE_BIN
+        - FOLDING_TABLE
     DraftCategory:
       type: string
       description: |
         ItemCategory plus UNKNOWN (label 미분류), which can only appear in intake drafts and must be fixed before confirm
-      enum: [DISPLAY_RACK, STORAGE_BIN, FOLDING_TABLE, UNKNOWN]
-
+      enum:
+        - DISPLAY_RACK
+        - STORAGE_BIN
+        - FOLDING_TABLE
+        - UNKNOWN
     Condition:
       type: string
-      enum: [GOOD, FAIR, POOR]
-
+      enum:
+        - GOOD
+        - FAIR
+        - POOR
     VehicleType:
       type: string
       description: |
         Ordered by cargo space, smallest first. An item fits a vehicle when its size fits that vehicle's cargo
         constants AND the vehicle is at least the item's `vehicleRequirement` (if set).
-      enum: [SEDAN, SUV, VAN, TRUCK_1T]
-
+      enum:
+        - SEDAN
+        - SUV
+        - VAN
+        - TRUCK_1T
     SizeCm:
       type: object
-      required: [width, depth, height]
+      required:
+        - width
+        - depth
+        - height
       properties:
         width:
           type: integer
@@ -781,12 +1879,18 @@ components:
         height:
           type: integer
           minimum: 1
-      example: { width: 90, depth: 40, height: 180 }
-
+      example:
+        width: 90
+        depth: 40
+        height: 180
     BoundingBox:
       type: object
       description: Normalized to the photo, origin top-left
-      required: [x, y, width, height]
+      required:
+        - x
+        - y
+        - width
+        - height
       properties:
         x:
           type: number
@@ -804,10 +1908,11 @@ components:
           type: number
           minimum: 0
           maximum: 1
-
     Organization:
       type: object
-      required: [id, name]
+      required:
+        - id
+        - name
       properties:
         id:
           type: integer
@@ -815,10 +1920,14 @@ components:
         name:
           type: string
           example: 성수 플리마켓 운영팀
-
     Event:
       type: object
-      required: [id, name, organizationId, venue, teardownDeadline]
+      required:
+        - id
+        - name
+        - organizationId
+        - venue
+        - teardownDeadline
       properties:
         id:
           type: integer
@@ -836,22 +1945,31 @@ components:
         teardownDeadline:
           type: string
           format: date-time
-          description: Booths must be cleared by this time. Item pickup deadlines default to it and may not exceed it
-
+          description: Booths must be cleared by this time. Item pickup deadlines default to it and may not exceed
+            it
     IntakeStatus:
       type: string
-      enum: [PROCESSING, READY, FAILED, CONFIRMED]
-
+      enum:
+        - PROCESSING
+        - READY
+        - FAILED
+        - CONFIRMED
     IntakeStage:
       type: string
       description: |
         Runs ESTIMATE first, then SEGMENT. ESTIMATE = Muse Spark finds and counts items with category, box, size and
         condition; SEGMENT = SAM 3.1 segments each item from Spark's boxes
-      enum: [ESTIMATE, SEGMENT]
-
+      enum:
+        - ESTIMATE
+        - SEGMENT
     IntakeDraft:
       type: object
-      required: [id, eventId, status, lines, createdAt]
+      required:
+        - id
+        - eventId
+        - status
+        - lines
+        - createdAt
       properties:
         id:
           type: integer
@@ -875,10 +1993,17 @@ components:
         createdAt:
           type: string
           format: date-time
-
     DraftLine:
       type: object
-      required: [lineId, category, label, count, boxes, condition, confidence, needsReview]
+      required:
+        - lineId
+        - category
+        - label
+        - count
+        - boxes
+        - condition
+        - confidence
+        - needsReview
       properties:
         lineId:
           type: integer
@@ -896,7 +2021,8 @@ components:
           example: 4
         boxes:
           type: array
-          description: One box per counted item, for the overlay. SAM 3.1's box when it segmented the item, else Spark's
+          description: One box per counted item, for the overlay. SAM 3.1's box when it segmented the item, else
+            Spark's
           items:
             $ref: '#/components/schemas/BoundingBox'
         sizeCm:
@@ -914,10 +2040,10 @@ components:
           description: |
             True when confidence is below the configured threshold, the category is UNKNOWN, SAM 3.1 did not segment
             one of the boxes (or the SAM call failed), or an optional SAM 3.1 count disagrees with `count`
-
     ConfirmIntakeRequest:
       type: object
-      required: [lines]
+      required:
+        - lines
       properties:
         lines:
           type: array
@@ -934,10 +2060,14 @@ components:
         conditionsTranscript:
           type: string
           description: Original spoken or typed giver conditions, kept for display
-
     ConfirmLine:
       type: object
-      required: [lineId, category, quantity, sizeCm, condition]
+      required:
+        - lineId
+        - category
+        - quantity
+        - sizeCm
+        - condition
       properties:
         lineId:
           type: integer
@@ -951,12 +2081,12 @@ components:
           $ref: '#/components/schemas/SizeCm'
         condition:
           $ref: '#/components/schemas/Condition'
-
     ConditionContext:
       type: string
       description: GIVER = conditions attached to leftover items; RECEIVER = a pickup request
-      enum: [GIVER, RECEIVER]
-
+      enum:
+        - GIVER
+        - RECEIVER
     Conditions:
       type: object
       description: Every field is optional; Spark fills only what was said
@@ -975,10 +2105,13 @@ components:
         purpose:
           type: string
           example: 주말 행사 진열용
-
     ConditionInterpretation:
       type: object
-      required: [context, transcript, conditions, missingFields]
+      required:
+        - context
+        - transcript
+        - conditions
+        - missingFields
       properties:
         context:
           $ref: '#/components/schemas/ConditionContext'
@@ -993,11 +2126,19 @@ components:
           description: Required fields for the next step that were not said (RECEIVER - category, vehicleType)
           items:
             type: string
-            enum: [category, quantity, vehicleType, pickupDeadline, purpose]
-
+            enum:
+              - category
+              - quantity
+              - vehicleType
+              - pickupDeadline
+              - purpose
     CreatePickupRequest:
       type: object
-      required: [organizationId, category, quantity, vehicleType]
+      required:
+        - organizationId
+        - category
+        - quantity
+        - vehicleType
       properties:
         organizationId:
           type: integer
@@ -1020,10 +2161,15 @@ components:
         transcript:
           type: string
           description: Original spoken or typed request, kept for display and for the agent
-
     PickupRequest:
       type: object
-      required: [id, organizationId, category, quantity, vehicleType, createdAt]
+      required:
+        - id
+        - organizationId
+        - category
+        - quantity
+        - vehicleType
+        - createdAt
       properties:
         id:
           type: integer
@@ -1047,10 +2193,19 @@ components:
         createdAt:
           type: string
           format: date-time
-
     Item:
       type: object
-      required: [id, eventId, organizationId, category, label, sizeCm, condition, totalQty, availableQty, pickupDeadline]
+      required:
+        - id
+        - eventId
+        - organizationId
+        - category
+        - label
+        - sizeCm
+        - condition
+        - totalQty
+        - availableQty
+        - pickupDeadline
       properties:
         id:
           type: integer
@@ -1088,15 +2243,24 @@ components:
           $ref: '#/components/schemas/VehicleType'
         conditionsTranscript:
           type: string
-          description: The giver's original spoken or typed conditions, shown on the item card
-
+          description: >-
+            Raw text included only for the giver organization's owner. Omit the field from listItems/getItem responses
+            to other members.
     AllocationStatus:
       type: string
-      enum: [HELD, NO_MATCH]
-
+      enum:
+        - HELD
+        - NO_MATCH
     AllocationResult:
       type: object
-      required: [requestId, status, explanation, reservations, rejections, alternatives, toolCalls]
+      required:
+        - requestId
+        - status
+        - explanation
+        - reservations
+        - rejections
+        - alternatives
+        - toolCalls
       properties:
         requestId:
           type: integer
@@ -1105,7 +2269,8 @@ components:
           $ref: '#/components/schemas/AllocationStatus'
         explanation:
           type: string
-          description: Korean summary for the receiver, by Muse Spark or a server template if the model failed after a hold
+          description: Korean summary for the receiver, by Muse Spark or a server template if the model failed after
+            a hold
           example: 높이 180cm라 승용차에 실을 수 없어요. 대신 접이식 테이블 3개 어떠세요?
         reservations:
           type: array
@@ -1127,14 +2292,20 @@ components:
           description: The agent's tool calls in order, shown in the UI so the server's decisions are visible
           items:
             $ref: '#/components/schemas/ToolCall'
-
     RejectionCode:
       type: string
-      enum: [VEHICLE_TOO_SMALL, QTY_UNAVAILABLE, QTY_EXCEEDS_REQUEST, PICKUP_CLOSED, CATEGORY_MISMATCH]
-
+      enum:
+        - VEHICLE_TOO_SMALL
+        - QTY_UNAVAILABLE
+        - QTY_EXCEEDS_REQUEST
+        - PICKUP_CLOSED
+        - CATEGORY_MISMATCH
     Rejection:
       type: object
-      required: [itemId, code, message]
+      required:
+        - itemId
+        - code
+        - message
       properties:
         itemId:
           type: integer
@@ -1147,11 +2318,16 @@ components:
         limitingDimension:
           type: string
           description: Set for VEHICLE_TOO_SMALL when size (not the giver's requirement) is the reason
-          enum: [width, depth, height]
-
+          enum:
+            - width
+            - depth
+            - height
     Alternative:
       type: object
-      required: [item, quantity, reason]
+      required:
+        - item
+        - quantity
+        - reason
       properties:
         item:
           $ref: '#/components/schemas/Item'
@@ -1162,28 +2338,34 @@ components:
         reason:
           type: string
           example: 접이식이라 승용차에 실을 수 있어요.
-
     ToolCall:
       type: object
-      required: [name, arguments, outcome]
+      required:
+        - name
+        - arguments
+        - outcome
       properties:
         name:
           type: string
-          enum: [searchCandidates, checkVehicleFit, holdQuantity]
+          enum:
+            - searchCandidates
+            - checkVehicleFit
+            - holdQuantity
         arguments:
           type: object
           additionalProperties: true
         outcome:
           type: string
           description: REJECTED only for checkVehicleFit and holdQuantity calls the server refused
-          enum: [OK, REJECTED]
+          enum:
+            - OK
+            - REJECTED
         code:
           description: Why the server refused, when REJECTED
           $ref: '#/components/schemas/RejectionCode'
         summary:
           type: string
           description: Short Korean description of the result
-
     ReservationStatus:
       type: string
       description: |
@@ -1200,8 +2382,12 @@ components:
         The hold TTL is 15 minutes (server setting `afterbooth.hold-ttl`, default `PT15M`).
         Every quantity effect is applied exactly once, in the same transaction as the status change.
         Any other transition fails with INVALID_TRANSITION.
-      enum: [HELD, CONFIRMED, HANDED_OVER, RELEASED, EXPIRED]
-
+      enum:
+        - HELD
+        - CONFIRMED
+        - HANDED_OVER
+        - RELEASED
+        - EXPIRED
     HoldItemRequest:
       type: object
       description: |
@@ -1214,7 +2400,10 @@ components:
         Holds for the same request are serialized: the server locks the pickup request row before reading its
         active reservations and keeps the lock until the new reservation is written, so two concurrent holds on
         different items cannot together exceed request.quantity.
-      required: [requestId, itemId, quantity]
+      required:
+        - requestId
+        - itemId
+        - quantity
       properties:
         requestId:
           type: integer
@@ -1225,10 +2414,19 @@ components:
         quantity:
           type: integer
           minimum: 1
-
     Reservation:
       type: object
-      required: [id, requestId, organizationId, itemId, itemLabel, quantity, status, holdExpiresAt, pickupDeadline, createdAt]
+      required:
+        - id
+        - requestId
+        - organizationId
+        - itemId
+        - itemLabel
+        - quantity
+        - status
+        - holdExpiresAt
+        - pickupDeadline
+        - createdAt
       properties:
         id:
           type: integer
@@ -1270,10 +2468,12 @@ components:
           description: Transition history, included only by `getReservation`
           items:
             $ref: '#/components/schemas/Transition'
-
     Transition:
       type: object
-      required: [to, at, actor]
+      required:
+        - to
+        - at
+        - actor
       properties:
         from:
           $ref: '#/components/schemas/ReservationStatus'
@@ -1284,15 +2484,24 @@ components:
           format: date-time
         actor:
           type: string
-          enum: [AGENT, USER, SCHEDULER, HANDOVER]
-
+          enum:
+            - AGENT
+            - USER
+            - SCHEDULER
+            - HANDOVER
     HandoverStatus:
       type: string
-      enum: [COMPLETED, MISMATCH]
-
+      enum:
+        - COMPLETED
+        - MISMATCH
     HandoverResult:
       type: object
-      required: [reservation, status, expectedQty, countedQty, boxes]
+      required:
+        - reservation
+        - status
+        - expectedQty
+        - countedQty
+        - boxes
       properties:
         reservation:
           $ref: '#/components/schemas/Reservation'
@@ -1309,19 +2518,22 @@ components:
           description: One box per counted item. SAM 3.1's box when it segmented the item, else Spark's
           items:
             $ref: '#/components/schemas/BoundingBox'
-
     ResolveHandoverRequest:
       type: object
-      required: [acceptedQty]
+      required:
+        - acceptedQty
       properties:
         acceptedQty:
           type: integer
           minimum: 1
           description: Quantity actually handed over, 1 to the reserved quantity (more → 400 INVALID_INPUT)
-
     ReuseStats:
       type: object
-      required: [totalReused, reusedVolumeLiters, byCategory, byEvent]
+      required:
+        - totalReused
+        - reusedVolumeLiters
+        - byCategory
+        - byEvent
       properties:
         totalReused:
           type: integer
@@ -1339,7 +2551,10 @@ components:
           type: array
           items:
             type: object
-            required: [category, label, quantity]
+            required:
+              - category
+              - label
+              - quantity
             properties:
               category:
                 $ref: '#/components/schemas/ItemCategory'
@@ -1351,7 +2566,10 @@ components:
           type: array
           items:
             type: object
-            required: [eventId, eventName, quantity]
+            required:
+              - eventId
+              - eventName
+              - quantity
             properties:
               eventId:
                 type: integer
@@ -1360,3 +2578,14 @@ components:
                 type: string
               quantity:
                 type: integer
+    ChangePasswordRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - currentPassword
+        - newPassword
+      properties:
+        currentPassword:
+          $ref: '#/components/schemas/MemberPassword'
+        newPassword:
+          $ref: '#/components/schemas/MemberPassword'
