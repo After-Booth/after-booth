@@ -4,6 +4,7 @@ import com.afterbooth.global.security.DomainAccess;
 import com.afterbooth.inventory.domain.ItemCategory;
 import com.afterbooth.stats.dto.ReuseStats;
 import com.afterbooth.stats.repository.ReuseStatsRepository;
+import java.math.BigInteger;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import org.springframework.stereotype.Service;
@@ -11,7 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class ReuseStatsService {
-  private static final long CUBIC_CM_PER_LITER = 1_000;
+  private static final BigInteger CUBIC_CM_PER_LITER = BigInteger.valueOf(1_000);
 
   private final ReuseStatsRepository repository;
   private final DomainAccess access;
@@ -26,14 +27,14 @@ public class ReuseStatsService {
     access.actor();
     if (eventId != null) access.event(eventId);
     var rows = repository.quantities(eventId);
-    var categories = new EnumMap<ItemCategory, Long>(ItemCategory.class);
+    var categories = new EnumMap<ItemCategory, BigInteger>(ItemCategory.class);
     var events = new LinkedHashMap<Long, ReuseStats.EventQuantity>();
-    long total = 0;
-    long cubicCm = 0;
+    BigInteger total = BigInteger.ZERO;
+    BigInteger cubicCm = BigInteger.ZERO;
     for (var row : rows) {
-      total += row.quantity();
-      cubicCm += row.cubicCm();
-      categories.merge(row.category(), row.quantity(), Long::sum);
+      total = total.add(row.quantity());
+      cubicCm = cubicCm.add(row.cubicCm());
+      categories.merge(row.category(), row.quantity(), BigInteger::add);
       if (access.owner(row.organizationId()))
         events.compute(
             row.eventId(),
@@ -41,16 +42,18 @@ public class ReuseStatsService {
                 new ReuseStats.EventQuantity(
                     id,
                     row.eventName(),
-                    row.quantity() + (previous == null ? 0 : previous.quantity())));
+                    row.quantity()
+                        .add(BigInteger.valueOf(previous == null ? 0 : previous.quantity()))
+                        .longValueExact()));
     }
     return new ReuseStats(
-        total,
-        cubicCm / CUBIC_CM_PER_LITER,
+        total.longValueExact(),
+        cubicCm.divide(CUBIC_CM_PER_LITER).longValueExact(),
         categories.entrySet().stream()
             .map(
                 entry ->
                     new ReuseStats.CategoryQuantity(
-                        entry.getKey(), entry.getKey().label(), entry.getValue()))
+                        entry.getKey(), entry.getKey().label(), entry.getValue().longValueExact()))
             .toList(),
         events.values().stream()
             .sorted(java.util.Comparator.comparing(ReuseStats.EventQuantity::eventId))

@@ -109,6 +109,61 @@ class GlobalExceptionHandlerTest {
         .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
   }
 
+  @Test
+  void unexpectedDatabaseFailureNeverLogsSyntheticOriginalOrThrowable() {
+    var logger =
+        (ch.qos.logback.classic.Logger)
+            org.slf4j.LoggerFactory.getLogger(GlobalExceptionHandler.class);
+    var captured =
+        new ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent>();
+    captured.start();
+    logger.addAppender(captured);
+    String marker = java.util.UUID.randomUUID().toString();
+    try {
+      var request =
+          new org.springframework.mock.web.MockHttpServletRequest("POST", "/api/reservations");
+      var result =
+          new GlobalExceptionHandler()
+              .handleUnexpected(
+                  new org.springframework.dao.DataAccessResourceFailureException(
+                      marker, new IllegalStateException(marker)),
+                  request);
+      org.assertj.core.api.Assertions.assertThat(result.getStatusCode().value()).isEqualTo(500);
+      org.assertj.core.api.Assertions.assertThat(captured.list).hasSize(1);
+      org.assertj.core.api.Assertions.assertThat(captured.list.getFirst().getFormattedMessage())
+          .isEqualTo("Request failed unexpectedly errorType=DataAccessResourceFailureException");
+      org.assertj.core.api.Assertions.assertThat(
+              captured.list.stream()
+                  .noneMatch(
+                      event ->
+                          event.getFormattedMessage().contains(marker)
+                              || event.getThrowableProxy() != null))
+          .isTrue();
+      captured.list.clear();
+      String authMarker = java.util.UUID.randomUUID().toString();
+      var authResult =
+          new GlobalExceptionHandler()
+              .handleUnexpected(
+                  new IllegalStateException(authMarker),
+                  new org.springframework.mock.web.MockHttpServletRequest(
+                      "POST", "/api/members/me"));
+      org.assertj.core.api.Assertions.assertThat(authResult.getStatusCode().value()).isEqualTo(503);
+      org.assertj.core.api.Assertions.assertThat(captured.list).hasSize(1);
+      org.assertj.core.api.Assertions.assertThat(captured.list.getFirst().getFormattedMessage())
+          .isEqualTo("Authentication request failed errorType=IllegalStateException");
+      org.assertj.core.api.Assertions.assertThat(
+              captured.list.stream()
+                  .noneMatch(
+                      event ->
+                          event.getFormattedMessage().contains(authMarker)
+                              || event.getThrowableProxy() != null))
+          .isTrue();
+    } finally {
+      logger.detachAppender(captured);
+      captured.stop();
+    }
+  }
+
   @RestController
   static class FakeController {
 

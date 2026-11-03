@@ -27,6 +27,15 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 
 class ConditionServiceTest {
+  private static com.afterbooth.global.security.DomainAccess syntheticAccess() {
+    var access = org.mockito.Mockito.mock(com.afterbooth.global.security.DomainAccess.class);
+    org.mockito.Mockito.when(access.actor())
+        .thenReturn(
+            new com.afterbooth.global.security.AuthenticatedMember(
+                1L, java.util.UUID.randomUUID(), 0));
+    return access;
+  }
+
   private final AiGateway gateway = mock(AiGateway.class);
   private final RequestReferences references = mock(RequestReferences.class);
   private final ConditionService service =
@@ -36,7 +45,8 @@ class ConditionServiceTest {
           Clock.fixed(Instant.parse("2026-10-31T16:00:00Z"), ZoneOffset.UTC),
           "minimal",
           "",
-          org.mockito.Mockito.mock(com.afterbooth.global.security.DomainAccess.class));
+          syntheticAccess(),
+          new com.afterbooth.global.security.MemberWorkRegistry());
 
   static ChatResponse answer(String json) {
     return new ChatResponse(json, List.of(), "stop", null);
@@ -80,7 +90,8 @@ class ConditionServiceTest {
             Clock.fixed(Instant.parse("2026-10-31T00:00:00Z"), ZoneOffset.UTC),
             "minimal",
             "2026-10-31",
-            org.mockito.Mockito.mock(com.afterbooth.global.security.DomainAccess.class));
+            syntheticAccess(),
+            new com.afterbooth.global.security.MemberWorkRegistry());
     var late =
         new ConditionService(
             gateway,
@@ -88,7 +99,8 @@ class ConditionServiceTest {
             Clock.fixed(Instant.parse("2026-11-02T23:00:00Z"), ZoneOffset.UTC),
             "minimal",
             "2026-10-31",
-            org.mockito.Mockito.mock(com.afterbooth.global.security.DomainAccess.class));
+            syntheticAccess(),
+            new com.afterbooth.global.security.MemberWorkRegistry());
     early.interpret(ConditionContext.RECEIVER, null, null, null, "today");
     late.interpret(ConditionContext.RECEIVER, null, null, null, "today");
     ArgumentCaptor<ChatRequest> calls = ArgumentCaptor.forClass(ChatRequest.class);

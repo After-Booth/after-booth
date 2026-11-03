@@ -55,6 +55,8 @@ class AuthSecurityConfiguration {
       PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/auth/password-resets/confirm");
   private static final RequestMatcher PASSWORD_CHANGE =
       PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/members/me/password");
+  private static final RequestMatcher WITHDRAWAL =
+      PathPatternRequestMatcher.pathPattern(HttpMethod.DELETE, "/api/members/me");
   private static final RequestMatcher SIGNUP_REQUESTS =
       new OrRequestMatcher(SIGNUP.stream().map(SignupEndpoint::matcher).toList());
   private static final RequestMatcher AUTH_POSTS =
@@ -66,7 +68,8 @@ class AuthSecurityConfiguration {
           LOGOUT_ALL,
           RESET_REQUEST,
           RESET_CONFIRM,
-          PASSWORD_CHANGE);
+          PASSWORD_CHANGE,
+          WITHDRAWAL);
   private static final RequestMatcher AUTH_RESPONSES =
       new OrRequestMatcher(
           PathPatternRequestMatcher.pathPattern("/api/auth/**"),
@@ -75,6 +78,7 @@ class AuthSecurityConfiguration {
   private static final RequestMatcher BEARER_REQUESTS =
       new OrRequestMatcher(
           LOGOUT_ALL,
+          WITHDRAWAL,
           PASSWORD_CHANGE,
           PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/api/members/me"),
           PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/events"),
@@ -222,7 +226,7 @@ class AuthSecurityConfiguration {
                         "/api/reservations/{id}/handover",
                         "/api/reservations/{id}/handover/resolve")
                     .authenticated()
-                    .requestMatchers(LOGOUT_ALL, PASSWORD_CHANGE)
+                    .requestMatchers(LOGOUT_ALL, PASSWORD_CHANGE, WITHDRAWAL)
                     .authenticated()
                     .anyRequest()
                     .denyAll())

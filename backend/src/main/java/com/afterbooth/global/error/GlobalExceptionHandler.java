@@ -59,10 +59,10 @@ class GlobalExceptionHandler {
       return handleClientError(framework.getStatusCode());
     }
     if (AUTH_REQUESTS.matches(request)) {
-      log.error("Authentication request failed");
+      log.error("Authentication request failed errorType={}", e.getClass().getSimpleName());
       return respond(ErrorCode.AUTH_UNAVAILABLE);
     }
-    log.error("Unhandled exception", e);
+    log.error("Request failed unexpectedly errorType={}", e.getClass().getSimpleName());
     return respond(ErrorCode.INTERNAL_ERROR);
   }
 

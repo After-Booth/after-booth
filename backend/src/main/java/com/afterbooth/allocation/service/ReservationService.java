@@ -128,10 +128,16 @@ public class ReservationService {
   public List<ReservationResponse> list(Long requestId, Long eventId) {
     access.actor();
     return reservations.listWithLabel(requestId, eventId).stream()
+        .filter(row -> !row.reservation().retentionEnded(clock.instant()))
         .filter(
             row -> {
-              var ids = access.reservationOrganizations(row.reservation().id());
-              return ids.stream().anyMatch(access::owner);
+              try {
+                var ids = access.reservationOrganizations(row.reservation().id());
+                return ids.stream().anyMatch(access::owner);
+              } catch (BusinessException error) {
+                if (error.errorCode() == ErrorCode.NOT_FOUND) return false;
+                throw error;
+              }
             })
         .map(row -> ReservationResponse.from(row.reservation(), row.itemLabel(), null))
         .toList();

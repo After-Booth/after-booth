@@ -1,5 +1,6 @@
 package com.afterbooth.ai;
 
+import com.afterbooth.global.security.MemberWorkRegistry;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
@@ -32,7 +33,6 @@ import tools.jackson.databind.node.ObjectNode;
 class MetaExchange {
 
   private static final String METHOD = "POST";
-  private static final int ERROR_BODY_LIMIT = 500;
   private static final Logger log = LoggerFactory.getLogger(MetaExchange.class);
 
   private final AiProperties properties;
@@ -81,6 +81,9 @@ class MetaExchange {
       Capability capability,
       JsonNode redactedBody,
       UnaryOperator<RestClient.RequestBodySpec> withBody) {
+    boolean memberOwned = MemberWorkRegistry.memberOwnedWork();
+    if (memberOwned && properties.mode() == AiMode.RECORD)
+      throw new AiCallException(capability, null, "Member input recording is disabled", null);
     String path = properties.paths().of(capability);
     String key = fixtures.key(METHOD, path, redactedBody);
     long started = System.nanoTime();
@@ -105,7 +108,7 @@ class MetaExchange {
         }
         FutureTask<JsonNode> call =
             new FutureTask<>(() -> parse(capability, send(capability, path, withBody)));
-        Thread.startVirtualThread(call);
+        MemberWorkRegistry.startChild(call);
         try {
           JsonNode body =
               call.get(properties.fallbackAfter().of(capability).toNanos(), TimeUnit.NANOSECONDS);
@@ -116,10 +119,7 @@ class MetaExchange {
         } catch (ExecutionException e) {
           if (!(e.getCause() instanceof AiCallException failure)) throw propagate(e.getCause());
           log.warn(
-              "AI fallback capability={} key={} reason={}",
-              capability,
-              key,
-              scrub(failure.getMessage()).replace('\r', ' ').replace('\n', ' '));
+              "AI fallback capability={} key={} reason={}", capability, key, "provider failure");
         } catch (InterruptedException e) {
           Thread.currentThread().interrupt();
           throw new AiCallException(capability, null, "call interrupted", e);
@@ -197,27 +197,19 @@ class MetaExchange {
                   new HttpResult(
                       response.getStatusCode().value(), response.getBody().readAllBytes()));
     } catch (RestClientException e) {
-      throw new AiCallException(capability, null, scrub(String.valueOf(e.getMessage())), e);
+      throw new AiCallException(capability, null, "Provider transport failed", null);
     }
   }
 
   private JsonNode parse(Capability capability, HttpResult result) {
-    String text = scrub(new String(result.body(), StandardCharsets.UTF_8));
-    String excerpt = text.length() > ERROR_BODY_LIMIT ? text.substring(0, ERROR_BODY_LIMIT) : text;
     if (result.status() < 200 || result.status() >= 300) {
-      throw new AiCallException(
-          capability, result.status(), "HTTP " + result.status() + ": " + excerpt, null);
+      throw new AiCallException(capability, result.status(), "HTTP " + result.status(), null);
     }
     try {
       return json.readTree(result.body());
     } catch (JacksonException e) {
-      throw new AiCallException(capability, result.status(), "response is not JSON: " + excerpt, e);
+      throw new AiCallException(capability, result.status(), "response is not JSON", null);
     }
-  }
-
-  private String scrub(String message) {
-    String key = properties.apiKey();
-    return key == null || key.isBlank() ? message : message.replace(key, "<redacted>");
   }
 
   private static byte[] audioBody(String boundary, byte[] requestJson, byte[] wav) {

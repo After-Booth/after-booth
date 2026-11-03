@@ -66,6 +66,7 @@ public class AllocationService {
   private final DomainAccess access;
   private final com.afterbooth.global.idempotency.IdempotencyLockPool runLocks;
   private final AllocationFinalizer finalizer;
+  private final com.afterbooth.global.security.MemberWorkRegistry work;
 
   public AllocationService(
       AiGateway ai,
@@ -81,8 +82,10 @@ public class AllocationService {
       @Value("${afterbooth.allocation.timeout:PT30S}") Duration timeout,
       DomainAccess access,
       com.afterbooth.global.idempotency.IdempotencyLockPool runLocks,
-      AllocationFinalizer finalizer) {
+      AllocationFinalizer finalizer,
+      com.afterbooth.global.security.MemberWorkRegistry work) {
     this.ai = ai;
+    this.work = work;
     this.requests = requests;
     this.holds = holds;
     this.reservations = reservations;
@@ -115,6 +118,10 @@ public class AllocationService {
   }
 
   private java.util.function.Supplier<AllocationResult> plan(Long requestId) {
+    return work.call(access.actor().memberId(), () -> planOwned(requestId));
+  }
+
+  private java.util.function.Supplier<AllocationResult> planOwned(Long requestId) {
     access.request(requestId);
     PickupRequest request = requests.findForAllocation(requestId);
     if (reservations.activeQuantity(requestId) > 0)
@@ -204,8 +211,9 @@ public class AllocationService {
       if (run.held.isEmpty()) throw new BusinessException(ErrorCode.AI_UNAVAILABLE);
       explanation = null;
     } finally {
-      // Do not wait for an uncooperative network call after the request deadline.
+      // Keep owned work active until the transport exits so withdrawal can drain it.
       executor.shutdownNow();
+      executor.close();
     }
     String finalExplanation = explanation;
     List<Long> organizations = new ArrayList<>();

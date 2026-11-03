@@ -2,7 +2,7 @@
 
 ## Status and scope
 
-This document defines the target authentication design and the current #65/#66 implementation boundary. Historical #63 design and verification records below describe its original base `5e62f13` and branch `docs/63-member-auth-design`; they are not #65 runtime evidence. #65 starts from `origin/main` `125d37b`.
+This document defines the authentication design and the historical #65/#66 implementation boundaries. Issue #69 implementation and local synthetic verification are authorized by D-083; completion requires the current verification evidence. Historical #63 design and verification records below describe its original base `5e62f13` and branch `docs/63-member-auth-design`; they are not #65 runtime evidence. #65 starts from `origin/main` `125d37b`.
 
 - D-069 records the historical #63 design-only schedule. The user explicitly authorizes #65 implementation now (D-076), preserving the existing demo and recorded fixtures. Historical verification records below remain evidence for #63 only.
 - The flow is email/password registration → signup email verification → login. Email-based login is not introduced. Password reset emails serve a separate purpose.
@@ -88,6 +88,8 @@ Calculate 30 days as `withdrawn_at + 30 × 24 hours`. Display response times usi
 | Non-personal aggregate statistics | Retain reused quantity/volume aggregates without member or original-content links | Retain aggregates only and delete individual transactions. No member-level or email-level analysis |
 
 The 30-day history linked by internal IDs and an HMAC usable for email matching are not fully anonymous. Do not use a plain email hash because dictionary attacks are easy. Manage HMAC keys outside the DB and support versioned matching without extending retention. Check registration against still-valid previous keys during rotation; remove a key version older than 30 days when it has no associated block data. After expiry, the same email may create a new account if no new block exists.
+
+**Single-server work disposal (#69, D-083):** the user approved one application server as the scope for immediate queued/running mail and intake disposal. Pause owned work before taking database member locks and wait for running work to release its application-owned payloads. Preserve queued work until final checks and the database transaction succeed, then discard its payloads before unpausing or returning success. On failure, resume the queued work without erasing its inputs. A second serving process requires coordinated cancellation/disposal first and is not supported by this local guarantee. JVM garbage collection and secure physical memory overwrite are not inferred from releasing application references. Existing requests started before withdrawal, client responses and external-provider retention retain their separate boundaries.
 
 **Cleanup and retention implementation requirements:** record transaction deletion deadlines in `reservation.retention_until`. Complete immediate deletions before the withdrawal commit. An implementation with large media must not report withdrawal complete before confirming deletion guarantees. Block reads at expiry first; run cleanup every minute, monitor failures, and retry. The maximum operational delay for physical deletion is one hour; reads and reprocessing after 30 days are prohibited. These are operational retention choices, not a determination of statutory periods.
 

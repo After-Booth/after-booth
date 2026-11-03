@@ -4,6 +4,7 @@ import com.afterbooth.global.error.BusinessException;
 import com.afterbooth.global.error.ErrorCode;
 import com.afterbooth.global.security.AuthRateLimiter;
 import com.afterbooth.global.security.HmacKeyRing;
+import com.afterbooth.global.security.MemberWorkRegistry;
 import com.afterbooth.member.domain.Member;
 import com.afterbooth.member.domain.SignupChallenge;
 import com.afterbooth.member.domain.SignupCredentials;
@@ -37,6 +38,7 @@ public class SignupService {
   private final HmacKeyRing keys;
   private final MailGateway mail;
   private final Executor mailExecutor;
+  private final MemberWorkRegistry work;
   private final TransactionTemplate transactions;
   private final SecureRandom random = new SecureRandom();
 
@@ -47,13 +49,15 @@ public class SignupService {
       HmacKeyRing keys,
       MailGateway mail,
       @Qualifier("signupMailExecutor") Executor mailExecutor,
-      PlatformTransactionManager transactionManager) {
+      PlatformTransactionManager transactionManager,
+      MemberWorkRegistry work) {
     this.members = members;
     this.passwords = passwords;
     this.limits = limits;
     this.keys = keys;
     this.mail = mail;
     this.mailExecutor = mailExecutor;
+    this.work = work;
     transactions = new TransactionTemplate(transactionManager);
   }
 
@@ -68,6 +72,8 @@ public class SignupService {
             members.lockEmail(email);
             Member existing = members.findForUpdate(email);
             Instant now = members.databaseNow();
+            if (!keys.versions(now).containsAll(members.activeBlockVersions(now)))
+              throw unavailable();
             boolean blocked = false;
             for (String version : keys.versions(now))
               blocked |=
@@ -98,7 +104,7 @@ public class SignupService {
     String code = String.format(Locale.ROOT, "%06d", random.nextInt(1_000_000));
     String version = keys.currentVersion();
     try {
-      MailMessage message =
+      MemberWorkRegistry.Work<MailMessage> message =
           transactions.execute(
               status -> {
                 members.lockEmail(email);
@@ -123,7 +129,9 @@ public class SignupService {
                     real ? codeDigest(version, id, email, code, purpose.name()) : null,
                     now);
                 return real
-                    ? new MailMessage(id, purpose, email, code, now.plusSeconds(600))
+                    ? work.register(
+                        member.id(),
+                        new MailMessage(id, purpose, email, code, now.plusSeconds(600)))
                     : null;
               });
       if (message != null) dispatch(message);
@@ -185,17 +193,18 @@ public class SignupService {
     return Base64.getUrlEncoder().withoutPadding().encodeToString(value);
   }
 
-  private void dispatch(MailMessage message) {
+  private void dispatch(MemberWorkRegistry.Work<MailMessage> message) {
     try {
       mailExecutor.execute(
           () -> {
             try {
-              mail.send(message);
+              message.run(mail::send);
             } catch (RuntimeException ignored) {
               /* Delivery never changes the public response. */
             }
           });
     } catch (RejectedExecutionException ignored) {
+      message.discard();
       /* A later request can issue a fresh challenge. */
     }
   }

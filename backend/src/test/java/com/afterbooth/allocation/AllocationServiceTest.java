@@ -35,6 +35,10 @@ class AllocationServiceTest {
     when(locks.allocation(anyLong(), any()))
         .thenAnswer(call -> ((java.util.function.Supplier<?>) call.getArgument(1)).get());
     var access = mock(com.afterbooth.global.security.DomainAccess.class);
+    when(access.actor())
+        .thenReturn(
+            new com.afterbooth.global.security.AuthenticatedMember(
+                1L, java.util.UUID.randomUUID(), 0));
     var finalizer =
         new AllocationFinalizer(
             access,
@@ -59,7 +63,8 @@ class AllocationServiceTest {
         Duration.ofSeconds(5),
         access,
         locks,
-        finalizer);
+        finalizer,
+        new com.afterbooth.global.security.MemberWorkRegistry());
   }
 
   PickupRequest request(long id, Instant now) {
@@ -129,6 +134,7 @@ class AllocationServiceTest {
     item(now);
     when(holds.holdForAgent(any())).thenReturn(held(reservationId, requestId, now));
     List<ChatRequest> captured = new ArrayList<>();
+    List<ChatResponse> syntheticResponses = new ArrayList<>();
     AiGateway ai = mock(AiGateway.class);
     when(ai.chat(any()))
         .thenAnswer(
@@ -141,11 +147,15 @@ class AllocationServiceTest {
                     case 2 -> tool("hold", "holdQuantity", "{\"itemId\":7,\"quantity\":2}");
                     default -> new ChatResponse("임시 확보했어요.", List.of(), "stop", null);
                   };
-              return support.record(invocation.getArgument(0), response);
+              syntheticResponses.add(response);
+              return response;
             });
     assertThat(service(ai, now).run(requestId).reservations())
         .singleElement()
         .satisfies(r -> assertThat(r.id()).isEqualTo(reservationId));
+    if (!replay)
+      for (int index = 0; index < captured.size(); index++)
+        support.record(captured.get(index), syntheticResponses.get(index));
     return captured;
   }
 

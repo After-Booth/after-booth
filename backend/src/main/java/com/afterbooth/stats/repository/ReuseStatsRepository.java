@@ -1,6 +1,7 @@
 package com.afterbooth.stats.repository;
 
 import com.afterbooth.inventory.domain.ItemCategory;
+import java.math.BigInteger;
 import java.util.List;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -15,15 +16,15 @@ public class ReuseStatsRepository {
 
   public List<Quantity> quantities(Long eventId) {
     return jdbc.query(
-        "select i.category,e.id,e.name,e.organization_id,sum(r.handed_over_qty),sum(r.handed_over_qty::bigint*i.width_cm*i.depth_cm*i.height_cm)::bigint from reservation r join item i on i.id=r.item_id join event e on e.id=i.event_id where r.status='HANDED_OVER' and (?::bigint is null or e.id=?) group by i.category,e.id,e.name,e.organization_id order by i.category,e.id",
+        "SELECT q.category,e.id,e.name,e.organization_id,sum(q.quantity),sum(q.cubic_cm) FROM (SELECT i.category,i.event_id,r.handed_over_qty::numeric quantity,r.handed_over_qty::numeric*i.width_cm*i.depth_cm*i.height_cm cubic_cm FROM reservation r JOIN item i ON i.id=r.item_id WHERE r.status='HANDED_OVER' UNION ALL SELECT category,event_id,reused_qty::numeric,reused_volume_cm3 FROM reuse_archive) q JOIN event e ON e.id=q.event_id WHERE (?::bigint IS NULL OR e.id=?) GROUP BY q.category,e.id,e.name,e.organization_id ORDER BY q.category,e.id",
         (row, n) ->
             new Quantity(
                 ItemCategory.valueOf(row.getString(1)),
                 row.getLong(2),
                 row.getString(3),
                 row.getLong(4),
-                row.getLong(5),
-                row.getLong(6)),
+                row.getBigDecimal(5).toBigIntegerExact(),
+                row.getBigDecimal(6).toBigIntegerExact()),
         eventId,
         eventId);
   }
@@ -33,6 +34,6 @@ public class ReuseStatsRepository {
       Long eventId,
       String eventName,
       long organizationId,
-      long quantity,
-      long cubicCm) {}
+      BigInteger quantity,
+      BigInteger cubicCm) {}
 }

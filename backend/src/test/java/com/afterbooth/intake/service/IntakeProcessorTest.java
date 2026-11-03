@@ -33,12 +33,13 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 
 class IntakeProcessorTest {
+  private static final String SYNTHETIC_MARKER = "synthetic-intake-log-marker";
   private final IntakePipeline pipeline = mock(IntakePipeline.class);
   private final IntakeProcessingStore store = mock(IntakeProcessingStore.class);
   private final IntakePhoto photo = new IntakePhoto(new byte[] {1}, "image/png");
   private final com.afterbooth.global.security.AuthenticatedMember actor =
       new com.afterbooth.global.security.AuthenticatedMember(1, java.util.UUID.randomUUID(), 0);
-  private final IntakeProcessor.Submitted event = new IntakeProcessor.Submitted(1L, photo, actor);
+  private final IntakeProcessor.Input event = new IntakeProcessor.Input(1L, photo, actor);
   private final EstimatedLine line =
       new EstimatedLine(
           DraftCategory.DISPLAY_RACK,
@@ -50,7 +51,23 @@ class IntakeProcessorTest {
           Condition.GOOD,
           new BigDecimal("0.95"),
           false);
-  private final IntakeProcessor processor = new IntakeProcessor(pipeline, store, Runnable::run);
+  private final IntakeProcessor processor =
+      new IntakeProcessor(
+          pipeline, store, Runnable::run, new com.afterbooth.global.security.MemberWorkRegistry());
+
+  @Test
+  void withdrawalErasesQueuedPhotoAndPreventsModelCalls() {
+    var work = new com.afterbooth.global.security.MemberWorkRegistry();
+    java.util.List<Runnable> queued = new java.util.ArrayList<>();
+    var guarded = new IntakeProcessor(pipeline, store, queued::add, work);
+    guarded.submitted(guarded.prepare(1L, photo, actor));
+    try (var guard = work.erase(actor.memberId())) {
+      guard.commit();
+      assertThat(photo.bytes()).containsOnly((byte) 0);
+    }
+    queued.forEach(Runnable::run);
+    verifyNoInteractions(pipeline, store);
+  }
 
   @Test
   void commitsSegmentStageBeforeSamAndThenReady() {
@@ -184,8 +201,9 @@ class IntakeProcessorTest {
             store,
             task -> {
               throw new RejectedExecutionException();
-            })
-        .submitted(event);
+            },
+            new com.afterbooth.global.security.MemberWorkRegistry())
+        .submitted(processor.prepare(1L, photo, actor));
     verify(store).fail(eq(1L), anyString(), eq(actor));
     verifyNoInteractions(pipeline);
   }
@@ -210,13 +228,93 @@ class IntakeProcessorTest {
             })
         .when(store)
         .fail(eq(1L), anyString(), eq(actor));
-    new IntakeProcessor(realPipeline, store, Runnable::run).process(event);
+    new IntakeProcessor(
+            realPipeline,
+            store,
+            Runnable::run,
+            new com.afterbooth.global.security.MemberWorkRegistry())
+        .process(event);
     assertThat(draft.status()).isEqualTo(IntakeStatus.FAILED);
     assertThat(draft.stage()).isEqualTo(IntakeStage.ESTIMATE);
     assertThat(draft.failureMessage()).matches(".*[\uac00-\ud7a3].*");
     verify(gateway, times(2)).chat(any());
     verify(gateway, never()).segment(any());
     verify(store, never()).ready(any(), any(), any());
+  }
+
+  @Test
+  void intakeFailuresLogOnlyErrorTypeWithoutSyntheticMessageOrThrowable() {
+    var logger =
+        (ch.qos.logback.classic.Logger) org.slf4j.LoggerFactory.getLogger(IntakeProcessor.class);
+    var captured =
+        new ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent>();
+    captured.start();
+    logger.addAppender(captured);
+    try {
+      new IntakeProcessor(
+              pipeline,
+              store,
+              task -> {
+                throw new RejectedExecutionException(SYNTHETIC_MARKER);
+              },
+              new com.afterbooth.global.security.MemberWorkRegistry())
+          .submitted(processor.prepare(1L, photo, actor));
+      assertOnlyErrorTypeLogged(
+          captured, "Cannot schedule intake 1 errorType=RejectedExecutionException");
+      captured.list.clear();
+
+      when(pipeline.estimate(photo)).thenReturn(List.of(line));
+      when(pipeline.segment(photo, List.of(line)))
+          .thenThrow(new IllegalStateException(SYNTHETIC_MARKER));
+      processor.process(event);
+      assertOnlyErrorTypeLogged(
+          captured, "Intake segmentation failed for 1 errorType=IllegalStateException");
+      captured.list.clear();
+
+      when(pipeline.estimate(photo)).thenThrow(new IllegalStateException(SYNTHETIC_MARKER));
+      processor.process(event);
+      assertOnlyErrorTypeLogged(
+          captured, "Intake processing failed for 1 errorType=IllegalStateException");
+      captured.list.clear();
+
+      doThrow(
+              new com.afterbooth.global.error.BusinessException(
+                  com.afterbooth.global.error.ErrorCode.INTERNAL_ERROR, SYNTHETIC_MARKER))
+          .when(store)
+          .fail(eq(1L), anyString(), eq(actor));
+      processor.process(event);
+      assertOnlyErrorTypeLogged(
+          captured,
+          "Intake processing failed for 1 errorType=IllegalStateException",
+          "Cannot store intake failure for 1 errorType=BusinessException");
+      captured.list.clear();
+
+      doThrow(new IllegalArgumentException(SYNTHETIC_MARKER))
+          .when(store)
+          .fail(eq(1L), anyString(), eq(actor));
+      processor.process(event);
+      assertOnlyErrorTypeLogged(
+          captured,
+          "Intake processing failed for 1 errorType=IllegalStateException",
+          "Cannot store intake failure for 1 errorType=IllegalArgumentException");
+    } finally {
+      logger.detachAppender(captured);
+      captured.stop();
+    }
+  }
+
+  private static void assertOnlyErrorTypeLogged(
+      ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent> captured,
+      String... expected) {
+    assertThat(captured.list.stream().map(event -> event.getFormattedMessage()).toList())
+        .containsExactly(expected);
+    assertThat(
+            captured.list.stream()
+                .noneMatch(
+                    event ->
+                        event.getFormattedMessage().contains(SYNTHETIC_MARKER)
+                            || event.getThrowableProxy() != null))
+        .isTrue();
   }
 
   private IntakeDraft trackFailure() {
