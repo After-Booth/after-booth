@@ -9,7 +9,6 @@ import com.afterbooth.member.dto.ResetPasswordRequest;
 import com.afterbooth.member.service.PasswordService;
 import com.afterbooth.member.service.SignupService;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -48,19 +47,10 @@ class PasswordController {
   private static ResponseEntity<Void> cleared() {
     return ResponseEntity.noContent()
         .header(HttpHeaders.CACHE_CONTROL, "no-store")
-        .header(HttpHeaders.SET_COOKIE, expired(SessionController.REFRESH_COOKIE))
-        .header(HttpHeaders.SET_COOKIE, expired(CsrfSessionService.COOKIE))
+        .header(
+            HttpHeaders.SET_COOKIE,
+            SessionController.cookie(SessionController.REFRESH_COOKIE, "", 0))
+        .header(HttpHeaders.SET_COOKIE, SessionController.cookie(CsrfSessionService.COOKIE, "", 0))
         .build();
-  }
-
-  private static String expired(String name) {
-    return ResponseCookie.from(name, "")
-        .httpOnly(true)
-        .secure(true)
-        .sameSite("Lax")
-        .path("/")
-        .maxAge(0)
-        .build()
-        .toString();
   }
 }

@@ -74,7 +74,7 @@ public class SessionController {
         .body(result.response());
   }
 
-  private static String cookie(String name, String value, long maxAge) {
+  static String cookie(String name, String value, long maxAge) {
     return ResponseCookie.from(name, value)
         .httpOnly(true)
         .secure(true)
