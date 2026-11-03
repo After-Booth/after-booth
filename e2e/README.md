@@ -7,6 +7,31 @@
 
 ## Local HTTPS authentication setup (#70)
 
+### Automated check
+
+`tests/auth.spec.ts` starts the built jar itself over local HTTPS with synthetic
+keys, the local-only Fake mail gateway and `AI_MODE=replay`, then drives the real
+UI: signup, email verification, login, account lookup, own event creation, photo
+intake, session restore after reload, logout, and a second member that can
+neither list nor read the first member's event. Fake codes are read from the
+child process output in memory and are never printed or stored. Chromium pins
+only that run's certificate. Prerequisites: Docker, Java 21, Node.js, a built
+frontend (`npm --prefix frontend run build`) and jar (`cd backend && ./gradlew
+bootJar`), and the disposable database from step 1 below.
+
+```bash
+cd e2e
+npm ci
+npm run install-browsers
+npm run test:auth
+```
+
+This was run once on 2026-11-04 on the developer PC: 2 tests passed. The withdrawal,
+password and two-member allocation/handover flows are covered by component tests
+only, not by this browser run.
+
+### Manual setup
+
 The steps below are a **manual setup proposal and have not been verified as an
 end-to-end run**. They use disposable local data and synthetic authentication
 keys. They require PowerShell 7, Node.js, Java 21 (including `keytool`), and a

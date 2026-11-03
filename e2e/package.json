@@ -6,6 +6,7 @@
   "description": "Playwright E2E for the AfterBooth demo scenario (issue #12), replay mode only",
   "scripts": {
     "test": "playwright test",
+    "test:auth": "playwright test -c playwright.auth.config.ts",
     "install-browsers": "playwright install --only-shell chromium"
   },
   "devDependencies": {
