@@ -38,6 +38,18 @@ public class AuthRateLimiter {
     return consume("signup:issue:email", email, 5, true).allowed();
   }
 
+  public boolean allowPasswordResetIssuance(String email) {
+    return consume("password-reset:issue:email", email, 5, true).allowed();
+  }
+
+  public void checkPasswordChangeWithinTransaction(long memberId) {
+    failureWindow("password-change", Long.toString(memberId), false, participating);
+  }
+
+  public void passwordChangeFailedWithinTransaction(long memberId) {
+    failureWindow("password-change", Long.toString(memberId), true, participating);
+  }
+
   public void checkIp(String scope, String ip) {
     Decision decision = consume(scope + ":ip", ip, 20, false);
     if (!decision.allowed()) throw new RateLimitedException(decision.retryAfter());
@@ -60,6 +72,11 @@ public class AuthRateLimiter {
   }
 
   private void loginWindow(String email, boolean failure, TransactionTemplate transaction) {
+    failureWindow("login", email, failure, transaction);
+  }
+
+  private void failureWindow(
+      String scope, String subject, boolean failure, TransactionTemplate transaction) {
     try {
       Long retry =
           transaction.execute(
@@ -70,7 +87,7 @@ public class AuthRateLimiter {
                     keys.versions(before).stream()
                         .map(
                             version ->
-                                new Key(version, keys.digest(version, "login:failure", email)))
+                                new Key(version, keys.digest(version, scope + ":failure", subject)))
                         .toList();
                 candidates.stream()
                     .map(key -> ByteBuffer.wrap(key.digest()).getLong())
@@ -88,8 +105,9 @@ public class AuthRateLimiter {
                 for (Key key : aliases) {
                   Timestamp blocked =
                       jdbc.queryForObject(
-                          "select max(expires_at) from auth_rate_limit where scope='login:block' and subject_hmac=? and key_version=? and expires_at>?",
+                          "select max(expires_at) from auth_rate_limit where scope=? and subject_hmac=? and key_version=? and expires_at>?",
                           Timestamp.class,
+                          scope + ":block",
                           key.digest(),
                           key.version(),
                           Timestamp.from(now));
@@ -105,8 +123,9 @@ public class AuthRateLimiter {
                       Math.max(
                           count,
                           jdbc.queryForObject(
-                              "select coalesce(sum(count),0) from auth_rate_limit where scope='login:failure' and subject_hmac=? and key_version=? and window_start>?",
+                              "select coalesce(sum(count),0) from auth_rate_limit where scope=? and subject_hmac=? and key_version=? and window_start>?",
                               Long.class,
+                              scope + ":failure",
                               key.digest(),
                               key.version(),
                               Timestamp.from(now.minusSeconds(900))));
@@ -114,14 +133,16 @@ public class AuthRateLimiter {
                 if (wait > 0 || !failure) return wait;
                 for (Key key : aliases) {
                   jdbc.update(
-                      "insert into auth_rate_limit(scope,subject_hmac,key_version,window_start,count,expires_at) values('login:failure',?,?,?,1,?) on conflict(scope,subject_hmac,key_version,window_start) do update set count=auth_rate_limit.count+1",
+                      "insert into auth_rate_limit(scope,subject_hmac,key_version,window_start,count,expires_at) values(?,?,?,?,1,?) on conflict(scope,subject_hmac,key_version,window_start) do update set count=auth_rate_limit.count+1",
+                      scope + ":failure",
                       key.digest(),
                       key.version(),
                       Timestamp.from(now),
                       Timestamp.from(now.plusSeconds(900)));
                   if (count + 1 >= 5)
                     jdbc.update(
-                        "insert into auth_rate_limit(scope,subject_hmac,key_version,window_start,count,expires_at) values('login:block',?,?,?,1,?) on conflict do nothing",
+                        "insert into auth_rate_limit(scope,subject_hmac,key_version,window_start,count,expires_at) values(?,?,?,?,1,?) on conflict do nothing",
+                        scope + ":block",
                         key.digest(),
                         key.version(),
                         Timestamp.from(now),

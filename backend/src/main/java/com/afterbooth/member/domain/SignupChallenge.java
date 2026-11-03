@@ -14,10 +14,32 @@ public record SignupChallenge(
     Instant expiresAt,
     Instant consumedAt) {
   public boolean accepts(Member member, byte[] expectedEmailKey, byte[] expectedCode, Instant now) {
+    return accepts(
+        member,
+        expectedEmailKey,
+        expectedCode,
+        now,
+        "SIGNUP_VERIFY",
+        MemberState.PENDING_VERIFICATION);
+  }
+
+  public boolean acceptsPasswordReset(
+      Member member, byte[] expectedEmailKey, byte[] expectedCode, Instant now) {
+    return accepts(
+        member, expectedEmailKey, expectedCode, now, "PASSWORD_RESET", MemberState.ACTIVE);
+  }
+
+  private boolean accepts(
+      Member member,
+      byte[] expectedEmailKey,
+      byte[] expectedCode,
+      Instant now,
+      String requiredPurpose,
+      MemberState requiredState) {
     return member != null
-        && member.acceptsSignupVerification()
+        && member.state() == requiredState
         && member.id().equals(memberId)
-        && "SIGNUP_VERIFY".equals(purpose)
+        && requiredPurpose.equals(purpose)
         && consumedAt == null
         && now.isBefore(expiresAt)
         && attempts < 5

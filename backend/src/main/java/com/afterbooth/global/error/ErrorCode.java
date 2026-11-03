@@ -24,6 +24,7 @@ public enum ErrorCode {
   RATE_LIMITED(HttpStatus.TOO_MANY_REQUESTS, "잠시 후 다시 시도해 주세요."),
   AUTH_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "인증 처리를 완료하지 못했어요. 잠시 후 다시 시도해 주세요."),
   INVALID_AUTH_CHALLENGE(HttpStatus.BAD_REQUEST, "인증 정보를 확인해 주세요."),
+  INVALID_CURRENT_PASSWORD(HttpStatus.FORBIDDEN, "현재 비밀번호를 확인해 주세요."),
   INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "잠시 후 다시 시도해 주세요.");
 
   private final HttpStatus status;
