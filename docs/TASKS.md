@@ -430,3 +430,35 @@ Regression evidence: the new foreign-database actor test failed before the helpe
 ```
 
 The parent inspected the actual diff and failure/success summaries. Full Linux CI is re-run by the PR push; local checks do not claim that result in advance. Existing exclusions for live AI, real mail, UI and deployment remain unchanged.
+
+## Issue #68 — Password change and reset (2026-11-03)
+
+Implementation base: fetched origin/main 0539cdb; isolated branch feat/68-password-management and worktree .claude/worktrees/68-password-management. Issue #67 proceeds separately from the same base. D-082 records reuse of the existing authentication foundations.
+
+- Implemented authenticated password change and email-code reset, including strict input fields, exact-Origin/CSRF/Bearer checks, operation-specific IP limits and durable current-password failure limits.
+- Reused existing challenge issuance, Fake/Resend adapters, Argon2id encoder, member locking, session/version revocation and CSRF lifecycle. Credentials are never stored in domain idempotency responses; identity and organization ownership remain unchanged.
+- PasswordIntegrationTest: 17 PostgreSQL tests passed after correcting synthetic expiry/rate-window fixtures. Includes partial-failure rollback, stale credentials, actual service races and observed member-lock waits. Withdrawal is a SQL protocol simulation, not an execution of #69.
+- LocalFakePasswordHttpsTest: five actual loopback HTTPS/PostgreSQL tests passed with synthetic data and privately captured Fake codes. SessionIntegrationTest (nine), ArchitectureTest (seven), MailGatewayTest (six) and ResendMailGatewayTest (eight) also passed in the first affected gate. Local Fake and loopback Resend stubs do not prove real mailbox ownership or delivery.
+- Fresh independent static review found R1 (unstable exact-lifetime expiry fixtures) and R2 (unobserved lock waits); both were corrected and independently re-reviewed with no blocking findings. No Claude reviewer or companion-plugin execution is claimed.
+
+Verification ran from this worktree's backend/ in PowerShell, AI_MODE=replay. The first combined gate ran 69 cases: 34 passed and 35 failed due to one expiry fixture, Mockito dynamic attachment failure and a Docker engine failure. A subsequent daemon/worker run hit Windows native allocation/page-file exhaustion; it is not a test pass. Reduced-memory single-class execution then passed all 17 PasswordIntegrationTest cases. The temporary init script is outside the repository and enables Mockito's startup Java agent, test heap 256 MiB, Serial GC, two processors, one test class per worker and a one-entry Spring test-context cache; daemon heap is 192 MiB. The repository's build configuration is unchanged.
+
+Commands completed:
+
+```powershell
+.\gradlew.bat spotlessApply compileJava compileTestJava spotlessCheck test --tests 'com.afterbooth.PasswordIntegrationTest' --tests 'com.afterbooth.LocalFakePasswordHttpsTest' --tests 'com.afterbooth.SessionIntegrationTest' --tests 'com.afterbooth.SignupIntegrationTest' --tests 'com.afterbooth.global.security.AuthRateLimiterIntegrationTest' --tests 'com.afterbooth.member.mail.MailGatewayTest' --tests 'com.afterbooth.member.mail.ResendMailGatewayTest' --tests 'com.afterbooth.ArchitectureTest' --no-daemon --max-workers=1
+# Compilation/formatting passed; 34/69 passed, failures described above.
+.\gradlew.bat '-Dorg.gradle.jvmargs=-Xms32m -Xmx192m -XX:MaxMetaspaceSize=192m -XX:ActiveProcessorCount=2 -XX:TieredStopAtLevel=1 -XX:ReservedCodeCacheSize=48m -XX:+UseSerialGC' --init-script C:\Users\ehddu\AppData\Local\Temp\afterbooth-agent-tests.gradle spotlessApply compileJava compileTestJava spotlessCheck test --tests 'com.afterbooth.PasswordIntegrationTest' --no-daemon --max-workers=1
+# BUILD SUCCESSFUL; all 17 tests passed, zero failures/errors/skips.
+```
+
+Not verified: full backend suite, frontend/browser integration, actual Resend sending/receipt, production/provider settings, actual #69 withdrawal implementation, deployment and live AI. No remote writes or real delivery occurred. Foundation regressions and final changed-file checks are recorded below when complete.
+
+Final foundation regression gate:
+
+```powershell
+.\gradlew.bat '-Dorg.gradle.jvmargs=-Xms32m -Xmx192m -XX:MaxMetaspaceSize=192m -XX:ActiveProcessorCount=2 -XX:TieredStopAtLevel=1 -XX:ReservedCodeCacheSize=48m -XX:+UseSerialGC' --init-script C:\Users\ehddu\AppData\Local\Temp\afterbooth-agent-tests.gradle test --tests 'com.afterbooth.SignupIntegrationTest' --tests 'com.afterbooth.global.security.AuthRateLimiterIntegrationTest' --no-daemon --max-workers=1
+# BUILD SUCCESSFUL; 16 signup and five shared-limit PostgreSQL tests passed, no failures/errors/skips.
+```
+
+Across the successful affected runs, 73 distinct cases passed: 17 password, five password HTTPS, nine session, 16 signup, five shared-limit, six Fake/mail configuration, eight loopback Resend and seven architecture cases. The parent inspected actual diffs and XML counts. Changed-file secret scanning and git diff --check passed. No contract or frontend change required regeneration; no full-suite pass is claimed.

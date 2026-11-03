@@ -81,8 +81,19 @@ public class SignupService {
   }
 
   public ChallengeIssued requestVerification(String inputEmail) {
+    return requestChallenge(inputEmail, MailMessage.Purpose.SIGNUP_VERIFY);
+  }
+
+  public ChallengeIssued requestPasswordReset(String inputEmail) {
+    return requestChallenge(inputEmail, MailMessage.Purpose.PASSWORD_RESET);
+  }
+
+  private ChallengeIssued requestChallenge(String inputEmail, MailMessage.Purpose purpose) {
     String email = SignupCredentials.normalizeEmail(inputEmail);
-    boolean allowed = limits.allowVerificationIssuance(email);
+    boolean allowed =
+        purpose == MailMessage.Purpose.SIGNUP_VERIFY
+            ? limits.allowVerificationIssuance(email)
+            : limits.allowPasswordResetIssuance(email);
     String id = identifier();
     String code = String.format(Locale.ROOT, "%06d", random.nextInt(1_000_000));
     String version = keys.currentVersion();
@@ -93,20 +104,26 @@ public class SignupService {
                 members.lockEmail(email);
                 Member member = members.findForUpdate(email);
                 Instant now = members.databaseNow();
-                boolean real = allowed && member != null && member.acceptsSignupVerification();
+                boolean real =
+                    allowed
+                        && member != null
+                        && (purpose == MailMessage.Purpose.SIGNUP_VERIFY
+                            ? member.acceptsSignupVerification()
+                            : member.state() == com.afterbooth.member.domain.MemberState.ACTIVE);
                 if (allowed)
                   for (String old : keys.versions(now))
-                    members.invalidateChallenges(old, emailKey(old, email), now);
+                    members.invalidateChallenges(
+                        old, emailKey(old, email, purpose.name()), purpose.name(), now);
                 members.insertChallenge(
                     id,
                     real ? member.id() : null,
-                    emailKey(version, email),
+                    emailKey(version, email, purpose.name()),
                     version,
-                    real ? codeDigest(version, id, email, code) : null,
+                    purpose.name(),
+                    real ? codeDigest(version, id, email, code, purpose.name()) : null,
                     now);
                 return real
-                    ? new MailMessage(
-                        id, MailMessage.Purpose.SIGNUP_VERIFY, email, code, now.plusSeconds(600))
+                    ? new MailMessage(id, purpose, email, code, now.plusSeconds(600))
                     : null;
               });
       if (message != null) dispatch(message);
@@ -147,11 +164,19 @@ public class SignupService {
   }
 
   private byte[] emailKey(String version, String email) {
-    return keys.digest(version, "challenge-email:" + PURPOSE, email);
+    return emailKey(version, email, PURPOSE);
+  }
+
+  private byte[] emailKey(String version, String email, String purpose) {
+    return keys.digest(version, "challenge-email:" + purpose, email);
   }
 
   private byte[] codeDigest(String version, String id, String email, String code) {
-    return keys.digest(version, "challenge-code", id + "\0" + PURPOSE + "\0" + email + "\0" + code);
+    return codeDigest(version, id, email, code, PURPOSE);
+  }
+
+  private byte[] codeDigest(String version, String id, String email, String code, String purpose) {
+    return keys.digest(version, "challenge-code", id + "\0" + purpose + "\0" + email + "\0" + code);
   }
 
   private String identifier() {

@@ -79,24 +79,49 @@ public class MemberRepository {
   }
 
   public void invalidateChallenges(String version, byte[] emailKey, Instant now) {
+    invalidateChallenges(version, emailKey, "SIGNUP_VERIFY", now);
+  }
+
+  public void invalidateChallenges(String version, byte[] emailKey, String purpose, Instant now) {
     jdbc.update(
-        "UPDATE auth_challenge SET consumed_at=? WHERE key_version=? AND email_key=? AND purpose='SIGNUP_VERIFY' AND consumed_at IS NULL",
+        "UPDATE auth_challenge SET consumed_at=? WHERE key_version=? AND email_key=? AND purpose=? AND consumed_at IS NULL",
         Timestamp.from(now),
         version,
-        emailKey);
+        emailKey,
+        purpose);
   }
 
   public void insertChallenge(
       String id, Long memberId, byte[] emailKey, String version, byte[] codeHmac, Instant now) {
+    insertChallenge(id, memberId, emailKey, version, "SIGNUP_VERIFY", codeHmac, now);
+  }
+
+  public void insertChallenge(
+      String id,
+      Long memberId,
+      byte[] emailKey,
+      String version,
+      String purpose,
+      byte[] codeHmac,
+      Instant now) {
     jdbc.update(
-        "INSERT INTO auth_challenge(id,member_id,email_key,key_version,purpose,code_hmac,attempts,created_at,expires_at) VALUES (?,?,?,?,'SIGNUP_VERIFY',?,0,?,?)",
+        "INSERT INTO auth_challenge(id,member_id,email_key,key_version,purpose,code_hmac,attempts,created_at,expires_at) VALUES (?,?,?,?,?,?,0,?,?)",
         id,
         memberId,
         emailKey,
         version,
+        purpose,
         codeHmac,
         Timestamp.from(now),
         Timestamp.from(now.plusSeconds(600)));
+  }
+
+  public void replacePassword(long memberId, String hash, Instant now) {
+    jdbc.update("UPDATE member SET password_hash=? WHERE id=?", hash, memberId);
+    jdbc.update(
+        "UPDATE auth_challenge SET consumed_at=? WHERE member_id=? AND purpose='PASSWORD_RESET' AND consumed_at IS NULL",
+        Timestamp.from(now),
+        memberId);
   }
 
   public SignupChallenge challengeForUpdate(String id) {

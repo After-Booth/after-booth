@@ -49,10 +49,24 @@ class AuthSecurityConfiguration {
       PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/auth/logout");
   private static final RequestMatcher LOGOUT_ALL =
       PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/auth/logout-all");
+  private static final RequestMatcher RESET_REQUEST =
+      PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/auth/password-resets/request");
+  private static final RequestMatcher RESET_CONFIRM =
+      PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/auth/password-resets/confirm");
+  private static final RequestMatcher PASSWORD_CHANGE =
+      PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/members/me/password");
   private static final RequestMatcher SIGNUP_REQUESTS =
       new OrRequestMatcher(SIGNUP.stream().map(SignupEndpoint::matcher).toList());
   private static final RequestMatcher AUTH_POSTS =
-      new OrRequestMatcher(SIGNUP_REQUESTS, LOGIN, REFRESH, LOGOUT, LOGOUT_ALL);
+      new OrRequestMatcher(
+          SIGNUP_REQUESTS,
+          LOGIN,
+          REFRESH,
+          LOGOUT,
+          LOGOUT_ALL,
+          RESET_REQUEST,
+          RESET_CONFIRM,
+          PASSWORD_CHANGE);
   private static final RequestMatcher AUTH_RESPONSES =
       new OrRequestMatcher(
           PathPatternRequestMatcher.pathPattern("/api/auth/**"),
@@ -61,6 +75,7 @@ class AuthSecurityConfiguration {
   private static final RequestMatcher BEARER_REQUESTS =
       new OrRequestMatcher(
           LOGOUT_ALL,
+          PASSWORD_CHANGE,
           PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/api/members/me"),
           PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/events"),
           PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/api/organizations"),
@@ -122,6 +137,12 @@ class AuthSecurityConfiguration {
                           .orElse(null);
                   if (endpoint != null) limiter.checkIp(endpoint.scope(), request.getRemoteAddr());
                   if (LOGIN.matches(request)) limiter.checkIp("login", request.getRemoteAddr());
+                  if (RESET_REQUEST.matches(request))
+                    limiter.checkIp("password-reset:issue", request.getRemoteAddr());
+                  if (RESET_CONFIRM.matches(request))
+                    limiter.checkIp("password-reset:confirm", request.getRemoteAddr());
+                  if (PASSWORD_CHANGE.matches(request))
+                    limiter.checkIp("password-change", request.getRemoteAddr());
                   if (AUTH_POSTS.matches(request)) {
                     String origin = request.getHeader("Origin");
                     if (!properties.validOrigin())
@@ -160,7 +181,8 @@ class AuthSecurityConfiguration {
             auth ->
                 auth.requestMatchers(HttpMethod.GET, "/api/auth/csrf")
                     .permitAll()
-                    .requestMatchers(SIGNUP_REQUESTS, LOGIN, REFRESH, LOGOUT)
+                    .requestMatchers(
+                        SIGNUP_REQUESTS, LOGIN, REFRESH, LOGOUT, RESET_REQUEST, RESET_CONFIRM)
                     .permitAll()
                     .requestMatchers(
                         HttpMethod.GET,
@@ -200,7 +222,7 @@ class AuthSecurityConfiguration {
                         "/api/reservations/{id}/handover",
                         "/api/reservations/{id}/handover/resolve")
                     .authenticated()
-                    .requestMatchers(LOGOUT_ALL)
+                    .requestMatchers(LOGOUT_ALL, PASSWORD_CHANGE)
                     .authenticated()
                     .anyRequest()
                     .denyAll())
