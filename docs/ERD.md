@@ -143,9 +143,9 @@ erDiagram
 - Version with a timestamp so parallel branches never collide: `V202610311200__create_core_tables.sql` (`V` + `yyyyMMddHHmm`).
 - #3 creates every table above in one migration. Later changes add new migrations; merged migrations are never edited.
 
-## Member authentication design extension (#63, not applied)
+## Member authentication schema target (#63 design, #65 implementation)
 
-This is the **new target schema** for implementing D-069–D-075 and [Member authentication design](AUTH_DESIGN.md). The diagram above and existing migration describe the current implementation. This task adds or changes no SQL or entities. One follow-up member-schema work unit will provide the new migration and constraints together.
+This is the **authentication schema target** from D-069–D-075 and [Member authentication design](AUTH_DESIGN.md). #65 implements this additive schema in a new Flyway migration (D-076), preserving the original core migration and existing rows. Schema availability does not implement later login/session/withdrawal/domain-authorization orchestration. Current verification evidence belongs in TASKS; the original #63 design did not apply SQL.
 
 ```mermaid
 erDiagram

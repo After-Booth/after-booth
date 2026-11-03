@@ -20,7 +20,7 @@ info:
     - Errors use the `Error` schema. `message` is Korean and safe to show to users. Any operation may also return
       500 `INTERNAL_ERROR`, and 405/415 `UNSUPPORTED_REQUEST` for a wrong method or content type (for example an
       audio format Voice Transcribe does not accept).
-    - Version 0.3.0 is the target authentication contract for a single rollout after hackathon submission; distinguish it from the current runtime implementation.
+    - Version 0.3.0 is the target authentication contract. Issue #65 implements protected signup and common security/mail foundations first; #66 reuses them for login and sessions. Existing-domain member authorization remains subsequent work; distinguish target permissions from the current runtime implementation.
       Do not provide a configuration switch that disables authentication. Every API requires an ACTIVE member except getHealth and explicitly public authentication operations.
     - Authentication APIs, withdrawMember, and changePassword are exempt from Idempotency-Key. Never store requests or responses containing tokens, verification codes, or passwords in idempotency_record. Existing rules apply to other domain writes.
     - Before replaying a domain idempotency response, authenticate the member and check current authorization on the original resource. Scope keys by the server-derived member ID and record related_organization_ids for all givers and receivers represented in the response. Do not replay withdrawn or deleted responses.
@@ -148,12 +148,15 @@ paths:
         - auth
       summary: Request a registration verification code
       description: >-
-        Call the Resend API on the server. Per email and purpose: a 60-second issuance interval and 5 requests per
+        Use the shared server mail gateway: explicit local Fake opt-in for simulation or explicit deployment Resend
+        opt-in with external credentials; default delivery is disabled. Never automatically fall back to Fake.
+        Local Fake may display only purpose/code in a private console; never in API responses or persistent logs.
+        Per email and purpose: a 60-second issuance interval and 5 requests per
         hour; per IP: 20 per hour. Return the same 202 and an equivalent random challengeId regardless of account
         existence, state, or email limit. Missing or already verified accounts and exceeded email limits receive
         a dummy challengeId without sending mail. Only IP limits return 429. Six-digit codes expire after 10 minutes
         and allow at most 5 verification attempts. A new request invalidates the previous code for the same purpose.
-        Never log mail bodies, codes, or recipients.
+        Never log mail bodies or recipients. The private local Fake purpose/code exception does not prove mailbox ownership.
       security: []
       responses:
         '503':

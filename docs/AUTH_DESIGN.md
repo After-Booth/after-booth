@@ -2,13 +2,13 @@
 
 ## Status and scope
 
-This is a **design for subsequent implementation**, reflecting the user's answers on 2026-11-03. It does not describe implemented runtime behavior or the current database state. The base is `main` `5e62f13`; the working branch is `docs/63-member-auth-design`.
+This document defines the target authentication design and the current #65/#66 implementation boundary. Historical #63 design and verification records below describe its original base `5e62f13` and branch `docs/63-member-auth-design`; they are not #65 runtime evidence. #65 starts from `origin/main` `125d37b`.
 
-- Introduce the authentication runtime after the hackathon submission. Before submission, change only this design and contract; preserve the current demo and recorded fixtures (D-069).
+- D-069 records the historical #63 design-only schedule. The user explicitly authorizes #65 implementation now (D-076), preserving the existing demo and recorded fixtures. Historical verification records below remain evidence for #63 only.
 - The flow is email/password registration → signup email verification → login. Email-based login is not introduced. Password reset emails serve a separate purpose.
 - The user selected “delete, 30 days, 30 days”: allow registration with the same email after 30 days, use email verification for signup, and use the Resend API for delivery. Earlier explanations of terms and a lack of response were not approval; the one-year and permanent-retention recommendations were not adopted (D-070).
-- This request covers local documentation, the contract, and verification. The user subsequently authorized local commits after checking for sensitive data and then requested one combined local commit including the missing password-change specification. Do not push, create a PR, close the issue, write or apply migrations, or send actual emails.
-- OpenAPI 0.3.0 is the target contract. The current server and screens do not implement authentication. Successful generation is not evidence of successful runtime authentication.
+- Historical #63 authorization covered design verification and one combined local commit including password change; its migration restriction applied only to that task. Current #65 permits implementation, disposable-test migration and local commits, excluding remote writes and actual mail.
+- OpenAPI 0.3.0 is the target contract. #65 covers signup/common foundations only; login, sessions, existing-domain member authorization and screens remain later work. Successful client generation alone is not runtime evidence.
 
 ## Members and email
 
@@ -117,7 +117,7 @@ Login failures return the same 401 `UNAUTHENTICATED` regardless of email existen
 
 - Assume same-origin HTTPS deployment. `__Host-afterbooth-refresh`: `HttpOnly; Secure; SameSite=Lax; Path=/`, no Domain, Max-Age no greater than the family's remaining lifetime (maximum 604800 seconds). Delete with the same name, Path, and attributes and Max-Age=0. Authentication integration tests use HTTPS even on localhost.
 - `getCsrfToken` creates a random 256-bit synchronizer token and server-side `csrf_session`. `__Host-afterbooth-csrf-session` is also HttpOnly, Secure, SameSite=Lax, Path=/, maximum one hour. Send the JSON csrfToken from memory as `X-CSRF-Token`. Do not put login or mail-sending side effects on GET.
-- **Every authentication POST, changePassword POST, and member-withdrawal DELETE** validates the CSRF token and an exact configured origin match, even before login. Reject missing Origin too. Cookie security must not rely solely on SameSite. Associate CSRF state with the member on successful login/refresh and reissue it when login identity changes.
+- **Every authentication POST, changePassword POST, and member-withdrawal DELETE** validates the CSRF token and an exact configured origin match, even before login. Signup endpoint selection, authorization, CSRF and per-operation IP scope selection share parsed-path matchers, so MVC-equivalent encoded prefixes or letters cannot skip protection, split quotas or omit no-store (D-078). Reject missing Origin too. Cookie security must not rely solely on SameSite. Associate CSRF state with the member on successful login/refresh and reissue it when login identity changes.
 - Domain writes authenticate with Bearer only; never accept the refresh cookie as a substitute. Domain APIs do not require a CSRF header; CORS allows only the explicitly configured same origin. Do not add wildcard CORS to expose authentication APIs to external origins.
 - Clear browser token memory after withdrawal, logout, password change, or reset. If a CSRF session becomes invalid, request `getCsrfToken` again before the next authentication action. Authentication APIs, changePassword and withdrawMember do not require the domain `Idempotency-Key` and do not use existing response caching/replay.
 
@@ -141,14 +141,14 @@ Login failures return the same 401 `UNAUTHENTICATED` regardless of email existen
 | Code | Six CSPRNG-generated digits, valid for 10 minutes after issuance, at most five verification attempts per challenge, one successful use. Separate `SIGNUP_VERIFY` and `PASSWORD_RESET` purposes |
 | Code storage | HMAC challengeId+purpose+normalized email+code using a server secret. Never store the plaintext code in the DB. Validate email, challengeId, purpose, and expiry together. Signup confirmation also requires password and sets it as the final password on success. Never activate the old unverified account password, preventing pre-registration attacks. The frontend passes the chosen password only through verification-screen memory and clears it immediately afterward. Signup confirmation cannot change an ACTIVE account's password. Accumulate failed attempts transactionally. Confirmation does not use the issuance-specific 60-second interval; apply 20 attempts/IP/hour and five attempts/challenge |
 | Issuance | Per purpose/email: 60-second interval and five/hour; IP: 20/hour. Use a rate-limit store shared across instances. Email limits return the same 202 with a dummy challenge; only IP limits return 429 + Retry-After. Apply the same limits to nonexistent accounts |
-| Registration | registerMember creates an unverified member and returns only a generic 202. The user then calls requestEmailVerification to receive a challengeId and email. Registration itself does not send a duplicate email |
+| Registration | Five requests/email/hour and 20/IP/hour, including real/dummy subjects. Email limits retain generic 202; IP limits return 429 with Retry-After. No issuance interval. registerMember creates an unverified member and returns only a generic 202. The user then calls requestEmailVerification to receive a challengeId and email. Registration itself does not send a duplicate email |
 | Re-request | When issuance is allowed, a new challengeId immediately invalidates the previous challenge. For nonexistent, active, or withdrawn accounts, return only an identically shaped dummy challengeId without signup mail |
 | Signup success | verifyEmail atomically sets the hash from the password submitted with email-code proof, changes PENDING_VERIFICATION to ACTIVE, and returns 204. It issues no session; the user logs in with the password |
 | Password reset | Send only for ACTIVE accounts; externally return the same 202+challengeId. Submit email, challengeId, code, and new password to resetPassword. Success is 204, revokes all sessions and invalidates every outstanding PASSWORD_RESET challenge and member-linked CSRF session. This is not repeated signup email verification at login |
 | Request retry | Recover a lost mail-code request response by requesting a new challenge after the issuance interval. Retrying confirmation after consumption returns 400 INVALID_AUTH_CHALLENGE. Never idempotently cache raw token responses |
 | Expiry cleanup | Used, expired, and dummy challenges cannot be used; delete no later than one hour after expiry. Delete email/IP rate-limit keys within the limit window + one hour. Delete unverified members after 24 hours |
 
-Delivery uses **server-side Resend `POST https://api.resend.com/emails`**. Subsequent implementation defines `MailGateway`/`ResendMailGateway` using the existing Java RestClient; this work adds no SDK dependency. Tests use FakeMailGateway and loopback HTTP without real external sending (D-073).
+The deployment adapter uses **server-side Resend `POST https://api.resend.com/emails`** through the existing Java RestClient, with no mail SDK. #65 also provides explicitly opted-in local Fake delivery; selection and its narrow code-display exception are defined below (D-077). Tests use synthetic data and loopback HTTP without real sending.
 
 - Supply the API key and verified sender domain/address through deployment secrets; never pass them to the frontend. Never put real keys or user addresses in docs or fixtures.
 - Attach a challenge-ID-based `Idempotency-Key` to Resend requests. Retries of the same send use the same key and body. The provider's deduplication retention is 24 hours, not the code lifetime.
@@ -160,19 +160,27 @@ Official references (read 2026-11-03): [Resend send-email API](https://resend.co
 
 ## Shared boundaries for subsequent implementation
 
-These are **subsequent work units**, not invented issue numbers. One work unit defines shared schemas/configuration; other work must not recreate them concurrently (D-074).
+The latest issue split supersedes the original D-074 assignment; preserve that decision as history (D-076).
 
-| Work unit and prerequisites | Owned files / responsibilities | Contract reused by other work |
+| Work unit | Responsibilities | Reuse boundary |
 |---|---|---|
-| Member, ownership, and retention foundation; first | New member domain/repository; one shared Argon2id password encoder implemented in #65; Flyway migration for all new authentication tables/columns; unassigned existing data; deletion/aggregate cleanup | Final ERD tables and fields. Never edit existing migrations. #66 and password-management flows reuse #65's encoder |
-| Shared security foundation; after schema and encoder | `com.afterbooth.global.security`, a single SecurityFilterChain configuration, JWT signer/verifier, session service, CSRF/rate limits implemented in #66 | Reuse #65's password encoder. Domain/signup work must not redefine active-member/session checks, principal, lock order, or encoder |
-| Shared mail foundation; after schema/security contract | MailGateway, Resend adapter, templates, and sending configuration under `com.afterbooth.member.mail` | Signup/reset use the same gateway. Consolidate configuration changes in one file; a human supplies real mail keys in deployment settings |
-| Signup/login/password-change/reset/withdrawal APIs | Member controller/service and policies, invoking the shared foundations | New auth/member operationIds and createEvent. Never recreate member schema, SecurityFilterChain, or mail gateway |
-| Existing domain authorization | Principal propagation, organization checks, final-write revalidation in inventory/intake/request/allocation/handover/stats | Existing operationIds and ownership matrix. Agent tools and idempotent paths use the same authorization |
-| Frontend integration; after contract/shared foundation | Authentication screens, in-memory auth state, CSRF, refresh single-flight, existing API headers | Do not edit generated clients. Shared `src/api/http.ts` changes belong only to this work unit |
-| Integration verification | DB/HTTP/browser checks using synthetic data without personal information | Withdrawal versus HOLD/handover races, immediate JWT rejection, 30-day boundaries, refresh reuse, code attempts, authorization bypasses, inventory/statistics invariants after deletion |
+| #65 member foundation; first | Eight authentication tables/four extensions, member model/repository, single Argon2id encoder, signup/challenges, private organization and pending cleanup | #66 reuses schema/model/encoder; no session or withdrawal orchestration |
+| #65 common security | Single SecurityFilterChain, getCsrfToken, anonymous synchronizer CSRF, exact-Origin, durable PostgreSQL request limits and cleanup | #66 extends the same chain/services/store for JWT/member/session checks, authenticated CSRF and login limits |
+| #65 mail | One MailGateway, local-only explicit Fake and deployment-only explicit Resend; default disabled | Later password-reset orchestration reuses interface; it is excluded here |
+| #66; after #65 | Login/JWT/refresh/reuse/logout, member locking, session cleanup and authenticated CSRF | Complete final signup → verification → login integration here |
+| Later domain/frontend work | Ownership/principal/final-write checks, authenticated idempotency and screens | Remain unimplemented under #65 |
 
-Shared foundations require security dependencies and schema changes; explain reasons and impacts before actual application. This work adds no new dependencies, runtime code, or SQL.
+#65 transition boundary: explicitly preserve main's existing domain routes and regression behavior while protecting anonymous signup and CSRF endpoints. Deny unimplemented authentication routes. This incomplete rollout does not implement existing-domain member authorization and must not be represented as completed authentication. No global permitAll, wildcard Origin or security-disable switch. #66 extends this same chain before later domain authorization applies the target permission matrix.
+
+Request counters commit independently of rejected business mutations. PostgreSQL atomic increments and still-valid previous HMAC versions preserve live-window quotas across instances and rotation. Write each request to every valid key alias under sorted advisory locks and enforce the maximum alias count, so old-current and new-current instances share quotas in either traffic direction. Store issuance intervals under the same aliases. Retain the old key throughout the rolling overlap and until old instances are drained and their latest live hourly/60-second windows expire; all concurrently serving versions must share a valid overlap key. Recheck expiry using database time after lock acquisition. Registration/confirmation never inherit the issuance-only 60-second interval. Cleanup runs every minute; expired records are unusable immediately and CSRF/rate/challenge physical deletion completes within one hour after expiry. Pending members expire after 24 hours; preserve referenced organizations/domain data.
+
+Add Boot-managed Spring Security modules for the single chain/encoder and explicitly versioned Bouncy Castle 1.84 for Argon2id; no mail SDK. Additive migration preserves existing rows and NULL ownership, tested only against disposable PostgreSQL. Actual email, deployment and provider settings remain unverified.
+
+### Environment-specific mail selection (#65)
+
+Default delivery and Fake output are disabled. Local Fake requires an explicit local profile plus a separate opt-in; forbid prod/production and simultaneous Fake/Resend. Resend requires an explicit deployment profile/opt-in and external sender/key settings. Missing keys and provider failures never select Fake automatically. Both adapters implement one MailGateway; signup logic stays shared.
+
+The user permits purpose/code output only from local Fake before expiry in a private personal console. Never print recipient, password, token, challenge ID, mail body or Resend codes. No public code retrieval, plaintext file/DB/outbox or extra memory mailbox. Do not forward this console to shared or file-collected logs. Capture synthetic output in tests. Fake success simulates the flow and does not prove mailbox ownership.
 
 ## Identifiers for subsequent references
 
@@ -250,3 +258,45 @@ Final correction checks on 2026-11-03:
 | frontend/ `npm run format:check` | Passed |
 
 The new password-change and related reset-invalidation behavior remain specifications only. No authentication runtime, backend source, SQL, real DB, mail delivery or external AI execution is included. Fresh independent read-only review found no blocking issues. Its decision-table formatting and final operation-count suggestions were corrected. Final diff hygiene and changed-file secret scanning passed; the staged-content scan and commit-message checks run again at commit time. One initial scanner match was a documented error-code name following the words "password:"; rewording the description removed the false positive without bypassing the scanner. No actual secret was involved.
+
+## #65 local operation and verification boundary
+
+Configuration is supplied externally; agents do not read or modify private configuration files.
+
+| Setting | Behavior |
+|---|---|
+| `spring.profiles.active=local` and `afterbooth.mail.fake-enabled=true` | Explicit private-console Fake; needs no Resend credentials |
+| `afterbooth.mail.resend-enabled=true` and profile `deployment`, `prod` or `production` | Select Resend with externally supplied `afterbooth.mail.resend-api-key` and `afterbooth.mail.resend-from`; never combine with local/Fake |
+| Neither delivery opt-in | Disabled adapter, no sending and no code output |
+| `afterbooth.auth.allowed-origin` | Exact HTTPS frontend origin, including port; no paths, wildcards or user information |
+| `afterbooth.auth.hmac.current-version` | Current shared key version |
+| `afterbooth.auth.hmac.keys.<version>` | External Base64 key of at least 32 random bytes, identical across instances |
+| `afterbooth.auth.hmac.previous-valid-until.<version>` | Previous-key matching deadline as an ISO instant; retain keys for all live rate/challenge/block records before retirement |
+
+Absent authentication keys do not create process-local fallback keys. Authentication operations requiring them fail closed with AUTH_UNAVAILABLE; existing demo routes retain the documented transition behavior. Missing or malformed mail credentials never activate Fake. Do not send local console output to shared collectors or file logging.
+
+For local execution, configure HTTPS and the shared synthetic development HMAC externally, then use `./gradlew bootRun --args='--spring.profiles.active=local --afterbooth.mail.fake-enabled=true'` in backend/. Use the exact configured HTTPS origin for requests. Keep the cookie and CSRF response only in the client memory/cookie jar. Call getCsrfToken, registerMember, requestEmailVerification, then submit the private-console code with email, challengeId and the intended final password to verifyEmail. Successful confirmation returns 204, stores the final password hash and marks the member ACTIVE; no session is issued. Do not print credential-bearing headers, responses or requests. No frontend flow or real mailbox is verified by this simulation.
+
+Automated loopback HTTPS tests generate synthetic TLS/HMAC material at runtime and capture Fake output in memory without forwarding codes to test logs. Their final-password assertion checks the stored hash directly without implementing login. They use disposable Testcontainers PostgreSQL, not development/production data. See the current execution record in TASKS; historical #63 results above are not reused as #65 proof.
+
+### Current #65 acceptance evidence
+
+All rows below refer to current local execution with synthetic data. Actual email/receipt is excluded by the issue, not asserted complete.
+
+| #65 acceptance group | Current evidence |
+|---|---|
+| Eight tables/four extensions and legacy preservation | AuthSchemaUpgradeTest applies core first, records arbitrary legacy rows, applies auth migration and compares original organization/item/reservation/idempotency fields; CoreSchemaIntegrationTest checks both migration versions and seed data |
+| Member/Argon2id and password rules | SignupCredentialsTest and SignupIntegrationTest verify boundaries, Unicode/space preservation, Argon2id parameters, hash matching and redacted credential objects |
+| Normalization, duplicates, concurrency, organizations | Concurrent registration creates one member/private organization; existing NULL ownership preserved; duplicate responses do not overwrite credentials |
+| HMAC block and 30-day boundary | Valid previous-key block prevents signup; deadline permits registration before physical cleanup; fresh identity/organization provisioning stays separate |
+| Registration limits | Shared PostgreSQL five/email/hour and per-API twenty/IP/hour; blocked and real subjects share generic responses; registration has no issuance interval |
+| Signup proof and final password | Parallel confirmations have one winner; submitted final password replaces pending credential atomically; consumed/ACTIVE replay fails; injected consumption failure rolls back state/hash/attempt together |
+| Challenges and issuance | Six digits, bound email/purpose/challenge, ten-minute expiry, five attempts, single use/reissue and real/dummy behavior; sixth hourly issuance returns dummy; actual lock wait rechecks expiry |
+| Single chain, CSRF and exact-Origin HTTP | AuthSecurityHttpsTest uses real loopback TLS, checks secure cookie attributes/hash storage, missing/wrong/expired CSRF and missing/different Origin; future authentication routes denied and health remains anonymous |
+| Durable limits, rotation and cleanup | AuthRateLimiterIntegrationTest exercises independent instances, rejected transaction counters, API quotas, mixed-current keys both directions, 60-second markers, actual lock waits and expiry cleanup |
+| Local Fake and selection policy | MailGatewayTest validates explicit local opt-in, production/conflict rejection, key-free Fake and default-disabled output; captures purpose/code privately and rejects expired output |
+| Resend adapter | ResendMailGatewayTest uses loopback HTTP for idempotency, exact retry body, bounded failures/429/timeouts, expiry and non-disclosure; SignupDeliveryIntegrationTest proves blocked external work holds no transaction/member lock and does not delay real/dummy public response |
+| Pending/organization/record cleanup | SignupIntegrationTest deletes 24-hour pending accounts and unused organizations while preserving referenced shells, domain data and ACTIVE members; removes expired challenges/CSRF/rate rows |
+| Local flow and reporting | LocalFakeSignupHttpsTest boots actual local/Fake configuration, captures the real adapter code, calls protected HTTPS APIs, proves ACTIVE/final hash, rejects reuse and verifies generic DB-failure rollback; no UI or login implementation |
+
+The corrected related run passed 60 tests; the broader run and correction together cover 195 distinct backend tests with all three initial fixture failures corrected. Frontend checks passed 118 tests. Generated Fake-code lines in XML/Gradle test output: zero. Full backend suite was not run. See TASKS for executed checks and unavailable review tooling.

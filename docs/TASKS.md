@@ -240,3 +240,51 @@ A debug-logged rerun of the twelve-preparation test passed. Its log shows 16 `id
 - Introduce the authentication runtime after submission. The user subsequently canceled the earlier commits while preserving changes and authorized one combined local commit, including the omitted authenticated password-change specification (D-075), after a sensitive-data check. This task does not implement features, write/apply migrations, send mail, push, create a PR or close the issue. See `docs/AUTH_DESIGN.md` for final identifiers and verification results.
 
 - [x] #63 password-change correction: changePassword, its policy/schema references and D-075 are defined. Final contract validation and client generation passed (35 operations, 298 local references); build, 118 tests, lint and formatting passed. Fresh independent review found no blockers. No runtime implementation is included.
+
+## Signup implementation (#65, D-076/D-077)
+
+- [x] #65 shared schema/member/Argon2id, signup/challenges and pending cleanup.
+- [x] #65 single common chain, anonymous CSRF, exact-Origin and PostgreSQL request limits.
+- [x] #65 local Fake/deployment Resend, default disabled; actual sending excluded.
+- [x] #65 protected loopback HTTPS signup → confirmation → ACTIVE and password matching; regression gates and independent review. Local commits use repository hooks after the final staged-content scan.
+- [ ] #66 reuses #65 for login/JWT/refresh/sessions and final signup → verification → login integration; excluded here.
+
+Explicit authorization supersedes the historical post-submission schedule without changing prior verification evidence. Existing-domain authorization, frontend and deployment remain later work. Mark completion only with current evidence.
+
+Current #65 execution (2026-11-03): the main session ran all commands below; no historical #63 or canceled implementation result is used.
+
+- `spotlessApply compileJava compileTestJava spotlessCheck`: passed, including a final compile after a lexical variable rename to avoid a scanner false positive.
+- Broad selected backend gate: 192 tests; 189 passed, three failed. One old assertion expected one migration; two issuance fixtures removed only the current alias after the rotation fix. Fixed the exact migration-version expectation and subject-specific interval fixture cleanup without weakening runtime checks.
+- Corrected related gate: 60 tests, zero failures/errors/skips. Added actual legacy-row schema upgrade, asynchronous sending outside locks, and purpose-binding tests. Combining unchanged passing regression cases with the corrected run gives 195 distinct passing tests; this is not a second complete 192-test run or the full backend suite.
+- Frontend `npm ci --no-audit --no-fund`, `npm run build`, `npm test -- --maxWorkers=1`, `npm run lint`, `npm run format:check`: passed; 118 tests. Lint retains two pre-existing useHandover warnings.
+- Parsed OpenAPI comparison excluding descriptions/summaries: structure unchanged, 35 unique operation IDs and 298 resolved local references. Orval generation passed. The contract explanation is its own local commit.
+- Independent fresh read-only review and Codex CLI adversarial review: per-API IP scopes and mixed-current rotation findings corrected, re-review approved without blocking findings. Claude reviewer could not run because its OAuth session expired; the required companion script is absent. No trust or credential setting was modified; independent read-only review replaced the unavailable reviewer.
+- Changed-file pattern scan, manual diff/privacy review, `git diff --check`, and generated Fake-code-output scan passed. Repository hooks repeat the staged scan and commit-message validation.
+- Not verified: full backend suite, frontend/browser signup UI, signup → verification → login (#66), actual Resend delivery/receipt, deployment/provider settings, real DB/user data and live Meta calls.
+- Read-only checks of current #65–#70 found no additional issue-body changes necessary. No GitHub issue/comment/status/checkbox or other remote write was made.
+
+Exact backend selections used (from backend/ with Java 21):
+
+```bash
+./gradlew spotlessApply compileJava compileTestJava spotlessCheck test --tests '*Signup*Test' --tests 'com.afterbooth.global.security.*Test' --tests 'com.afterbooth.member.mail.*Test' --tests 'com.afterbooth.ArchitectureTest' --tests 'com.afterbooth.CoreSchemaIntegrationTest' --tests 'com.afterbooth.ReservationIntegrationTest' --tests 'com.afterbooth.DefaultVehicleHoldIntegrationTest' --tests 'com.afterbooth.AllocationIntegrationTest' --tests 'com.afterbooth.HandoverIntegrationTest' --tests '*IntakeIntegrationTest' --tests '*PickupRequestIntegrationTest' --tests 'com.afterbooth.IdempotencyRecoveryIntegrationTest' --tests '*ControllerTest' --tests '*GlobalExceptionHandlerTest' --tests '*SpaShellTest' --tests '*HoldItemValidationTest' --tests '*HandoverResolveValidationTest' --no-daemon
+# Broad run: 192 cases, three fixture failures corrected below.
+./gradlew spotlessApply compileJava compileTestJava spotlessCheck test --tests '*Signup*Test' --tests 'com.afterbooth.AuthSchemaUpgradeTest' --tests 'com.afterbooth.global.security.*Test' --tests 'com.afterbooth.member.mail.*Test' --tests 'com.afterbooth.ArchitectureTest' --tests 'com.afterbooth.CoreSchemaIntegrationTest' --no-daemon
+# Corrected related run: 60 passed, zero failures/errors/skips.
+./gradlew spotlessApply compileJava compileTestJava spotlessCheck --no-daemon
+# Final lexical-only scanner correction: passed; no behavior change.
+```
+
+## PR #71 review correction — R1 encoded signup paths
+
+- [x] Confirmed the remote review targets the clean local head `583fc51`; reused the existing signup worktree without changing the shared checkout.
+- [x] Reproduced R1 with three new actual loopback HTTPS/PostgreSQL regressions before production changes: missing security checks, successful-response no-store and canonical/encoded IP-quota sharing all failed. An initial mistyped method filter selected no tests; it is not reproduction evidence.
+- [x] Reused parsed-path POST matcher objects for signup authorization, CSRF, exact-Origin enforcement and IP-scope selection; authentication no-store uses parsed namespace matchers too (D-078). No firewall relaxation, dependency, schema, API contract or policy-limit changes.
+- [x] Protected encoded paths with valid synthetic business bodies: missing/wrong Origin, cookie and CSRF return 403 without member/organization/challenge mutations, activation, attempt consumption or password-hash changes. Valid encoded signup/verification still works. Canonical and encoded aliases share each API's twenty/IP/hour quota and return Retry-After on exhaustion.
+- [x] Main-session final gate below passed: 38 tests across six suites, zero failures/errors/skips, including seven real HTTPS security cases, PostgreSQL rate/key-rotation checks, signup/final-password checks, actual local Fake HTTPS flow and ArchitectureTest.
+
+```bash
+# backend/, Java 21
+./gradlew spotlessApply compileJava compileTestJava spotlessCheck test --tests 'com.afterbooth.global.security.AuthSecurityHttpsTest' --tests 'com.afterbooth.global.security.AuthRateLimiterIntegrationTest' --tests 'com.afterbooth.global.security.AuthSecurityPropertiesTest' --tests 'com.afterbooth.LocalFakeSignupHttpsTest' --tests 'com.afterbooth.SignupIntegrationTest' --tests 'com.afterbooth.ArchitectureTest' --no-daemon
+```
+
+Fresh independent read-only review and the installed Codex CLI adversarial re-review both approved R1 as resolved with no blockers. Final changed-file/staged-content scanning and repository hooks apply before local commit. Tests use generated synthetic material and disposable PostgreSQL; available XML/Gradle outputs contain zero generated Fake-code lines. No real secrets, user data or provider calls were accessed. Not verified in this correction: full backend/frontend suite, browser UI, additional context-path deployment, real mail, deployment or updated remote CI. No push, GitHub comment/review/status modification or merge is included.

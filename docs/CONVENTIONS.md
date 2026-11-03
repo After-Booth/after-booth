@@ -112,6 +112,7 @@ These rules are enforced by `backend/src/test/java/com/afterbooth/ArchitectureTe
 - Controllers do not touch repositories or entities.
 - A domain never touches another domain's `repository` or `controller`. Call its `service`, and reference other aggregates by ID (`Long itemId`), not by entity field.
 - Domain packages have no dependency cycles.
+- HTTP clients are restricted to the AI package and the explicit `member.mail` delivery adapter. Only AiGateway calls Meta.
 - Code does not call `now()` on `java.time` types. Inject `Clock` and use `now(clock)`.
 - No field injection. Use constructor injection with `final` fields.
 - Entities have no public setters.
@@ -167,7 +168,7 @@ Do not write:
 
 ## What not to write
 
-- Do not implement features outside `docs/SPEC.md`. Maps, general notifications and payments remain out of scope. Implement member authentication and signup/password-reset email after submission under SPEC §Member authentication rollout scope (#63); #63 itself is limited to documentation and contract design.
+- Do not implement features outside `docs/SPEC.md`. Maps, general notifications and payments remain out of scope. D-076 explicitly authorizes #65 signup/common security/mail implementation now; the original #63 restriction applied to design only. Login/session, password management, withdrawal and existing-domain authorization remain later work.
 - Unused parameters, unused config, "just in case" utilities.
 - Generic base classes (`BaseService<T>`) or deep inheritance. Prefer composition.
 - Defensive null checks for values that validation already guarantees.
