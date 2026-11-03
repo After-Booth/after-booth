@@ -24,7 +24,64 @@ import org.springframework.test.web.servlet.MockMvc;
 })
 class OrganizationControllerTest {
   @Autowired MockMvc mvc;
+  @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
+  @Autowired java.time.Clock clock;
   @MockitoBean OrganizationService organizations;
+
+  @org.junit.jupiter.api.AfterEach
+  void clearActor() {
+    org.springframework.security.core.context.SecurityContextHolder.clearContext();
+  }
+
+  @Test
+  void actorFromAnotherDatabaseDoesNotInvalidateDefaultAuthentication() throws Exception {
+    com.afterbooth.DomainAuthTestSupport.use(
+        new com.afterbooth.global.security.AuthenticatedMember(
+            Long.MAX_VALUE, java.util.UUID.randomUUID(), 0));
+    when(organizations.list()).thenReturn(List.of());
+
+    mvc.perform(get("/api/organizations")).andExpect(status().isOk());
+  }
+
+  @Test
+  void requestRestoresTheCurrentDatabaseActor() throws Exception {
+    var actor = com.afterbooth.DomainAuthTestSupport.seedOwner(jdbc, clock, 1);
+    when(organizations.list()).thenReturn(List.of());
+
+    mvc.perform(get("/api/organizations")).andExpect(status().isOk());
+
+    org.assertj.core.api.Assertions.assertThat(
+            org.springframework.security.core.context.SecurityContextHolder.getContext()
+                .getAuthentication()
+                .getPrincipal())
+        .isEqualTo(actor);
+  }
+
+  @Test
+  void revokedCurrentDatabaseActorIsNotReplacedWithSyntheticAuthentication() throws Exception {
+    var actor = com.afterbooth.DomainAuthTestSupport.seedOwner(jdbc, clock, 1);
+    jdbc.update(
+        "update refresh_session set revoked_at=clock_timestamp() where id=?", actor.sessionId());
+
+    mvc.perform(get("/api/organizations")).andExpect(status().isUnauthorized());
+  }
+
+  @Test
+  void invalidCurrentDatabaseActorVersionIsNotReplacedWithSyntheticAuthentication()
+      throws Exception {
+    var actor = com.afterbooth.DomainAuthTestSupport.seedOwner(jdbc, clock, 1);
+    com.afterbooth.DomainAuthTestSupport.use(
+        new com.afterbooth.global.security.AuthenticatedMember(
+            actor.memberId(), actor.sessionId(), actor.authVersion() + 1));
+
+    mvc.perform(get("/api/organizations")).andExpect(status().isUnauthorized());
+  }
+
+  @Test
+  void explicitInvalidAuthorizationIsNotReplacedWithSyntheticAuthentication() throws Exception {
+    mvc.perform(get("/api/organizations").header("Authorization", "Bearer invalid"))
+        .andExpect(status().isUnauthorized());
+  }
 
   @Test
   void listsOrganizationsWithOnlyContractFields() throws Exception {

@@ -2,6 +2,8 @@ package com.afterbooth.intake.service;
 
 import com.afterbooth.global.error.BusinessException;
 import com.afterbooth.global.error.ErrorCode;
+import com.afterbooth.global.security.AuthenticatedMember;
+import com.afterbooth.global.security.DomainAccess;
 import com.afterbooth.intake.domain.IntakeDraft;
 import com.afterbooth.intake.domain.IntakeDraftLine;
 import com.afterbooth.intake.pipeline.EstimatedLine;
@@ -16,19 +18,24 @@ import org.springframework.transaction.annotation.Transactional;
 public class IntakeProcessingStore {
   private final IntakeDraftRepository drafts;
   private final IntakeDraftLineRepository lines;
+  private final DomainAccess access;
 
-  public IntakeProcessingStore(IntakeDraftRepository drafts, IntakeDraftLineRepository lines) {
+  public IntakeProcessingStore(
+      IntakeDraftRepository drafts, IntakeDraftLineRepository lines, DomainAccess access) {
     this.drafts = drafts;
     this.lines = lines;
+    this.access = access;
   }
 
   @Transactional(propagation = Propagation.REQUIRES_NEW)
-  public void segment(Long id) {
+  public void segment(Long id, AuthenticatedMember actor) {
+    authorize(id, actor);
     find(id).beginSegmentation();
   }
 
   @Transactional(propagation = Propagation.REQUIRES_NEW)
-  public void ready(Long id, List<EstimatedLine> estimates) {
+  public void ready(Long id, List<EstimatedLine> estimates, AuthenticatedMember actor) {
+    authorize(id, actor);
     IntakeDraft draft = find(id);
     estimates.forEach(
         e ->
@@ -48,8 +55,20 @@ public class IntakeProcessingStore {
   }
 
   @Transactional(propagation = Propagation.REQUIRES_NEW)
-  public void fail(Long id, String message) {
+  public void fail(Long id, String message, AuthenticatedMember actor) {
+    authorize(id, actor);
     find(id).fail(message);
+  }
+
+  @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = true)
+  public void check(Long id, AuthenticatedMember actor) {
+    access.draft(id, actor);
+  }
+
+  private void authorize(Long id, AuthenticatedMember actor) {
+    long organizationId = access.draft(id, actor);
+    access.lockOrganizations(List.of(organizationId), actor);
+    access.draft(id, actor);
   }
 
   private IntakeDraft find(Long id) {

@@ -26,7 +26,8 @@ class PickupRequestServiceTest {
           repository,
           references,
           Clock.fixed(Instant.parse("2026-11-01T00:00:00Z"), ZoneOffset.UTC),
-          json);
+          json,
+          org.mockito.Mockito.mock(com.afterbooth.global.security.DomainAccess.class));
   private static final String BODY =
       "{\"organizationId\":2,\"category\":\"DISPLAY_RACK\",\"quantity\":2,\"vehicleType\":\"SEDAN\",\"purpose\":\"주말"
           + " 행사\",\"transcript\":\"진열대 두 개\"}";

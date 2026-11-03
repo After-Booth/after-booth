@@ -13,10 +13,10 @@ import com.afterbooth.allocation.dto.AllocationModelData;
 import com.afterbooth.allocation.dto.AllocationResult;
 import com.afterbooth.allocation.dto.AllocationResult.*;
 import com.afterbooth.allocation.dto.HoldItemRequest;
-import com.afterbooth.allocation.dto.ReservationResponse;
 import com.afterbooth.allocation.repository.ReservationRepository;
 import com.afterbooth.global.error.BusinessException;
 import com.afterbooth.global.error.ErrorCode;
+import com.afterbooth.global.security.DomainAccess;
 import com.afterbooth.inventory.domain.Item;
 import com.afterbooth.inventory.domain.VehicleFitResult;
 import com.afterbooth.inventory.service.ItemService;
@@ -63,6 +63,9 @@ public class AllocationService {
   private final JsonMapper json;
   private final int maxTurns;
   private final Duration timeout;
+  private final DomainAccess access;
+  private final com.afterbooth.global.idempotency.IdempotencyLockPool runLocks;
+  private final AllocationFinalizer finalizer;
 
   public AllocationService(
       AiGateway ai,
@@ -75,7 +78,10 @@ public class AllocationService {
       Clock clock,
       JsonMapper json,
       @Value("${afterbooth.allocation.max-turns:6}") int maxTurns,
-      @Value("${afterbooth.allocation.timeout:PT30S}") Duration timeout) {
+      @Value("${afterbooth.allocation.timeout:PT30S}") Duration timeout,
+      DomainAccess access,
+      com.afterbooth.global.idempotency.IdempotencyLockPool runLocks,
+      AllocationFinalizer finalizer) {
     this.ai = ai;
     this.requests = requests;
     this.holds = holds;
@@ -85,6 +91,9 @@ public class AllocationService {
     this.vehicles = vehicles;
     this.clock = clock;
     this.json = json;
+    this.access = access;
+    this.runLocks = runLocks;
+    this.finalizer = finalizer;
     if (maxTurns < 1
         || maxTurns > 20
         || timeout.isNegative()
@@ -95,9 +104,19 @@ public class AllocationService {
     this.timeout = timeout;
   }
 
-  @Transactional
+  @Transactional(propagation = org.springframework.transaction.annotation.Propagation.NOT_SUPPORTED)
   public AllocationResult run(Long requestId) {
-    PickupRequest request = requests.lock(requestId);
+    return runLocks.allocation(requestId, () -> plan(requestId).get());
+  }
+
+  @Transactional(propagation = org.springframework.transaction.annotation.Propagation.NOT_SUPPORTED)
+  public java.util.function.Supplier<AllocationResult> prepare(Long requestId) {
+    return runLocks.allocation(requestId, () -> plan(requestId));
+  }
+
+  private java.util.function.Supplier<AllocationResult> plan(Long requestId) {
+    access.request(requestId);
+    PickupRequest request = requests.findForAllocation(requestId);
     if (reservations.activeQuantity(requestId) > 0)
       throw new BusinessException(ErrorCode.REQUEST_ALREADY_HELD);
     Run run = new Run(request);
@@ -188,18 +207,27 @@ public class AllocationService {
       // Do not wait for an uncooperative network call after the request deadline.
       executor.shutdownNow();
     }
-    return com.afterbooth.allocation.domain.AllocationOutcome.assemble(
-        run.request,
-        run.held,
-        run.rejected,
-        run.trace,
-        inventory.candidates(),
-        item -> vehicles.checkFit(item, run.request.vehicleType()),
-        clock.instant(),
-        explanation);
+    String finalExplanation = explanation;
+    List<Long> organizations = new ArrayList<>();
+    organizations.add(request.organizationId());
+    for (var proposal : run.held) organizations.add(stock.get(proposal.itemId()).organizationId());
+    for (var candidate : inventory.candidates()) organizations.add(candidate.organizationId());
+    organizations.addAll(access.responseOrganizations(run.trace));
+    return new com.afterbooth.global.idempotency.IdempotencyService.PreparedAction<
+        AllocationResult>() {
+      public List<Long> organizations() {
+        return List.copyOf(organizations);
+      }
+
+      public AllocationResult get() {
+        return finalizer.complete(
+            requestId, run.held, run.rejected, run.trace, finalExplanation, organizations);
+      }
+    };
   }
 
   private Object execute(Run run, String name, AllocationArguments args) {
+    access.request(run.request.id());
     if (name.equals("searchCandidates")) {
       List<AllocationModelData.Candidate> candidates =
           inventory.candidates().stream()
@@ -208,7 +236,24 @@ public class AllocationService {
                       i.category()
                           == (args.category() == null ? run.request.category() : args.category()))
               .limit(100)
-              .map(i -> AllocationModelData.Candidate.from(i, clock.instant()))
+              .map(
+                  i -> {
+                    var candidate = AllocationModelData.Candidate.from(i, clock.instant());
+                    return new AllocationModelData.Candidate(
+                        candidate.itemId(),
+                        candidate.category(),
+                        candidate.label(),
+                        candidate.sizeCm(),
+                        candidate.condition(),
+                        Math.max(
+                            0,
+                            candidate.availableQty()
+                                - run.held.stream()
+                                    .filter(h -> h.itemId().equals(i.id()))
+                                    .mapToInt(HoldItemRequest::quantity)
+                                    .sum()),
+                        candidate.pickupEligible());
+                  })
               .toList();
       String summary =
           args.category() == null || args.category() == run.request.category()
@@ -220,6 +265,7 @@ public class AllocationService {
     Item item;
     try {
       item = stock.get(args.itemId());
+      access.item(item.id());
     } catch (BusinessException error) {
       if (error.errorCode() != ErrorCode.NOT_FOUND) throw error;
       throw new AgentProtocolViolation("Unknown allocation item");
@@ -232,11 +278,18 @@ public class AllocationService {
       return Map.of("fit", true);
     }
     try {
-      ReservationResponse held =
-          holds.holdForAgent(new HoldItemRequest(run.request.id(), item.id(), args.quantity()));
+      HoldItemRequest held = new HoldItemRequest(run.request.id(), item.id(), args.quantity());
+      holds.proposeForAgent(
+          held,
+          run.held.stream().mapToInt(HoldItemRequest::quantity).sum(),
+          run.held.stream()
+              .filter(h -> h.itemId().equals(item.id()))
+              .mapToInt(HoldItemRequest::quantity)
+              .sum());
       run.held.add(held);
       run.trace.add(new ToolTrace(name, args.values(), "OK", null, "물품을 임시 확보했어요. 직접 확정해 주세요."));
-      return AllocationModelData.Hold.from(held);
+      return new AllocationModelData.Hold(
+          held.itemId(), held.quantity(), com.afterbooth.allocation.domain.ReservationStatus.HELD);
     } catch (AgentHoldRejectedException error) {
       return reject(run, name, args, item, error.rejection().name(), null);
     } catch (BusinessException error) {
@@ -275,7 +328,7 @@ public class AllocationService {
 
   private static final class Run {
     private final PickupRequest request;
-    private final List<ReservationResponse> held = new ArrayList<>();
+    private final List<HoldItemRequest> held = new ArrayList<>();
     private final Map<Long, Rejection> rejected = new LinkedHashMap<>();
     private final List<ToolTrace> trace = new ArrayList<>();
     private final Set<String> callIds = new HashSet<>();

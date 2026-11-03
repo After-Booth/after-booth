@@ -35,7 +35,8 @@ class ConditionServiceTest {
           references,
           Clock.fixed(Instant.parse("2026-10-31T16:00:00Z"), ZoneOffset.UTC),
           "minimal",
-          "");
+          "",
+          org.mockito.Mockito.mock(com.afterbooth.global.security.DomainAccess.class));
 
   static ChatResponse answer(String json) {
     return new ChatResponse(json, List.of(), "stop", null);
@@ -78,14 +79,16 @@ class ConditionServiceTest {
             references,
             Clock.fixed(Instant.parse("2026-10-31T00:00:00Z"), ZoneOffset.UTC),
             "minimal",
-            "2026-10-31");
+            "2026-10-31",
+            org.mockito.Mockito.mock(com.afterbooth.global.security.DomainAccess.class));
     var late =
         new ConditionService(
             gateway,
             references,
             Clock.fixed(Instant.parse("2026-11-02T23:00:00Z"), ZoneOffset.UTC),
             "minimal",
-            "2026-10-31");
+            "2026-10-31",
+            org.mockito.Mockito.mock(com.afterbooth.global.security.DomainAccess.class));
     early.interpret(ConditionContext.RECEIVER, null, null, null, "today");
     late.interpret(ConditionContext.RECEIVER, null, null, null, "today");
     ArgumentCaptor<ChatRequest> calls = ArgumentCaptor.forClass(ChatRequest.class);

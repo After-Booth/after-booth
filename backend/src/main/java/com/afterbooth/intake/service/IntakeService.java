@@ -2,6 +2,7 @@ package com.afterbooth.intake.service;
 
 import com.afterbooth.global.error.BusinessException;
 import com.afterbooth.global.error.ErrorCode;
+import com.afterbooth.global.security.DomainAccess;
 import com.afterbooth.intake.domain.IntakeDraft;
 import com.afterbooth.intake.domain.IntakeDraftLine;
 import com.afterbooth.intake.domain.IntakeStatus;
@@ -26,34 +27,40 @@ public class IntakeService {
   private final ItemService inventory;
   private final ApplicationEventPublisher events;
   private final Clock clock;
+  private final DomainAccess access;
 
   public IntakeService(
       IntakeDraftRepository drafts,
       IntakeDraftLineRepository lines,
       ItemService inventory,
       ApplicationEventPublisher events,
-      Clock clock) {
+      Clock clock,
+      DomainAccess access) {
     this.drafts = drafts;
     this.lines = lines;
     this.inventory = inventory;
     this.events = events;
     this.clock = clock;
+    this.access = access;
   }
 
   @Transactional
   public IntakeDraftResponse create(Long eventId, byte[] bytes, String mediaType) {
+    long organizationId = access.event(eventId);
+    access.lockOrganizations(List.of(organizationId));
     IntakeUpload upload = new IntakeUpload(bytes, mediaType);
     inventory.requireEvent(eventId);
     IntakeDraft draft = drafts.saveAndFlush(IntakeDraft.start(eventId, clock.instant()));
     IntakeDraftResponse response = IntakeDraftResponse.from(draft, List.of());
     events.publishEvent(
         new IntakeProcessor.Submitted(
-            draft.id(), new IntakePhoto(upload.bytes(), upload.mediaType())));
+            draft.id(), new IntakePhoto(upload.bytes(), upload.mediaType()), access.actor()));
     return response;
   }
 
   @Transactional(readOnly = true)
   public IntakeDraftResponse get(Long id) {
+    access.draft(id);
     IntakeDraft draft = find(id);
     return IntakeDraftResponse.from(
         draft,
@@ -62,6 +69,8 @@ public class IntakeService {
 
   @Transactional
   public List<ItemResponse> confirm(Long id, ConfirmIntakeRequest request) {
+    long organizationId = access.draft(id);
+    access.lockOrganizations(List.of(organizationId));
     IntakeDraft draft =
         drafts.findLocked(id).orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
     draft.confirm(

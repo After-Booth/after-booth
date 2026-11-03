@@ -37,7 +37,7 @@ public final class AllocationOutcome {
       if (code == null) {
         alternatives.add(
             new Alternative(
-                ItemResponse.from(item),
+                ItemResponse.from(item, false),
                 Math.min(remaining, item.availableQty()),
                 "차량과 픽업 조건에 맞아요. 직접 선택해 임시 확보할 수 있어요."));
         rejected.remove(item.id());

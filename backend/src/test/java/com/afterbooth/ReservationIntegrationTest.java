@@ -59,10 +59,15 @@ class ReservationIntegrationTest {
   @Autowired IdempotencyService idempotency;
   @Autowired JdbcTemplate jdbc;
   @Autowired MutableClock clock;
+  @Autowired com.afterbooth.global.security.DomainAccess access;
+  private com.afterbooth.global.security.AuthenticatedMember giver;
+  private com.afterbooth.global.security.AuthenticatedMember receiver;
 
   @BeforeEach
   void reset() {
     clock.set(NOW);
+    giver = DomainAuthTestSupport.seedOwner(jdbc, clock, 1);
+    receiver = DomainAuthTestSupport.seedOwner(jdbc, clock, 2);
     jdbc.update("delete from idempotency_record");
     jdbc.update("delete from reservation_transition");
     jdbc.update("delete from handover_log");
@@ -98,7 +103,8 @@ class ReservationIntegrationTest {
     CountDownLatch ready = new CountDownLatch(count);
     CountDownLatch start = new CountDownLatch(1);
     List<Future<ErrorCode>> futures = new ArrayList<>();
-    try (ExecutorService executor = Executors.newFixedThreadPool(count)) {
+    try (ExecutorService executor =
+        com.afterbooth.DomainAuthTestSupport.executor(Executors.newFixedThreadPool(count))) {
       for (int i = 0; i < count; i++) {
         int index = i;
         futures.add(
@@ -182,11 +188,12 @@ class ReservationIntegrationTest {
     Long item = item(2);
     Long request = request(2);
     UUID key = UUID.randomUUID();
-    byte[] body = "orphan-hold".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+    byte[] body = holdBody(request, item, 1);
     jdbc.update(
-        "insert into idempotency_record(idempotency_key,fingerprint,state,created_at) values (?,?,'IN_PROGRESS',current_timestamp)",
+        "insert into idempotency_record(idempotency_key,fingerprint,state,created_at,actor_member_id,related_organization_ids) values (?,?,'IN_PROGRESS',current_timestamp,?,array[1,2]::bigint[])",
         key,
-        IdempotencyService.fingerprint("POST", "/api/reservations", body));
+        IdempotencyService.fingerprint("POST", "/api/reservations", body),
+        receiver.memberId());
     var recovered =
         idempotency.execute(key, "POST", "/api/reservations", body, 201, () -> hold(request, item));
     var replay =
@@ -212,7 +219,7 @@ class ReservationIntegrationTest {
     Long item = item(2);
     Long request = request(2);
     UUID key = UUID.randomUUID();
-    byte[] body = "hold".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+    byte[] body = holdBody(request, item, 1);
     var first =
         idempotency.execute(key, "POST", "/api/reservations", body, 201, () -> hold(request, item));
     var second =
@@ -235,10 +242,15 @@ class ReservationIntegrationTest {
                         key,
                         "POST",
                         "/api/reservations",
-                        new byte[0],
+                        holdBody(request, item, 2),
                         201,
                         () -> hold(request, item))))
         .isEqualTo(ErrorCode.IDEMPOTENCY_CONFLICT);
+  }
+
+  byte[] holdBody(Long request, Long item, int quantity) {
+    return ("{\"requestId\":" + request + ",\"itemId\":" + item + ",\"quantity\":" + quantity + "}")
+        .getBytes(java.nio.charset.StandardCharsets.UTF_8);
   }
 
   void assertThatJson(String actual, String expected) {
@@ -251,14 +263,15 @@ class ReservationIntegrationTest {
     UUID key = UUID.randomUUID();
     CountDownLatch entered = new CountDownLatch(1);
     CountDownLatch finish = new CountDownLatch(1);
-    try (ExecutorService pool = Executors.newSingleThreadExecutor()) {
+    try (ExecutorService pool =
+        com.afterbooth.DomainAuthTestSupport.executor(Executors.newSingleThreadExecutor())) {
       Future<?> first =
           pool.submit(
               () ->
                   idempotency.execute(
                       key,
                       "POST",
-                      "/test",
+                      "/api/events",
                       new byte[0],
                       200,
                       () -> {
@@ -278,7 +291,7 @@ class ReservationIntegrationTest {
                 attempt(
                     () ->
                         idempotency.execute(
-                            key, "POST", "/test", new byte[0], 200, () -> "duplicate")))
+                            key, "POST", "/api/events", new byte[0], 200, () -> "duplicate")))
             .isEqualTo(ErrorCode.IDEMPOTENCY_CONFLICT);
       } finally {
         finish.countDown();
@@ -367,7 +380,7 @@ class ReservationIntegrationTest {
         idempotency.execute(
             key,
             "POST",
-            "/test",
+            "/api/events",
             new byte[0],
             201,
             () -> {
@@ -377,7 +390,7 @@ class ReservationIntegrationTest {
         idempotency.execute(
             key,
             "POST",
-            "/test",
+            "/api/events",
             new byte[0],
             201,
             () -> {
@@ -620,7 +633,7 @@ class ReservationIntegrationTest {
                 idempotency.execute(
                     key,
                     "POST",
-                    "/test-rollback",
+                    "/api/events",
                     new byte[0],
                     201,
                     () -> {
@@ -643,7 +656,7 @@ class ReservationIntegrationTest {
         .isZero();
     assertThat(
             idempotency
-                .execute(key, "POST", "/test-rollback", new byte[0], 201, () -> hold(request, item))
+                .execute(key, "POST", "/api/events", new byte[0], 201, () -> hold(request, item))
                 .getStatusCode()
                 .value())
         .isEqualTo(201);
@@ -659,7 +672,7 @@ class ReservationIntegrationTest {
         idempotency.execute(
             key,
             "POST",
-            "/test-business-rollback",
+            "/api/events",
             new byte[0],
             201,
             () -> {
@@ -678,7 +691,7 @@ class ReservationIntegrationTest {
         idempotency.execute(
             key,
             "POST",
-            "/test-business-rollback",
+            "/api/events",
             new byte[0],
             201,
             () -> {
@@ -694,8 +707,9 @@ class ReservationIntegrationTest {
     clock.set(NOW.plusSeconds(899));
     CountDownLatch sampled = new CountDownLatch(1);
     CountDownLatch proceed = new CountDownLatch(1);
-    try (ExecutorService executor = Executors.newSingleThreadExecutor()) {
-      Future<ReservationService.Confirmation> late =
+    try (ExecutorService executor =
+        com.afterbooth.DomainAuthTestSupport.executor(Executors.newSingleThreadExecutor())) {
+      Future<ErrorCode> late =
           executor.submit(
               () -> {
                 clock.override(
@@ -704,7 +718,11 @@ class ReservationIntegrationTest {
                       await(proceed);
                       return NOW.plusSeconds(900);
                     });
-                return reservations.confirm(id);
+                try {
+                  return reservations.confirm(id).error();
+                } catch (BusinessException error) {
+                  return error.errorCode();
+                }
               });
       assertThat(sampled.await(10, TimeUnit.SECONDS)).isTrue();
       try {
@@ -712,7 +730,7 @@ class ReservationIntegrationTest {
       } finally {
         proceed.countDown();
       }
-      assertThat(late.get(30, TimeUnit.SECONDS).error()).isEqualTo(ErrorCode.INVALID_TRANSITION);
+      assertThat(late.get(30, TimeUnit.SECONDS)).isEqualTo(ErrorCode.INVALID_TRANSITION);
     }
     assertThat(reservations.get(id).status().name()).isEqualTo("CONFIRMED");
     assertThat(stock(item)).isZero();
@@ -726,7 +744,8 @@ class ReservationIntegrationTest {
     clock.set(NOW.plusSeconds(900));
     CountDownLatch sampled = new CountDownLatch(1);
     CountDownLatch proceed = new CountDownLatch(1);
-    try (ExecutorService executor = Executors.newSingleThreadExecutor()) {
+    try (ExecutorService executor =
+        com.afterbooth.DomainAuthTestSupport.executor(Executors.newSingleThreadExecutor())) {
       Future<ReservationService.Confirmation> early =
           executor.submit(
               () -> {
@@ -752,31 +771,23 @@ class ReservationIntegrationTest {
   }
 
   @Test
-  void schedulerSampledAfterExpiryLosesToConfirmWithoutRestoringStock() throws Exception {
+  void schedulerQueuedBehindMemberLockedConfirmDoesNotRestoreStock() throws Exception {
     Long item = item(1);
     Long id = hold(request(1), item).id();
     clock.set(NOW.plusSeconds(899));
-    CountDownLatch sampled = new CountDownLatch(1);
-    CountDownLatch proceed = new CountDownLatch(1);
-    try (ExecutorService executor = Executors.newSingleThreadExecutor()) {
-      Future<Boolean> expired =
-          executor.submit(
-              () -> {
-                clock.override(
-                    () -> {
-                      sampled.countDown();
-                      await(proceed);
-                      return NOW.plusSeconds(900);
-                    });
-                return reservations.expire(id);
-              });
-      assertThat(sampled.await(10, TimeUnit.SECONDS)).isTrue();
-      try {
-        assertThat(reservations.confirm(id).error()).isNull();
-      } finally {
-        proceed.countDown();
-      }
-      assertThat(expired.get(30, TimeUnit.SECONDS)).isFalse();
+    var transaction =
+        new org.springframework.transaction.support.TransactionTemplate(transactionManager);
+    try (ExecutorService executor =
+        com.afterbooth.DomainAuthTestSupport.executor(Executors.newSingleThreadExecutor())) {
+      AtomicReference<Future<Boolean>> expired = new AtomicReference<>();
+      transaction.executeWithoutResult(
+          status -> {
+            access.lockOrganizations(List.of(1L, 2L));
+            expired.set(executor.submit(() -> reservations.expire(id)));
+            assertThat(reservations.confirm(id).error()).isNull();
+            clock.set(NOW.plusSeconds(900));
+          });
+      assertThat(expired.get().get(30, TimeUnit.SECONDS)).isFalse();
     }
     assertThat(stock(item)).isZero();
     assertThat(reservations.get(id).status().name()).isEqualTo("CONFIRMED");
@@ -794,9 +805,11 @@ class ReservationIntegrationTest {
   }
 
   private Long confirmed(Long item, int quantity) {
+    DomainAuthTestSupport.use(receiver);
     Long request = request(quantity);
     Long id = reservations.hold(new HoldItemRequest(request, item, quantity)).id();
     assertThat(reservations.confirm(id).error()).isNull();
+    DomainAuthTestSupport.use(giver);
     return id;
   }
 
@@ -904,8 +917,13 @@ class ReservationIntegrationTest {
             index ->
                 attempt(
                     () -> {
-                      if (index == 0) handovers.resolve(id, 1);
-                      else reservations.cancel(id);
+                      if (index == 0) {
+                        DomainAuthTestSupport.use(giver);
+                        handovers.resolve(id, 1);
+                      } else {
+                        DomainAuthTestSupport.use(receiver);
+                        reservations.cancel(id);
+                      }
                     }));
     assertThat(result).filteredOn(Objects::isNull).hasSize(1);
     var finalReservation = reservations.get(id);
@@ -933,24 +951,26 @@ class ReservationIntegrationTest {
   @Autowired jakarta.persistence.EntityManagerFactory entityManagerFactory;
 
   @Test
-  void cancelWaitingBehindConfirmStillReleasesConfirmedReservation() throws Exception {
+  void cancelWaitingBehindMemberLockedConfirmStillReleasesConfirmedReservation() throws Exception {
     Long item = item(1);
     Long id = hold(request(1), item).id();
     var transaction =
         new org.springframework.transaction.support.TransactionTemplate(transactionManager);
-    try (ExecutorService executor = Executors.newSingleThreadExecutor()) {
+    try (ExecutorService executor =
+        com.afterbooth.DomainAuthTestSupport.executor(Executors.newSingleThreadExecutor())) {
       AtomicReference<Future<ReservationResponse>> cancelled = new AtomicReference<>();
       transaction.executeWithoutResult(
           status -> {
+            access.lockOrganizations(List.of(1L, 2L));
             jdbc.queryForObject("select id from reservation where id=? for update", Long.class, id);
             cancelled.set(executor.submit(() -> reservations.cancel(id)));
             long limit = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
             while (jdbc.queryForObject(
-                    "select count(*) from pg_stat_activity where datname=current_database() and wait_event_type='Lock' and query like '%reservation%' and pid<>pg_backend_pid()",
+                    "select count(*) from pg_stat_activity where datname=current_database() and wait_event_type='Lock' and query like '%member%' and pid<>pg_backend_pid()",
                     Integer.class)
                 == 0) {
               if (System.nanoTime() > limit)
-                throw new AssertionError("Cancellation did not wait for the reservation row lock");
+                throw new AssertionError("Cancellation did not wait for the member row lock");
               jdbc.execute("select pg_stat_clear_snapshot()");
               Thread.yield();
             }

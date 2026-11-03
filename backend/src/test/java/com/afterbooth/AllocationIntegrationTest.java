@@ -42,6 +42,7 @@ class AllocationIntegrationTest {
   @Autowired IdempotencyService idempotency;
   @Autowired JdbcTemplate jdbc;
   @Autowired StubAi ai;
+  @Autowired Clock clock;
   @Autowired MockMvc mvc;
 
   @org.springframework.test.context.bean.override.mockito.MockitoSpyBean
@@ -51,6 +52,8 @@ class AllocationIntegrationTest {
 
   @BeforeEach
   void reset() {
+    DomainAuthTestSupport.seedOwner(jdbc, clock, 1);
+    DomainAuthTestSupport.seedOwner(jdbc, clock, 2);
     jdbc.update("delete from idempotency_record");
     jdbc.update("delete from reservation_transition");
     jdbc.update("delete from handover_log");
@@ -120,7 +123,8 @@ class AllocationIntegrationTest {
     UUID key = UUID.randomUUID();
     String path = "/api/pickup-requests/" + request + "/allocation";
     var result =
-        idempotency.execute(key, "POST", path, new byte[0], 200, () -> allocations.run(request));
+        idempotency.executePrepared(
+            key, "POST", path, new byte[0], 200, () -> allocations.prepare(request));
     assertThat(result.getStatusCode().value()).isEqualTo(200);
     assertThat(result.getBody()).contains("HELD", "5개 중 2개", "alternatives");
     assertThat(stock(item)).isZero();
@@ -425,7 +429,8 @@ class AllocationIntegrationTest {
           }
           return hold(item, 1);
         };
-    try (ExecutorService pool = Executors.newFixedThreadPool(2)) {
+    try (ExecutorService pool =
+        com.afterbooth.DomainAuthTestSupport.executor(Executors.newFixedThreadPool(2))) {
       Future<AllocationResult> a = pool.submit(() -> allocations.run(first));
       Future<AllocationResult> b = pool.submit(() -> allocations.run(second));
       List<AllocationResult> results =
@@ -464,7 +469,8 @@ class AllocationIntegrationTest {
           }
           return hold(item, 1);
         };
-    try (ExecutorService pool = Executors.newFixedThreadPool(2)) {
+    try (ExecutorService pool =
+        com.afterbooth.DomainAuthTestSupport.executor(Executors.newFixedThreadPool(2))) {
       Future<AllocationResult> first = pool.submit(() -> allocations.run(request));
       assertThat(entered.await(1, TimeUnit.SECONDS)).isTrue();
       Future<ErrorCode> second =

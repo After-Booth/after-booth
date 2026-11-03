@@ -18,6 +18,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class IdempotencyLockPool {
   private final HikariDataSource pool;
+  private final ThreadLocal<Session> current = new ThreadLocal<>();
 
   @org.springframework.beans.factory.annotation.Autowired
   public IdempotencyLockPool(
@@ -72,10 +73,30 @@ public class IdempotencyLockPool {
         connection.close();
         throw new BusinessException(ErrorCode.IDEMPOTENCY_CONFLICT);
       }
+      current.set(session);
       return session;
     } catch (SQLException error) {
       if (connection != null) discard(connection);
       throw new IllegalStateException("Cannot acquire idempotency lock", error);
+    }
+  }
+
+  public <T> T allocation(long requestId, java.util.function.Supplier<T> action) {
+    Session existing = current.get();
+    if (existing != null) {
+      existing.requireAllocation(requestId);
+      return action.get();
+    }
+    Session session;
+    try {
+      session = acquire(new UUID(Long.MIN_VALUE, requestId));
+    } catch (BusinessException failure) {
+      if (failure.errorCode() == ErrorCode.IDEMPOTENCY_CONFLICT)
+        throw new BusinessException(ErrorCode.REQUEST_ALREADY_HELD);
+      throw failure;
+    }
+    try (session) {
+      return action.get();
     }
   }
 
@@ -95,6 +116,7 @@ public class IdempotencyLockPool {
   final class Session implements AutoCloseable {
     private final Connection connection;
     private final long lockKey;
+    private final java.util.List<Long> additional = new java.util.ArrayList<>();
 
     private Session(Connection connection, long lockKey) {
       this.connection = connection;
@@ -112,6 +134,17 @@ public class IdempotencyLockPool {
       }
     }
 
+    void requireAllocation(long requestId) {
+      long value = Long.MIN_VALUE ^ requestId;
+      try {
+        if (!query("select pg_try_advisory_lock(?)", value))
+          throw new BusinessException(ErrorCode.REQUEST_ALREADY_HELD);
+        additional.add(value);
+      } catch (SQLException error) {
+        throw new BusinessException(ErrorCode.IDEMPOTENCY_CONFLICT);
+      }
+    }
+
     private boolean query(String sql, long... values) throws SQLException {
       try (PreparedStatement statement = connection.prepareStatement(sql)) {
         for (int i = 0; i < values.length; i++) statement.setLong(i + 1, values[i]);
@@ -123,7 +156,13 @@ public class IdempotencyLockPool {
 
     @Override
     public void close() {
+      current.remove();
       try {
+        for (Long value : additional)
+          if (!query("select pg_advisory_unlock(?)", value)) {
+            discard(connection);
+            return;
+          }
         if (!query("select pg_advisory_unlock(?)", lockKey)) {
           discard(connection);
           return;
