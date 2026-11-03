@@ -24,12 +24,12 @@ class AllocationController {
       @RequestHeader("Idempotency-Key") UUID key,
       @RequestBody(required = false) byte[] body,
       HttpServletRequest http) {
-    return idempotency.execute(
+    return idempotency.executePrepared(
         key,
         http.getMethod(),
         http.getRequestURI(),
         body == null ? new byte[0] : body,
         200,
-        () -> allocations.run(requestId));
+        () -> allocations.prepare(requestId));
   }
 }

@@ -54,10 +54,14 @@ class HandoverIntegrationTest {
   @MockitoBean HandoverPhotoCounter counter;
   static final Instant NOW = ReservationIntegrationTest.NOW;
   byte[] photo;
+  private com.afterbooth.global.security.AuthenticatedMember giver;
+  private com.afterbooth.global.security.AuthenticatedMember receiver;
 
   @BeforeEach
   void reset() throws Exception {
     clock.set(NOW);
+    giver = DomainAuthTestSupport.seedOwner(jdbc, clock, 1);
+    receiver = DomainAuthTestSupport.seedOwner(jdbc, clock, 2);
     jdbc.update("delete from idempotency_record");
     jdbc.update("delete from reservation_transition");
     jdbc.update("delete from handover_log");
@@ -82,9 +86,20 @@ class HandoverIntegrationTest {
             Long.class,
             quantity,
             java.sql.Timestamp.from(NOW));
+    DomainAuthTestSupport.use(receiver);
     Long id = reservations.hold(new HoldItemRequest(request, item, quantity)).id();
     reservations.confirm(id);
+    DomainAuthTestSupport.use(giver);
     return id;
+  }
+
+  void cancelAsReceiver(Long id) {
+    DomainAuthTestSupport.use(receiver);
+    try {
+      reservations.cancel(id);
+    } finally {
+      DomainAuthTestSupport.use(giver);
+    }
   }
 
   void counted(int count, boolean allSegmented) {
@@ -146,9 +161,10 @@ class HandoverIntegrationTest {
                 "photo", "image/png", photo)
             .getBytes(java.nio.charset.StandardCharsets.UTF_8);
     jdbc.update(
-        "insert into idempotency_record(idempotency_key,fingerprint,state,created_at) values (?,?,'IN_PROGRESS',current_timestamp)",
+        "insert into idempotency_record(idempotency_key,fingerprint,state,created_at,actor_member_id,related_organization_ids) values (?,?,'IN_PROGRESS',current_timestamp,?,array[1,2]::bigint[])",
         key,
-        com.afterbooth.global.idempotency.IdempotencyService.fingerprint("POST", path, multipart));
+        com.afterbooth.global.idempotency.IdempotencyService.fingerprint("POST", path, multipart),
+        giver.memberId());
     counted(2, true);
     submit(id, key, photo).andExpect(status().isOk());
     submit(id, key, photo).andExpect(status().isOk());
@@ -298,7 +314,7 @@ class HandoverIntegrationTest {
     when(counter.count(any(), anyString(), any()))
         .thenAnswer(
             call -> {
-              reservations.cancel(cancelled);
+              cancelAsReceiver(cancelled);
               return new HandoverPhotoCounter.Result(0, List.of(), false);
             });
     submit(cancelled, UUID.randomUUID(), photo)
@@ -329,7 +345,7 @@ class HandoverIntegrationTest {
     submit(id, UUID.randomUUID(), photo).andExpect(status().isConflict());
     verifyNoInteractions(counter);
     clock.set(NOW);
-    reservations.cancel(id);
+    cancelAsReceiver(id);
     submit(id, UUID.randomUUID(), photo).andExpect(status().isConflict());
     verifyNoInteractions(counter);
   }
@@ -338,7 +354,8 @@ class HandoverIntegrationTest {
   void concurrentMatchedSubmissionsCompleteOnlyOnce() throws Exception {
     Long id = confirmed(2);
     counted(2, true);
-    try (var pool = Executors.newFixedThreadPool(2)) {
+    try (var pool =
+        com.afterbooth.DomainAuthTestSupport.executor(Executors.newFixedThreadPool(2))) {
       var barrier = new CyclicBarrier(2);
       when(counter.count(any(), anyString(), any()))
           .thenAnswer(
@@ -375,7 +392,8 @@ class HandoverIntegrationTest {
               assertThat(release.await(20, TimeUnit.SECONDS)).isTrue();
               return new HandoverPhotoCounter.Result(0, List.of(), false);
             });
-    try (var pool = Executors.newSingleThreadExecutor()) {
+    try (var pool =
+        com.afterbooth.DomainAuthTestSupport.executor(Executors.newSingleThreadExecutor())) {
       var retake =
           pool.submit(() -> attempt(() -> handovers.prepare(id, photo, "image/png").get()));
       assertThat(entered.await(20, TimeUnit.SECONDS)).isTrue();
@@ -421,7 +439,8 @@ class HandoverIntegrationTest {
               assertThat(release.await(25, TimeUnit.SECONDS)).isTrue();
               return new HandoverPhotoCounter.Result(0, List.of(), false);
             });
-    try (var pool = Executors.newFixedThreadPool(count)) {
+    try (var pool =
+        com.afterbooth.DomainAuthTestSupport.executor(Executors.newFixedThreadPool(count))) {
       var results = new java.util.ArrayList<Future<Integer>>();
       for (Long id : ids)
         results.add(
@@ -450,7 +469,8 @@ class HandoverIntegrationTest {
               assertThat(release.await(20, TimeUnit.SECONDS)).isTrue();
               throw new AiCallException(Capability.SPARK, "Local failure");
             });
-    try (var pool = Executors.newSingleThreadExecutor()) {
+    try (var pool =
+        com.afterbooth.DomainAuthTestSupport.executor(Executors.newSingleThreadExecutor())) {
       var first = pool.submit(() -> submit(id, key, photo).andReturn().getResponse().getStatus());
       assertThat(entered.await(20, TimeUnit.SECONDS)).isTrue();
       submit(id, key, photo)
@@ -487,7 +507,7 @@ class HandoverIntegrationTest {
     handovers.prepare(second, photo, "image/png").get();
     handovers.resolve(second, 1);
     handovers.prepare(pending, photo, "image/png").get();
-    reservations.cancel(cancelled);
+    cancelAsReceiver(cancelled);
     var result = stats.get(null);
     assertThat(result.totalReused()).isEqualTo(3);
     assertThat(result.reusedVolumeLiters()).isEqualTo(19);
@@ -495,7 +515,13 @@ class HandoverIntegrationTest {
     assertThat(result.byEvent()).hasSize(2);
     assertThat(stats.get(otherEvent).totalReused()).isEqualTo(1);
     assertThat(stats.get(otherEvent).reusedVolumeLiters()).isEqualTo(3);
-    mvc.perform(get("/api/stats/reuse").param("eventId", "-1"))
+    mvc.perform(get("/api/stats/reuse").param("eventId", "-1")).andExpect(status().isNotFound());
+    Long emptyEvent =
+        jdbc.queryForObject(
+            "insert into event(organization_id,name,venue,teardown_deadline) values(1,'Empty event','Synthetic venue',?) returning id",
+            Long.class,
+            java.sql.Timestamp.from(NOW.plusSeconds(3600)));
+    mvc.perform(get("/api/stats/reuse").param("eventId", emptyEvent.toString()))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.totalReused").value(0))
         .andExpect(jsonPath("$.reusedVolumeLiters").value(0))

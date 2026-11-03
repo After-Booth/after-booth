@@ -49,6 +49,10 @@ public class Event {
     return new Event(organizationId, name, venue, teardownDeadline);
   }
 
+  public void requireFutureDeadline(Instant now) {
+    if (!teardownDeadline.isAfter(now)) invalid();
+  }
+
   private static void invalid() {
     throw new BusinessException(ErrorCode.INVALID_INPUT);
   }

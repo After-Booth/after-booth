@@ -22,15 +22,46 @@ public class AuthenticatedMockMvcConfiguration {
       java.time.Clock clock,
       org.springframework.security.crypto.password.PasswordEncoder encoder) {
     String hash = encoder.encode(java.util.UUID.randomUUID().toString());
-    return builder ->
-        builder.defaultRequest(
-            MockMvcRequestBuilders.get("/")
-                .with(
-                    request -> {
-                      if (request.getHeader("Authorization") == null)
-                        request.addHeader(
-                            "Authorization", SyntheticAuthSupport.bearer(jdbc, jwt, clock, hash));
-                      return request;
-                    }));
+    return builder -> {
+      builder.addFilters(
+          new org.springframework.web.filter.OncePerRequestFilter() {
+            @Override
+            protected void doFilterInternal(
+                jakarta.servlet.http.HttpServletRequest request,
+                jakarta.servlet.http.HttpServletResponse response,
+                jakarta.servlet.FilterChain chain)
+                throws jakarta.servlet.ServletException, java.io.IOException {
+              var previous =
+                  org.springframework.security.core.context.SecurityContextHolder.getContext();
+              try {
+                chain.doFilter(request, response);
+              } finally {
+                org.springframework.security.core.context.SecurityContextHolder.setContext(
+                    previous);
+              }
+            }
+          });
+      builder.defaultRequest(
+          MockMvcRequestBuilders.get("/")
+              .with(
+                  request -> {
+                    if (request.getHeader("Authorization") == null) {
+                      var authentication =
+                          org.springframework.security.core.context.SecurityContextHolder
+                              .getContext()
+                              .getAuthentication();
+                      request.addHeader(
+                          "Authorization",
+                          authentication != null
+                                  && authentication.getPrincipal()
+                                      instanceof
+                                      com.afterbooth.global.security.AuthenticatedMember actor
+                                  && DomainAuthTestSupport.hasSession(jdbc, actor)
+                              ? DomainAuthTestSupport.bearer(jwt, clock)
+                              : SyntheticAuthSupport.bearer(jdbc, jwt, clock, hash));
+                    }
+                    return request;
+                  }));
+    };
   }
 }

@@ -19,10 +19,16 @@ public record ItemResponse(
     int availableQty,
     OffsetDateTime pickupDeadline,
     VehicleType vehicleRequirement,
-    String conditionsTranscript) {
+    @com.fasterxml.jackson.annotation.JsonInclude(
+            com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+        String conditionsTranscript) {
   public record Size(int width, int depth, int height) {}
 
   public static ItemResponse from(Item i) {
+    return from(i, true);
+  }
+
+  public static ItemResponse from(Item i, boolean includeTranscript) {
     return new ItemResponse(
         i.id(),
         i.eventId(),
@@ -35,6 +41,6 @@ public record ItemResponse(
         i.availableQty(),
         i.pickupDeadline().atZone(ZoneId.of("Asia/Seoul")).toOffsetDateTime(),
         i.vehicleRequirement(),
-        i.conditionsTranscript());
+        includeTranscript ? i.conditionsTranscript() : null);
   }
 }

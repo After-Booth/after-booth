@@ -76,6 +76,8 @@ class AuthSecurityConfiguration {
       new OrRequestMatcher(
           LOGOUT_ALL,
           PASSWORD_CHANGE,
+          PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/api/members/me"),
+          PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/events"),
           PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/api/organizations"),
           PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/api/items"),
           PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/api/items/{id}"),
@@ -194,6 +196,7 @@ class AuthSecurityConfiguration {
                     .permitAll()
                     .requestMatchers(
                         HttpMethod.GET,
+                        "/api/members/me",
                         "/api/organizations",
                         "/api/items",
                         "/api/items/{id}",
@@ -207,6 +210,7 @@ class AuthSecurityConfiguration {
                     .authenticated()
                     .requestMatchers(
                         HttpMethod.POST,
+                        "/api/events",
                         "/api/intake/drafts",
                         "/api/intake/drafts/{id}/confirm",
                         "/api/conditions/interpret",

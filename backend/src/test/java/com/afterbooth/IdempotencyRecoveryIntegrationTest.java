@@ -26,14 +26,22 @@ class IdempotencyRecoveryIntegrationTest {
   @Autowired org.springframework.transaction.PlatformTransactionManager manager;
   @Autowired java.time.Clock clock;
   @Autowired tools.jackson.databind.json.JsonMapper json;
+  @Autowired com.afterbooth.global.security.DomainAccess access;
+
+  @org.junit.jupiter.api.BeforeEach
+  void authenticate() {
+    DomainAuthTestSupport.seedOwner(jdbc, clock, 2);
+  }
+
   static final byte[] BODY = new byte[0];
-  static final String PATH = "/synthetic-recovery";
+  static final String PATH = "/api/events";
 
   void orphan(UUID key) {
     jdbc.update(
-        "insert into idempotency_record(idempotency_key,fingerprint,state,created_at) values (?,?,'IN_PROGRESS',current_timestamp)",
+        "insert into idempotency_record(idempotency_key,fingerprint,state,created_at,actor_member_id,related_organization_ids) values (?,?,'IN_PROGRESS',current_timestamp,?,array[2]::bigint[])",
         key,
-        IdempotencyService.fingerprint("POST", PATH, BODY));
+        IdempotencyService.fingerprint("POST", PATH, BODY),
+        access.actor().memberId());
   }
 
   Object run(UUID key, Supplier<?> action) {
@@ -73,11 +81,12 @@ class IdempotencyRecoveryIntegrationTest {
         new com.afterbooth.global.idempotency.IdempotencyLockPool(
             source, 2, 0, java.time.Duration.ofSeconds(1));
     try {
-      var other = new IdempotencyService(jdbc, manager, clock, json, otherLocks);
+      var other = new IdempotencyService(jdbc, manager, clock, json, otherLocks, access);
       UUID key = UUID.randomUUID();
       orphan(key);
       CountDownLatch entered = new CountDownLatch(1), release = new CountDownLatch(1);
-      try (var workers = Executors.newSingleThreadExecutor()) {
+      try (var workers =
+          com.afterbooth.DomainAuthTestSupport.executor(Executors.newSingleThreadExecutor())) {
         var first =
             workers.submit(
                 () ->
@@ -199,7 +208,8 @@ class IdempotencyRecoveryIntegrationTest {
     UUID key = UUID.randomUUID();
     orphan(key);
     CountDownLatch entered = new CountDownLatch(1), release = new CountDownLatch(1);
-    try (var workers = Executors.newSingleThreadExecutor()) {
+    try (var workers =
+        com.afterbooth.DomainAuthTestSupport.executor(Executors.newSingleThreadExecutor())) {
       var first =
           workers.submit(
               () ->
@@ -237,7 +247,8 @@ class IdempotencyRecoveryIntegrationTest {
       UUID key = UUID.randomUUID();
       CountDownLatch entered = new CountDownLatch(1), release = new CountDownLatch(1);
       AtomicInteger actions = new AtomicInteger();
-      try (var workers = Executors.newSingleThreadExecutor()) {
+      try (var workers =
+          com.afterbooth.DomainAuthTestSupport.executor(Executors.newSingleThreadExecutor())) {
         var first =
             workers.submit(
                 () ->
@@ -284,7 +295,8 @@ class IdempotencyRecoveryIntegrationTest {
   void finalRowLockProtectsCommitWhenSessionDies() throws Exception {
     UUID key = UUID.randomUUID();
     CountDownLatch entered = new CountDownLatch(1), release = new CountDownLatch(1);
-    try (var workers = Executors.newSingleThreadExecutor()) {
+    try (var workers =
+        com.afterbooth.DomainAuthTestSupport.executor(Executors.newSingleThreadExecutor())) {
       var first =
           workers.submit(
               () ->

@@ -41,6 +41,14 @@ class DefaultVehicleHoldIntegrationTest {
   @Autowired VehicleCargoProperties cargo;
   @Autowired tools.jackson.databind.json.JsonMapper json;
 
+  @Autowired Clock clock;
+
+  @org.junit.jupiter.api.BeforeEach
+  void authorize() {
+    DomainAuthTestSupport.seedOwner(jdbc, clock, 1);
+    DomainAuthTestSupport.seedOwner(jdbc, clock, 2);
+  }
+
   Long request(String vehicle) {
     return jdbc.queryForObject(
         "insert into pickup_request(organization_id,category,quantity,vehicle_type,created_at) values(2,'DISPLAY_RACK',1,?,?) returning id",

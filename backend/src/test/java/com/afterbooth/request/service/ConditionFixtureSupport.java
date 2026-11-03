@@ -36,7 +36,8 @@ final class ConditionFixtureSupport {
                       mock(RequestReferences.class),
                       Clock.fixed(Instant.parse("2026-10-31T03:00:00Z"), ZoneOffset.UTC),
                       "minimal",
-                      "2026-10-31");
+                      "2026-10-31",
+                      org.mockito.Mockito.mock(com.afterbooth.global.security.DomainAccess.class));
               var result =
                   service.interpret(ConditionContext.RECEIVER, null, wav, "audio/wav", null);
               assertThat(result.transcript()).isNotBlank();

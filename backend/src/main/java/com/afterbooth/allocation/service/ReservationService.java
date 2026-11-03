@@ -11,6 +11,7 @@ import com.afterbooth.allocation.repository.ReservationRepository;
 import com.afterbooth.allocation.repository.TransitionRepository;
 import com.afterbooth.global.error.BusinessException;
 import com.afterbooth.global.error.ErrorCode;
+import com.afterbooth.global.security.DomainAccess;
 import com.afterbooth.inventory.domain.Item;
 import com.afterbooth.inventory.domain.ItemCategory;
 import com.afterbooth.inventory.service.ItemStockService;
@@ -34,6 +35,7 @@ public class ReservationService {
   private final VehicleFitPolicy vehicles;
   private final Clock clock;
   private final Duration ttl;
+  private final DomainAccess access;
 
   public ReservationService(
       ReservationRepository reservations,
@@ -42,7 +44,8 @@ public class ReservationService {
       PickupRequestService requests,
       VehicleFitPolicy vehicles,
       Clock clock,
-      @Value("${afterbooth.hold-ttl:PT15M}") Duration ttl) {
+      @Value("${afterbooth.hold-ttl:PT15M}") Duration ttl,
+      DomainAccess access) {
     if (ttl.isZero() || ttl.isNegative())
       throw new IllegalArgumentException("afterbooth.hold-ttl must be positive but was " + ttl);
     this.reservations = reservations;
@@ -52,6 +55,7 @@ public class ReservationService {
     this.vehicles = vehicles;
     this.clock = clock;
     this.ttl = ttl;
+    this.access = access;
   }
 
   @Transactional
@@ -71,8 +75,12 @@ public class ReservationService {
   private ReservationResponse hold(HoldItemRequest input, TransitionActor actor) {
     if (input.requestId() == null || input.itemId() == null || input.quantity() <= 0)
       throw new BusinessException(ErrorCode.INVALID_INPUT);
-    PickupRequest request = requests.lock(input.requestId());
     Item item = items.get(input.itemId());
+    long receiver = access.request(input.requestId());
+    access.item(item.id());
+    access.lockOrganizations(List.of(receiver, item.organizationId()));
+    access.request(input.requestId());
+    PickupRequest request = requests.lock(input.requestId());
     Instant now = clock.instant();
     if (item.isPickupClosed(now)) throw new BusinessException(ErrorCode.PICKUP_CLOSED);
     vehicles.requireFit(item, request.vehicleType());
@@ -95,19 +103,44 @@ public class ReservationService {
   }
 
   @Transactional(readOnly = true)
+  public void proposeForAgent(
+      HoldItemRequest input, int stagedRequestQuantity, int stagedItemQuantity) {
+    access.request(input.requestId());
+    access.item(input.itemId());
+    PickupRequest request = requests.findForAllocation(input.requestId());
+    Item item = items.get(input.itemId());
+    if (item.isPickupClosed(clock.instant())) throw new BusinessException(ErrorCode.PICKUP_CLOSED);
+    vehicles.requireFit(item, request.vehicleType());
+    AgentHoldRejection.requireCategory(request.category(), item.category());
+    request.requireCapacity(
+        reservations.activeQuantity(request.id()) + stagedRequestQuantity, input.quantity());
+    if (input.quantity() <= 0 || item.availableQty() - stagedItemQuantity < input.quantity())
+      throw new BusinessException(ErrorCode.QTY_UNAVAILABLE);
+  }
+
+  @Transactional(readOnly = true)
   public ReservationResponse get(Long id) {
+    access.reservation(id, DomainAccess.Role.PARTY);
     return response(find(id), true);
   }
 
   @Transactional(readOnly = true)
   public List<ReservationResponse> list(Long requestId, Long eventId) {
+    access.actor();
     return reservations.listWithLabel(requestId, eventId).stream()
+        .filter(
+            row -> {
+              var ids = access.reservationOrganizations(row.reservation().id());
+              return ids.stream().anyMatch(access::owner);
+            })
         .map(row -> ReservationResponse.from(row.reservation(), row.itemLabel(), null))
         .toList();
   }
 
   @Transactional
   public Confirmation confirm(Long id) {
+    access.lockOrganizations(access.reservation(id, DomainAccess.Role.RECEIVER));
+    access.reservation(id, DomainAccess.Role.RECEIVER);
     Reservation reservation = find(id);
     Instant now = clock.instant();
     Reservation.ConfirmationDecision decision = reservation.confirmationAt(now);
@@ -120,6 +153,8 @@ public class ReservationService {
 
   @Transactional
   public ReservationResponse cancel(Long id) {
+    access.lockOrganizations(access.reservation(id, DomainAccess.Role.RECEIVER));
+    access.reservation(id, DomainAccess.Role.RECEIVER);
     Reservation r =
         reservations.lock(id).orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
     if (!apply(r, r.cancel(), TransitionActor.USER, clock.instant()))
@@ -129,6 +164,7 @@ public class ReservationService {
 
   @Transactional
   public boolean expire(Long id) {
+    access.lockSystemOrganizations(access.reservationOrganizations(id));
     Reservation r = find(id);
     Instant now = clock.instant();
     ReservationStatus next = r.dueTransition(now);
@@ -152,6 +188,7 @@ public class ReservationService {
       readOnly = true,
       propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
   public ItemCategory preparePhotoHandover(Long id) {
+    access.reservation(id, DomainAccess.Role.GIVER);
     Reservation reservation = find(id);
     reservation.requirePhotoHandover(clock.instant());
     return items.get(reservation.itemId()).category();
@@ -159,6 +196,8 @@ public class ReservationService {
 
   @Transactional(propagation = org.springframework.transaction.annotation.Propagation.MANDATORY)
   public ReservationResponse lockForPhotoHandover(Long id) {
+    access.lockOrganizations(access.reservation(id, DomainAccess.Role.GIVER));
+    access.reservation(id, DomainAccess.Role.GIVER);
     Reservation reservation =
         reservations.lock(id).orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
     reservation.requirePhotoHandover(clock.instant());
@@ -167,12 +206,15 @@ public class ReservationService {
 
   @Transactional(propagation = org.springframework.transaction.annotation.Propagation.MANDATORY)
   public ReservationResponse lockForHandover(Long id) {
+    access.lockOrganizations(access.reservation(id, DomainAccess.Role.GIVER));
+    access.reservation(id, DomainAccess.Role.GIVER);
     return response(
         reservations.lock(id).orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND)), false);
   }
 
   @Transactional(propagation = org.springframework.transaction.annotation.Propagation.MANDATORY)
   public ReservationResponse completeHandover(Long id, int accepted, TransitionActor actor) {
+    access.lockOrganizations(access.reservation(id, DomainAccess.Role.GIVER));
     Reservation reservation = find(id);
     Instant now = clock.instant();
     int remainder = reservation.requireHandover(accepted, actor, now);

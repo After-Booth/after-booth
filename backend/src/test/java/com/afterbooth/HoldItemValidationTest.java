@@ -36,10 +36,17 @@ class HoldItemValidationTest {
   @BeforeEach
   void reset() {
     clock.set(NOW);
+    DomainAuthTestSupport.seedOwner(jdbc, clock, 1);
+    DomainAuthTestSupport.seedOwner(jdbc, clock, 2);
     jdbc.update("delete from idempotency_record");
     jdbc.update("delete from reservation_transition");
     jdbc.update("delete from handover_log");
     jdbc.update("delete from reservation");
+  }
+
+  @org.junit.jupiter.api.AfterEach
+  void clearActor() {
+    org.springframework.security.core.context.SecurityContextHolder.clearContext();
   }
 
   Long item(int quantity) {
