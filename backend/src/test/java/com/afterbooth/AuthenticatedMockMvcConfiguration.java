@@ -45,20 +45,21 @@ public class AuthenticatedMockMvcConfiguration {
           MockMvcRequestBuilders.get("/")
               .with(
                   request -> {
-                    if (request.getHeader("Authorization") == null)
+                    if (request.getHeader("Authorization") == null) {
+                      var authentication =
+                          org.springframework.security.core.context.SecurityContextHolder
+                              .getContext()
+                              .getAuthentication();
                       request.addHeader(
                           "Authorization",
-                          org.springframework.security.core.context.SecurityContextHolder
-                                          .getContext()
-                                          .getAuthentication()
-                                      != null
-                                  && org.springframework.security.core.context.SecurityContextHolder
-                                          .getContext()
-                                          .getAuthentication()
-                                          .getPrincipal()
-                                      instanceof com.afterbooth.global.security.AuthenticatedMember
+                          authentication != null
+                                  && authentication.getPrincipal()
+                                      instanceof
+                                      com.afterbooth.global.security.AuthenticatedMember actor
+                                  && DomainAuthTestSupport.hasSession(jdbc, actor)
                               ? DomainAuthTestSupport.bearer(jwt, clock)
                               : SyntheticAuthSupport.bearer(jdbc, jwt, clock, hash));
+                    }
                     return request;
                   }));
     };

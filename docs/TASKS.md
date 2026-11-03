@@ -414,3 +414,19 @@ All 218 distinct tests in 20 affected classes passed, with zero failures/skips/a
 The 35-case authorization suite includes 22 separately parameterized anonymous-route checks, forbidden giver cancellation/unrelated confirmation, foreign allocation, owned/foreign GIVER condition interpretation and ACTIVE/revoked RECEIVER checks. Catalog coverage also rejects foreign intake confirmation. The final reservation and idempotency recovery runs resolve the earlier failures; actual successful quantities, party roles, state transitions, stock restoration and response atomicity are verified rather than inferred from mocks.
 
 The parent checked the actual implementation/test diff, per-class summaries and exit codes. Compilation/formatting and independent re-review passed. Changed-file secret scanning, whitespace and local PR-body validation are checked before commit. The 218-case total combines final affected runs on the unchanged relevant code; it is not an additional full-suite execution. No test pass is attributed to the aborted Gradle workers.
+
+## PR #73 backend CI correction (2026-11-03)
+
+CI run 41619198975 at c1d9f84 executed 555 tests: 37 failed and five were skipped. The earlier per-class checks did not expose shared-JVM fixture contamination. The downloaded backend report identifies three test-only causes: AuthenticatedMockMvcConfiguration reused an actor from another test database; HoldItemValidationTest/HandoverResolveValidationTest still used unowned seed organizations without receiver/giver actors; HoldTtlStartupTest omitted the new DomainAccess constructor dependency.
+
+The correction changes no production source or security rules. Default test authentication reuses an actor only when its session/member identity exists in the current database. Revoked, version-mismatched and explicitly invalid credentials still reach the real JWT validation and return 401. Validation fixtures provision synthetic owners, apply receiver/giver roles and clear their actor after each case. The isolated TTL slice mocks DomainAccess.
+
+Regression evidence: the new foreign-database actor test failed before the helper correction (OrganizationControllerTest: four passed, one failed). After correction, five focused authentication regression cases cover foreign actor, current actor restoration, revoked actor, version mismatch and explicit invalid Bearer. Compilation/Spotless passed. All 93 cases in eight affected classes then passed together in ONE JUnit JVM, zero skips/failures/aborts, using the previously documented Gradle-runtime-classpath launcher. The group includes OrganizationControllerTest, HoldTtlStartupTest, HoldItemValidationTest, HandoverResolveValidationTest, IntakeControllerTest, RequestControllerTest, ReservationIntegrationTest and HandoverIntegrationTest.
+
+```powershell
+.\gradlew.bat '-Dorg.gradle.jvmargs=-Xms32m -Xmx192m -XX:MaxMetaspaceSize=192m -XX:ActiveProcessorCount=2 -XX:TieredStopAtLevel=1 -XX:ReservedCodeCacheSize=48m -XX:+UseSerialGC' --init-script C:\Users\ehddu\AppData\Local\Temp\afterbooth-agent-tests.gradle spotlessApply compileJava compileTestJava processTestResources spotlessCheck --no-daemon --max-workers=1
+& 'C:\Users\ehddu\AppData\Local\Temp\afterbooth-selected-test.ps1' -TestClass 'com.afterbooth.inventory.controller.OrganizationControllerTest' -AdditionalClasses @('com.afterbooth.HoldTtlStartupTest','com.afterbooth.HoldItemValidationTest','com.afterbooth.HandoverResolveValidationTest','com.afterbooth.intake.controller.IntakeControllerTest','com.afterbooth.request.controller.RequestControllerTest','com.afterbooth.ReservationIntegrationTest','com.afterbooth.HandoverIntegrationTest')
+# Compilation/formatting passed; all 93 same-JVM cases passed.
+```
+
+The parent inspected the actual diff and failure/success summaries. Full Linux CI is re-run by the PR push; local checks do not claim that result in advance. Existing exclusions for live AI, real mail, UI and deployment remain unchanged.

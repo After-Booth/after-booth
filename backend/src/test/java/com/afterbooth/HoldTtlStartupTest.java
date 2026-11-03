@@ -36,6 +36,11 @@ class HoldTtlStartupTest {
   @Import(ReservationService.class)
   static class Slice {
     @Bean
+    com.afterbooth.global.security.DomainAccess access() {
+      return Mockito.mock(com.afterbooth.global.security.DomainAccess.class);
+    }
+
+    @Bean
     ReservationRepository reservations() {
       return Mockito.mock(ReservationRepository.class);
     }

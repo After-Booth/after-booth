@@ -43,10 +43,14 @@ class HandoverResolveValidationTest {
   @MockitoBean HandoverPhotoCounter counter;
   static final Instant NOW = ReservationIntegrationTest.NOW;
   byte[] photo;
+  private com.afterbooth.global.security.AuthenticatedMember giver;
+  private com.afterbooth.global.security.AuthenticatedMember receiver;
 
   @BeforeEach
   void reset() throws Exception {
     clock.set(NOW);
+    giver = DomainAuthTestSupport.seedOwner(jdbc, clock, 1);
+    receiver = DomainAuthTestSupport.seedOwner(jdbc, clock, 2);
     jdbc.update("delete from idempotency_record");
     jdbc.update("delete from reservation_transition");
     jdbc.update("delete from handover_log");
@@ -55,6 +59,11 @@ class HandoverResolveValidationTest {
     var out = new ByteArrayOutputStream();
     ImageIO.write(new BufferedImage(4, 4, BufferedImage.TYPE_INT_RGB), "png", out);
     photo = out.toByteArray();
+  }
+
+  @org.junit.jupiter.api.AfterEach
+  void clearActor() {
+    org.springframework.security.core.context.SecurityContextHolder.clearContext();
   }
 
   Long confirmed(int quantity) {
@@ -71,8 +80,10 @@ class HandoverResolveValidationTest {
             Long.class,
             quantity,
             java.sql.Timestamp.from(NOW));
+    DomainAuthTestSupport.use(receiver);
     Long id = reservations.hold(new HoldItemRequest(request, item, quantity)).id();
     reservations.confirm(id);
+    DomainAuthTestSupport.use(giver);
     return id;
   }
 

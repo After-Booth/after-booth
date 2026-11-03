@@ -61,4 +61,13 @@ public final class DomainAuthTestSupport {
     return "Bearer "
         + jwt.issue(actor.memberId(), actor.sessionId(), actor.authVersion(), clock.instant());
   }
+
+  public static boolean hasSession(JdbcTemplate jdbc, AuthenticatedMember actor) {
+    return Boolean.TRUE.equals(
+        jdbc.queryForObject(
+            "select exists(select 1 from refresh_session where id=? and member_id=?)",
+            Boolean.class,
+            actor.sessionId(),
+            actor.memberId()));
+  }
 }
