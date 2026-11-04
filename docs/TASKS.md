@@ -519,3 +519,10 @@ Baseline: fetched `origin/main` `d02c98232cad21ae65d5c94a6bb45fee77bc23f0`; bran
 - [ ] Actual teammate reviews, current video, submission form access/fields and final external submission.
 
 See [SUBMISSION_READINESS](SUBMISSION_READINESS.md) for commands, evidence boundaries, current failures, G3 report and human actions. #17 and Phase 3 remain incomplete; no push, PR, merge, GitHub write, deployment, upload or external submission was performed. The earlier #70 checklist above is its historical delivery record; this section describes newly verified scope and remaining gaps.
+
+
+### #17 replay recovery preparation (2026-11-04)
+
+Continue the existing `fix/17-submission-readiness` branch from `a9237b0`; preserve preceding commits and original recordings. Reproduced the condition replay failure and verified its exact missing English hash against the original request. Added a separately gated one-attempt condition recorder and deterministic owned-demo database setup/ID assertions. Production member-owned RECORD remains forbidden; no paid call was made. The full-demo recorder and both race recordings remain BLOCKED pending staged preparation and explicit paid approval; ENGLISH_RECORDINGS_READY remains false.
+
+Current checks: 60 focused backend tests and three additional no-network photo/handover request preparation checks plus format/compile passed; E2E type checking passed; six authenticated browser checks passed; owned-demo fresh DB reset smoke passed; demo readiness remains an explicit failure with ten overlap/helper tests passing. See [SUBMISSION_READINESS](SUBMISSION_READINESS.md#replay-recovery-preparation-on-fix17-submission-readiness-2026-11-04) for exact synthetic inputs, request differences, cost limits and unverified scope. No full-demo success or Phase 3 completion is claimed.

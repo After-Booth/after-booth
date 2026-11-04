@@ -41,6 +41,33 @@ One file per unique recorded request: `fixtures/replay/<capability>/<key>.json`,
 
 ## Recording
 
+### English condition request preparation (#17)
+
+`EnglishConditionRecordingTest.identifiesExactEnglishRequestWithoutNetworkOrInventedResponses`
+serializes the current `ConditionPrompt` through the real gateway request builder without transport.
+It verifies that the receiver sedan request is
+`4c5fb1f9cfcbd4263b79d4c0f71865b7b42eb1e67e0eb7d9351e63dc92ccb711`
+and differs from historical request `0890f3ea8678a3cf3e08248a08b4e7299843bb93cf909058c3e9600cbc5a3dc0`
+only in the system prompt's English purpose instruction/example. Its schema, model, minimal effort,
+`2026-10-31` reference date and original Korean user transcript remain byte-identical.
+This is English output preparation using historical Korean speech, not English voice evidence.
+
+After separate human approval, the opt-in `recordsExactlyOneApprovedSparkRequest` method records
+only that exact request using `muse-spark-1.3` at `https://api.meta.ai/v1/chat/completions`.
+It checks the request hash, endpoint and Standard model before transport, reuses an existing fixture,
+and has one gateway call with no retry or validation re-ask: at most one new paid HTTP attempt per
+invocation. It never enters or clears member-owned work. The production member recording prohibition
+remains in place. The approval property is `afterbooth.english-condition-recording-approved=true`;
+ordinary tests leave this method disabled. Do not run the historical `ConditionInterpretationRecordTest`
+to record authenticated input: the member recording guard intentionally rejects it.
+
+The historical minimal structuring estimate is about $0.0018 per call. Current Standard Spark pricing
+is $1.25 per million input tokens and $4.25 per million output tokens; actual response usage must be
+logged after recording. The one-attempt limit is enforced; a hard dollar limit is not enforced because
+this request does not set an output-token cap. Approve this narrow recording separately from a full
+demo recording, and run `ConditionInterpretationReplayTest` afterward. Recording this one file alone
+does not establish authenticated full-demo readiness.
+
 `AI_MODE=record` reuses an existing fixture without an HTTP call and logs `outcome=reused`. For a missing fixture, it makes the live call and writes the file above. Concurrent identical requests in one gateway share a single in-flight call and its response. Failures propagate to all waiters and are not cached. Later runs add missing branches without overwriting earlier responses; a human deletes an individual file to re-record it. New calls spend credits, so a human runs recording (AGENTS.md hard rule 6; the Claude Code hook asks first), then logs the cost in `docs/BUDGET.md`.
 
 The gateway smoke records one tiny call per model (a Korean Spark text prompt at `reasoning_effort: minimal`, one SAM box prompt on `spike/samples/table-lifetime-single.jpg`, one Transcribe call on `spike/samples/audio-giver-van-tonight.wav`), about $0.004 in total at the spike's per-call costs. From the repo root:

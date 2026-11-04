@@ -59,4 +59,8 @@ tasks.named('test') {
 	if (providers.gradleProperty('recordSmoke').isPresent()) {
 		systemProperty 'afterbooth.ai.record-smoke', 'true'
 	}
+	// Separate G$ approval is required; default tests remain replay-only.
+	if (providers.gradleProperty('recordEnglishCondition').isPresent()) {
+		systemProperty 'afterbooth.english-condition-recording-approved', 'true'
+	}
 }

@@ -27,7 +27,7 @@ test.beforeAll(async () => {
     );
     throw new Error('Full authenticated English demo is BLOCKED: approved recordings for the owned rack intake, English condition/allocation requests and handover are missing. No live call is authorized.');
   }
-  stack = await startAuthStack();
+  stack = await startAuthStack({ ownedDemo: true });
   browser = await chromium.launch({
     args: [`--ignore-certificate-errors-spki-list=${stack.spki}`],
   });
@@ -223,9 +223,12 @@ test('authenticated owned inventory, allocation race, giver handover and reuse s
         receiverB.organizationId,
       ]).size,
     ).toBe(3);
+    expect([giver.organizationId, receiverA.organizationId, receiverB.organizationId])
+      .toEqual([1, 2, 3]);
     const health = await apiGet<{ aiMode: string }>(giver.page, '/api/health');
     expect(health.aiMode).toBe('replay');
     const event = await createOwnedEvent(giver.page);
+    expect(event.id).toBe(1);
     const binsMs = await intake(
       giver.page,
       event.id,
@@ -252,6 +255,7 @@ test('authenticated owned inventory, allocation race, giver handover and reuse s
     const racks = items.filter((item) => item.category === 'DISPLAY_RACK');
     expect(racks).toHaveLength(1);
     expect(racks[0].availableQty).toBe(1);
+    expect(racks[0].id).toBe(2);
     expect(
       items.filter((item) => item.category === 'STORAGE_BIN')
         .reduce((sum, item) => sum + item.totalQty, 0),
@@ -269,6 +273,7 @@ test('authenticated owned inventory, allocation race, giver handover and reuse s
     captureAllocations(receiverA.page, allocationsA);
     captureAllocations(receiverB.page, allocationsB);
     const sedanId = await prepareRequest(receiverA.page, true);
+    expect(sedanId).toBe(1);
     await receiverA.page
       .getByRole('button', { name: 'Get allocation proposal', exact: true })
       .click();
@@ -293,6 +298,7 @@ test('authenticated owned inventory, allocation race, giver handover and reuse s
 
     const requestA = await prepareRequest(receiverA.page, false);
     const requestB = await prepareRequest(receiverB.page, false);
+    expect([requestA, requestB]).toEqual([2, 3]);
     for (const [actor, requestId] of [
       [receiverA, requestA],
       [receiverB, requestB],

@@ -107,3 +107,48 @@ Intentional Korean remains in original user/transcript examples and the request 
 | `e86b788` | Isolated authentication E2E, recovery/privacy checks, owned-data demo gate, standalone TypeScript configuration and E2E run guide |
 
 The final documentation commit adds current README/fixture/run guidance, this G3 report, exact verification records and TASKS status. Local commits are the endpoint: no push, PR, main merge, GitHub issue/comment/status change, visibility change, deployment, video upload or external submission occurred. The original checkout remains on main.
+
+
+## Replay recovery preparation on `fix/17-submission-readiness` (2026-11-04)
+
+This follow-up started at `a9237b0` on the existing `fix/17-submission-readiness` branch with a clean working tree. No branch switch, new worktree or main-based reset was performed. The earlier baseline section describes the preceding work, not the current branch name.
+
+### Reproduced failure and exact input
+
+`ConditionInterpretationReplayTest` fails in the current build: the original Transcribe exchange succeeds in REPLAY, then Spark fails and ConditionService returns AI_UNAVAILABLE. The new offline `EnglishConditionRecordingTest.identifiesExactEnglishRequestWithoutNetworkOrInventedResponses` independently verifies the current canonical key and the complete request difference:
+
+- Missing: `spark/4c5fb1f9cfcbd4263b79d4c0f71865b7b42eb1e67e0eb7d9351e63dc92ccb711.json`.
+- Original: `spark/0890f3ea8678a3cf3e08248a08b4e7299843bb93cf909058c3e9600cbc5a3dc0.json`.
+- Only the system message differs for this condition request: current `ConditionPrompt.SYSTEM` requires English purpose text. The original Korean transcript, RECEIVER context, reference date `2026-10-31`, schema, `muse-spark-1.3` and `minimal` effort remain identical. The new request is serialized through the actual MetaAiGateway; no response is synthesized.
+- No-network real-pipeline preparation also pins the first Spark requests for bins intake (`d65a99d1191a0ef88b8c7e5c859570facfc128fceb16a8e61ea7aea65c8a2805`), rack intake (`97e4168ccb9cb37cd0082effe2effc27d42ac36e9bac55a1802322b1e54322ed`) and rack handover (`31186f2f5caf929e96f0f27e1499f19cc7e70e17bf09b4940ecd6e87b23cce1b`). Photo SHA-256 values are checked before request generation. These three preparation tests abort before any response and do not establish a successful pipeline.
+- Other demo requests have additional differences: English model/tool messages and actual owned inventory IDs, dimensions, condition and stock. AllocationModelData excludes auth/session/request IDs and wall-clock timestamps, but retains item IDs and all server decision inputs. Genuine model tool-call IDs and earlier replies determine subsequent turn hashes.
+
+### Isolated initial state and order
+
+The owned-demo stack creates its own disposable PostgreSQL container, migrates it, checks that no member exists, and resets only that container's seed domain tables with identity restart. It does not accept an external database target. Default auth tests retain their existing seed setup. Authentication, ownership, constraints and production member-recording protection are unchanged.
+
+1. Create three verified synthetic accounts in independent HTTPS browser contexts, giver first and receivers A/B next. Credentials, codes and ephemeral signing/TLS keys stay outside fixtures and documentation. Expected organization IDs: 1/2/3.
+2. Giver creates event #1, `Synthetic Reuse Expo`, venue `Synthetic Hall`, teardown `2030-01-01T18:00` KST. Pin the condition reference date to `2026-10-31`.
+3. Intake `spike/samples/bins-orange-stack.jpg`, then `spike/samples/rack-gondola-single.jpg`, without edits; assert four bins and one rack. Expected rack item ID: 2. Real model output supplies actual dimensions/condition; do not edit recordings to force a vehicle result. Stop and review if model output does not satisfy the scenario.
+4. Receiver A uploads the unchanged Korean `audio-receiver-racks-sedan.wav`: request #1, three display racks, SEDAN. Check no HOLD, VEHICLE_TOO_SMALL and an actionable alternative. This is Korean speech with English generated purpose/explanations, not English speech verification.
+5. Both receivers enter exactly `We need one display rack. We will collect it in a van.`; save requests #2/#3. Race the last rack: exactly one HOLD, loser NO_MATCH with QTY_UNAVAILABLE and a visible, enabled alternative.
+6. Winner confirms the HOLD. Giver uploads `rack-gondola-single.jpg` for handover; assert HANDED_OVER, quantity one, stock zero and event-filtered reuse statistics matching the API.
+7. A separate fresh-state run must also cover the other losing branch: both searches see stock one then a rejected HOLD, versus a search after the winner commits that sees stock zero. Browser overlap alone does not prove both branches were recorded.
+
+### Paid gate: staged recording, not a full-demo authorization
+
+Production MetaExchange intentionally rejects RECORD inside member-owned work (D-083). Do not enable recording globally or suppress the member scope to film the authenticated app. `EnglishConditionRecordingTest.recordsExactlyOneApprovedSparkRequest` instead submits one immutable synthetic condition request directly through AiGateway outside member work. Before transport it checks the full expected hash, standard model, official endpoint and repository fixture directory. It makes at most one new HTTP attempt, with no validation re-ask or automated retry; an existing fixture is reused.
+
+The prepared first stage is one Spark call only: model `muse-spark-1.3`, POST `/v1/chat/completions`, effort `minimal`, exact missing key above. It reuses existing real Transcribe evidence and does not call SAM or Transcribe. Estimated typical cost is about $0.002, based on the historical condition measurement. Current [official pricing](https://dev.meta.ai/docs/pricing-rate-limits) is $1.25/M input and $4.25/M output tokens; [official model configuration limits](https://dev.meta.ai/docs/quickstart) list 1,048,576 context and 131,072 output tokens. Charging both maxima conservatively gives $1.867776 per attempt: propose a $2 approval ceiling for this single attempt. This is a provider-limit/rate bound, not a client-side hard dollar meter. Adding a token parameter would change the exact request hash and cannot be done just for the recording.
+
+After separate approval, a human-controlled secret loader may supply the key to the existing process environment without exposing it; select only `*EnglishConditionRecordingTest.recordsExactlyOneApprovedSparkRequest` with `-PrecordEnglishCondition`. No environment secret file was inspected. Record response usage/cost in BUDGET after the attempt, including an unsuccessful attempt, scan the fixture and run ConditionInterpretationReplayTest again. Never paste a key into chat or a command argument.
+
+The full-demo recorder is not yet executable. Follow-on photo/SAM and allocation tool turns require reviewed synthetic request capture and actual earlier Meta replies; the ordinary authenticated app RECORD path remains forbidden. The old $0.05–$0.15 full-demo forecast is not a hard spending cap or approval. A separately bounded plan is still required for those stages. One condition fixture does not clear ENGLISH_RECORDINGS_READY.
+
+### Newly verified and remaining
+
+- Java 21: `spotlessApply compileJava compileTestJava spotlessCheck` and 60 selected tests passed: exact English request, FixtureStoreTest, AiGatewayModesTest, MetaAiGatewayTest, MemberInputPrivacyTest and ArchitectureTest. An initial new-test type error was fixed; overlapping build output was discarded and the successful verification ran serially.
+- Three additional SyntheticDemoRequestPreparationTest photo/handover first-request checks passed with format/compile.
+- E2E TypeScript passed; `test:demo` still fails explicitly at the unchanged readiness gate and passes all ten overlap/helper tests. A separate auth execution passed six real-browser checks. A separate owned-stack smoke executed the disposable seed reset and cleanup successfully.
+- The original condition replay remains failing until an approved real fixture exists. Full English authenticated replay, both recorded race outcomes, HANDED_OVER/statistics with real recordings and English speech remain unverified.
+- No paid call, real mail, environment secret-file access, real-user/production database access, external write or screenshot-evidence collection was performed. No new Meta fixture or budget ledger entry exists. Submission remains blocked.

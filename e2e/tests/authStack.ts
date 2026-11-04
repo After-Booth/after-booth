@@ -28,7 +28,9 @@ function run(command: string, args: string[]): void {
  * Fake mail gateway and AI replay. Fake codes are parsed from the child's stdout in
  * memory; nothing from that stream is logged or written to disk.
  */
-export async function startAuthStack(): Promise<AuthStack> {
+export async function startAuthStack(
+  options: { ownedDemo?: boolean } = {},
+): Promise<AuthStack> {
   const jar = path.join(REPO, 'backend', 'build', 'libs', 'afterbooth-0.0.1-SNAPSHOT.jar');
   const dist = path.join(REPO, 'frontend', 'dist');
   if (!fs.existsSync(jar)) throw new Error('Build the backend first: gradlew bootJar');
@@ -204,6 +206,23 @@ export async function startAuthStack(): Promise<AuthStack> {
     } finally {
       starting = false;
       clearTimeout(startupTimer!);
+    }
+
+    if (options.ownedDemo) {
+      // This container was created above for this run. Never accept an external DB target.
+      // Reset before any synthetic signup so IDs and available inventory are reproducible.
+      run('docker', [
+        'exec', database, 'psql', '-U', 'afterbooth', '-d', 'afterbooth',
+        '-v', 'ON_ERROR_STOP=1', '-c',
+        `BEGIN;
+         DO $$ BEGIN
+           IF EXISTS (SELECT 1 FROM member) THEN
+             RAISE EXCEPTION 'Owned demo reset requires an unused disposable database';
+           END IF;
+         END $$;
+         TRUNCATE organization RESTART IDENTITY CASCADE;
+         COMMIT;`,
+      ]);
     }
 
     return {
