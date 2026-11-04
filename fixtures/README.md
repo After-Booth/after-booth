@@ -6,7 +6,7 @@ The original recordings below are historical provider evidence and remain unchan
 
 `npm --prefix e2e run test:auth` verifies its documented subset with local Fake mail and replay; it is separate from `npm --prefix e2e run test:demo`, which fails explicitly until the authenticated English full-demo prerequisites are met. `npm --prefix e2e test` includes that readiness gate. Synthetic AI unit/integration test responses are test doubles, not Meta recordings or real-model end-to-end evidence.
 
-A new English recording needs separate human approval and a bounded cost plan. Prepare verified synthetic giver/receiver accounts in separate HTTPS sessions, create an owned event and inventory, and record exact approved inputs through allocation, completed handover and statistics. A concurrent last-item race requires another receiver session. Validate both race outcomes without weakening the server rules. Never commit credentials, codes or temporary test keys. No new paid recording was made for #17.
+A new English recording needs separate human approval and a bounded cost plan. Prepare verified synthetic giver/receiver accounts in separate HTTPS sessions, create an owned event and inventory, and record exact approved inputs through allocation, completed handover and statistics. A concurrent last-item race requires another receiver session. Validate both race outcomes without weakening the server rules. Never commit credentials, codes or temporary test keys. On 2026-11-04, separate human approval authorized one English condition Spark recording described below. Authenticated full-demo recording remains incomplete and requires separate approval.
 
 The original audio samples contain Korean speech and the Transcribe configuration keeps its Korean language bias. English voice recognition/structuring/allocation has not been verified. Original user transcripts stay original; English system-generated explanations are a separate requirement.
 
@@ -67,6 +67,17 @@ logged after recording. The one-attempt limit is enforced; a hard dollar limit i
 this request does not set an output-token cap. Approve this narrow recording separately from a full
 demo recording, and run `ConditionInterpretationReplayTest` afterward. Recording this one file alone
 does not establish authenticated full-demo readiness.
+
+On 2026-11-04, the separately approved single call succeeded through the real Meta gateway:
+`outcome=recorded`, 2,436 ms, 542 input tokens and 182 output tokens (including 150 reasoning tokens).
+It created the exact `4c5fb1f9cfcbd4263b79d4c0f71865b7b42eb1e67e0eb7d9351e63dc92ccb711.json`
+fixture without changing original recordings. Estimated Standard cost is **$0.001451**
+(`542 × $1.25 / 1,000,000 + 182 × $4.25 / 1,000,000`); billing-dashboard reconciliation was not performed.
+The real response passed the test's schema/domain and English-purpose assertions, and the fixture
+passed the repository secret scan. This evidence covers this one condition request only; the
+authenticated allocation, both last-item race outcomes, completed photo handover, `HANDED_OVER`
+and statistics remain unverified against current real Meta recordings. No additional paid call is
+authorized by that one-call approval.
 
 `AI_MODE=record` reuses an existing fixture without an HTTP call and logs `outcome=reused`. For a missing fixture, it makes the live call and writes the file above. Concurrent identical requests in one gateway share a single in-flight call and its response. Failures propagate to all waiters and are not cached. Later runs add missing branches without overwriting earlier responses; a human deletes an individual file to re-record it. New calls spend credits, so a human runs recording (AGENTS.md hard rule 6; the Claude Code hook asks first), then logs the cost in `docs/BUDGET.md`.
 

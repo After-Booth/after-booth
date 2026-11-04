@@ -111,6 +111,8 @@ The final documentation commit adds current README/fixture/run guidance, this G3
 
 ## Replay recovery preparation on `fix/17-submission-readiness` (2026-11-04)
 
+This section is the pre-approval snapshot committed in `cce5370`. The approved execution below supersedes its statements about the missing condition fixture and zero calls; full-demo blockers remain.
+
 This follow-up started at `a9237b0` on the existing `fix/17-submission-readiness` branch with a clean working tree. No branch switch, new worktree or main-based reset was performed. The earlier baseline section describes the preceding work, not the current branch name.
 
 ### Reproduced failure and exact input
@@ -152,3 +154,19 @@ The full-demo recorder is not yet executable. Follow-on photo/SAM and allocation
 - E2E TypeScript passed; `test:demo` still fails explicitly at the unchanged readiness gate and passes all ten overlap/helper tests. A separate auth execution passed six real-browser checks. A separate owned-stack smoke executed the disposable seed reset and cleanup successfully.
 - The original condition replay remains failing until an approved real fixture exists. Full English authenticated replay, both recorded race outcomes, HANDED_OVER/statistics with real recordings and English speech remain unverified.
 - No paid call, real mail, environment secret-file access, real-user/production database access, external write or screenshot-evidence collection was performed. No new Meta fixture or budget ledger entry exists. Submission remains blocked.
+
+
+## Approved single-condition recording result (2026-11-04)
+
+The user separately approved the proposed single Spark attempt, with a $2 ceiling. No follow-on paid calls were authorized or executed. The existing secret loader supplied credentials to the process without printing or manually inspecting the environment file; no real-user or production DB was accessed. Branch `fix/17-submission-readiness` and preceding commits were preserved.
+
+`EnglishConditionRecordingTest.recordsExactlyOneApprovedSparkRequest`, selected with `-PrecordEnglishCondition`, passed with one real `muse-spark-1.3` RECORD exchange (`outcome=recorded`, 2,436 ms). The resulting fixture is `fixtures/replay/spark/4c5fb1f9cfcbd4263b79d4c0f71865b7b42eb1e67e0eb7d9351e63dc92ccb711.json`. Its request hash was independently recalculated and matched the filename. The parsed real response passed the category, quantity, vehicle, nonblank English purpose and no-tool-call assertions; no response was translated or manually edited.
+
+Usage was 542 prompt and 182 completion tokens, including 150 reasoning tokens, for an estimated $0.001451 at current Standard rates. [BUDGET](BUDGET.md) records the calculation and cumulative estimate; actual dashboard billing remains unverified. Original 19 recordings are byte-identical to the pre-work digest baseline. The new fixture passed the repository secret scanner and structural inspection for credential fields, email patterns, key markers, bearer values and inline media payloads. No credentials or temporary keys were found.
+
+A fresh key-free, replay-only backend run passed all 20 selected checks with zero failures/errors/skips: ConditionInterpretationReplayTest, the exact English hash test, SyntheticDemoRequestPreparationTest, FixtureStoreTest and MemberInputPrivacyTest. The previously reproduced condition failure is resolved by a real Meta recording. This does not validate English speech: the unchanged source WAV and Transcribe evidence remain Korean.
+
+ENGLISH_RECORDINGS_READY remains false. The full-demo recording runner, owned-rack intake, English allocation turns, both losing race branches and completed photo handover/statistics with genuine recordings remain unfinished. The one-condition approval does not cover those paid requests. No push, PR, merge, screenshots for D-061/D-062/D-084 or external submission occurred.
+
+
+Post-recording `npm --prefix e2e test` was run in full: TypeScript passed; all six authentication browser checks passed against a fresh disposable HTTPS stack; ten overlap/helper checks passed; the full demo failed explicitly at the unchanged ENGLISH_RECORDINGS_READY prerequisite. The overall command exited 1. This is a verified remaining failure, not a full E2E pass.

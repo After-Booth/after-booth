@@ -515,7 +515,7 @@ Baseline: fetched `origin/main` `d02c98232cad21ae65d5c94a6bb45fee77bc23f0`; bran
 - [x] Real HTTPS browser authentication suite: six tests passed, including password change/reset, resend verification and refresh-trouble logout. The refresh 503 is Playwright-injected; logout/cookies/reload use the real server.
 - [x] Reviewed blank login and credential-free refresh screens at mobile/desktop widths; no human teammate review is inferred.
 - [x] Rewrote the full-demo test for owned events/inventory and three isolated authenticated contexts; strict TypeScript checking and discovery passed. Runtime success is not implied.
-- [ ] Authenticated English full Meta demo and new English replay: separate paid recording approval required. Existing ConditionInterpretationReplayTest fails on the missing English Spark request rather than skipping or modifying the original recording.
+- [ ] Authenticated English full Meta demo and new English replay: separate paid recording approval required. The original ConditionInterpretationReplayTest failure was resolved by the separately approved single-condition recording below; remaining full-demo recordings are still missing.
 - [ ] Actual teammate reviews, current video, submission form access/fields and final external submission.
 
 See [SUBMISSION_READINESS](SUBMISSION_READINESS.md) for commands, evidence boundaries, current failures, G3 report and human actions. #17 and Phase 3 remain incomplete; no push, PR, merge, GitHub write, deployment, upload or external submission was performed. The earlier #70 checklist above is its historical delivery record; this section describes newly verified scope and remaining gaps.
@@ -526,3 +526,12 @@ See [SUBMISSION_READINESS](SUBMISSION_READINESS.md) for commands, evidence bound
 Continue the existing `fix/17-submission-readiness` branch from `a9237b0`; preserve preceding commits and original recordings. Reproduced the condition replay failure and verified its exact missing English hash against the original request. Added a separately gated one-attempt condition recorder and deterministic owned-demo database setup/ID assertions. Production member-owned RECORD remains forbidden; no paid call was made. The full-demo recorder and both race recordings remain BLOCKED pending staged preparation and explicit paid approval; ENGLISH_RECORDINGS_READY remains false.
 
 Current checks: 60 focused backend tests and three additional no-network photo/handover request preparation checks plus format/compile passed; E2E type checking passed; six authenticated browser checks passed; owned-demo fresh DB reset smoke passed; demo readiness remains an explicit failure with ten overlap/helper tests passing. See [SUBMISSION_READINESS](SUBMISSION_READINESS.md#replay-recovery-preparation-on-fix17-submission-readiness-2026-11-04) for exact synthetic inputs, request differences, cost limits and unverified scope. No full-demo success or Phase 3 completion is claimed.
+
+
+### #17 approved single-condition recording (2026-11-04)
+
+- [x] The user approved one Spark attempt, $2 ceiling. Recorded the exact missing `4c5fb1…` condition fixture through the real Meta API; no retry or additional paid capability call. Estimated cost $0.001451 is recorded in BUDGET.
+- [x] Replayed the formerly failing ConditionInterpretationReplayTest successfully; 20 related backend checks passed with zero failures/errors/skips. Verified canonical hash, preserved all 19 original recordings and scanned the new fixture for secrets and credential/personal-data patterns.
+- [ ] Full English authenticated demo, both race recordings, real photo handover/statistics and the complete recording runner remain incomplete. ENGLISH_RECORDINGS_READY is still false; approval did not include further paid requests.
+
+Post-recording full E2E command: typecheck, six auth checks and ten helpers passed; the overall command failed at the retained missing-full-demo-recordings gate. No full E2E success is claimed.
