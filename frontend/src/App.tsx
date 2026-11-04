@@ -7,7 +7,7 @@ import { IntakeScreen } from './features/intake/IntakeScreen'
 import { HandoverScreen } from './features/handover/HandoverScreen'
 import { AccountScreen, AuthScreen } from './features/auth/AuthScreen'
 import {
-  clearSession,
+  signOut,
   onSessionEnd,
   onSessionTrouble,
   renewSession,
@@ -142,7 +142,11 @@ export default function App() {
   else if (hash.startsWith('#/allocation')) {
     const id = Number(new URLSearchParams(hash.split('?')[1]).get('requestId'))
     screen = (
-      <AllocationBoard key={id} requestId={Number.isSafeInteger(id) && id > 0 ? id : undefined} />
+      <AllocationBoard
+        key={id}
+        organizationId={member.organizationId}
+        requestId={Number.isSafeInteger(id) && id > 0 ? id : undefined}
+      />
     )
   } else if (hash === '#/handover') screen = <HandoverScreen />
   else
@@ -169,7 +173,17 @@ export default function App() {
           >
             다시 시도
           </button>
-          <button onClick={clearSession}>로그아웃</button>
+          <button
+            disabled={retrying}
+            onClick={() => {
+              setRetrying(true)
+              signOut()
+                .catch(() => undefined)
+                .finally(() => setRetrying(false))
+            }}
+          >
+            로그아웃
+          </button>
         </div>
       )}
       {screen}

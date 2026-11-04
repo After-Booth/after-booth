@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   confirmReservation,
+  cancelReservation,
   holdItem,
   listItems,
   listReservations,
@@ -211,17 +212,26 @@ export function useAllocation(request: PickupRequest) {
     }
   }
 
-  async function confirm(reservation: Reservation) {
-    if (busy.current || reservation.status !== 'HELD') return
+  async function updateReservation(reservation: Reservation, operation: 'confirm' | 'cancel') {
+    if (
+      busy.current ||
+      (operation === 'confirm'
+        ? reservation.status !== 'HELD'
+        : !['HELD', 'CONFIRMED'].includes(reservation.status))
+    )
+      return
     busy.current = true
     revision.current++
     setPending(true)
     setMessage('')
-    const action = `confirm:${reservation.id}`
+    const action = `${operation}:${reservation.id}`
     const key = keys.current.get(action) ?? crypto.randomUUID()
     keys.current.set(action, key)
     try {
-      const response = await confirmReservation(reservation.id, { 'Idempotency-Key': key })
+      const response = await (operation === 'confirm' ? confirmReservation : cancelReservation)(
+        reservation.id,
+        { 'Idempotency-Key': key },
+      )
       if (response.status !== 200)
         throw new ApiError(response.status, response.data.code, response.data.message)
       keys.current.delete(action)
@@ -260,7 +270,8 @@ export function useAllocation(request: PickupRequest) {
     stockLoading,
     manualSelection,
     execute,
-    confirm,
+    confirm: (reservation: Reservation) => updateReservation(reservation, 'confirm'),
+    cancel: (reservation: Reservation) => updateReservation(reservation, 'cancel'),
     currentStock,
   }
 }

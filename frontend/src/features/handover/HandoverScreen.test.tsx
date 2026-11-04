@@ -254,7 +254,7 @@ test('retries an in-flight idempotency conflict with the same key', async () => 
   expect(keys[1]).toBe(keys[0])
 })
 
-test('cancels a zero receipt instead of submitting an invalid accepted quantity', async () => {
+test('directs a provider to receiver cancellation without a forbidden mutation', async () => {
   let cancelled = 0
   server.use(
     http.post('*/api/reservations/7/handover', () => HttpResponse.json(result(0))),
@@ -265,11 +265,9 @@ test('cancels a zero receipt instead of submitting an invalid accepted quantity'
   )
   const user = await selectReservation()
   await user.upload(screen.getByLabelText('인계 사진 촬영 또는 업로드'), photo())
-  await user.click(
-    await screen.findByRole('button', { name: '아무것도 받지 않았어요 · 예약 취소' }),
-  )
-  expect(await screen.findByText('예약을 취소하고 수량을 재고로 돌려놓았어요.')).toBeInTheDocument()
-  expect(cancelled).toBe(1)
+  expect(await screen.findByText(/수령자에게 본인의 배정 제안/)).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: /예약 취소/ })).not.toBeInTheDocument()
+  expect(cancelled).toBe(0)
 })
 
 test('filters statistics by event and displays an empty result', async () => {

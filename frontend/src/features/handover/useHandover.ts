@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  cancelReservation,
   getReservation,
   getReuseStats,
   listEvents,
@@ -14,7 +13,6 @@ import { ApiError } from '../../api/http'
 type Action = (
   | { kind: 'photo'; reservationId: number; photo: File; key: string }
   | { kind: 'resolve'; reservationId: number; quantity: number; key: string }
-  | { kind: 'cancel'; reservationId: number; key: string }
 ) & { reconcile?: boolean }
 
 const messageOf = (error: unknown) =>
@@ -73,7 +71,6 @@ export function useHandover() {
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
   const [readError, setReadError] = useState('')
-  const [cancelled, setCancelled] = useState(false)
   const [retryAction, setRetryAction] = useState<Action>()
   const lock = useRef(false)
   const generation = useRef(0)
@@ -146,7 +143,7 @@ export function useHandover() {
       current?.status === 'HANDED_OVER' && current.handedOverQty !== undefined
     let mutationStarted = false
     try {
-      if (action.reconcile && action.kind !== 'cancel') {
+      if (action.reconcile) {
         const current = await reconcile()
         if (isCompleted(current)) {
           setLoading(true)
@@ -160,33 +157,23 @@ export function useHandover() {
       }
       const headers = { 'Idempotency-Key': action.key }
       mutationStarted = true
-      if (action.kind === 'cancel') {
-        await retryConflict(() => cancelReservation(action.reservationId, headers), signal)
-        signal.throwIfAborted()
-        setCancelled(true)
-        setResult(undefined)
-        setPhoto(undefined)
-        setPhotoResult(undefined)
-      } else {
-        const response = await retryConflict(
-          () =>
-            action.kind === 'photo'
-              ? submitHandoverPhoto(action.reservationId, { photo: action.photo }, headers)
-              : resolveHandover(action.reservationId, { acceptedQty: action.quantity }, headers),
-          signal,
-        )
-        signal.throwIfAborted()
-        if (response.status === 200) {
-          setResult(response.data)
-          if (action.kind === 'photo') setPhotoResult(response.data)
-        }
+      const response = await retryConflict(
+        () =>
+          action.kind === 'photo'
+            ? submitHandoverPhoto(action.reservationId, { photo: action.photo }, headers)
+            : resolveHandover(action.reservationId, { acceptedQty: action.quantity }, headers),
+        signal,
+      )
+      signal.throwIfAborted()
+      if (response.status === 200) {
+        setResult(response.data)
+        if (action.kind === 'photo') setPhotoResult(response.data)
       }
       setLoading(true)
       await refresh()
     } catch (error) {
       if (signal.aborted) return
       const needsReconciliation =
-        action.kind !== 'cancel' &&
         error instanceof ApiError &&
         ['IDEMPOTENCY_CONFLICT', 'INVALID_TRANSITION'].includes(error.code)
       let current: Reservation | undefined
@@ -228,7 +215,6 @@ export function useHandover() {
     setPhoto(undefined)
     setMessage('')
     setRetryAction(undefined)
-    setCancelled(false)
   }
 
   return {
@@ -252,7 +238,6 @@ export function useHandover() {
     busy,
     message,
     readError,
-    cancelled,
     refresh: () => {
       setLoading(true)
       return refresh()
@@ -270,7 +255,5 @@ export function useHandover() {
     resolve: (quantity: number) =>
       selectedId &&
       run({ kind: 'resolve', reservationId: selectedId, quantity, key: crypto.randomUUID() }),
-    cancel: () =>
-      selectedId && run({ kind: 'cancel', reservationId: selectedId, key: crypto.randomUUID() }),
   }
 }

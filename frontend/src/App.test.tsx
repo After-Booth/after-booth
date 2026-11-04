@@ -136,3 +136,28 @@ test('shows a notice when the session cannot be refreshed and recovers on retry'
   await vi.waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
   expect(await screen.findByText('서버 UP · AI replay')).toBeInTheDocument()
 })
+
+test('revokes the server session when signing out from a refresh outage', async () => {
+  window.location.hash = '#/'
+  let refreshes = 0
+  let revoked = false
+  server.use(
+    http.post('*/api/auth/refresh', () =>
+      ++refreshes === 1
+        ? HttpResponse.json({ accessToken: 'test-token', tokenType: 'Bearer', expiresIn: 600 })
+        : HttpResponse.json({ code: 'AUTH_UNAVAILABLE', message: 'Unavailable' }, { status: 503 }),
+    ),
+    http.get('*/api/events', () =>
+      HttpResponse.json({ code: 'UNAUTHENTICATED', message: 'Expired' }, { status: 401 }),
+    ),
+    http.post('*/api/auth/logout', () => {
+      revoked = true
+      return new HttpResponse(null, { status: 204 })
+    }),
+  )
+  render(<App />)
+  await screen.findByRole('alert')
+  await userEvent.click(screen.getByRole('button', { name: '로그아웃' }))
+  expect(await screen.findByRole('heading', { name: '다시 만나요' })).toBeInTheDocument()
+  expect(revoked).toBe(true)
+})

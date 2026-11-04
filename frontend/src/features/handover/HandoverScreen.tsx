@@ -90,7 +90,7 @@ export function HandoverScreen() {
               }).format(new Date(reservation.pickupDeadline))}
             </p>
           )}
-          {confirmed && !completed && !handover.cancelled && (
+          {confirmed && !completed && (
             <label className={`block text-center ${button}`}>
               {handover.result ? '인계 사진 다시 촬영' : '인계 사진 촬영 또는 업로드'}
               <input
@@ -198,13 +198,10 @@ export function HandoverScreen() {
                   이 수량으로 인계 완료
                 </button>
               </form>
-              <button
-                className="min-h-12 underline"
-                disabled={handover.busy}
-                onClick={() => void handover.cancel()}
-              >
-                아무것도 받지 않았어요 · 예약 취소
-              </button>
+              <p>
+                아무것도 인계하지 않았다면 수령자에게 본인의 배정 제안에서 예약을 취소하도록 요청해
+                주세요.
+              </p>
             </div>
           )}
           {completed && (
@@ -215,7 +212,6 @@ export function HandoverScreen() {
               </p>
             </div>
           )}
-          {handover.cancelled && <p role="status">예약을 취소하고 수량을 재고로 돌려놓았어요.</p>}
         </section>
         <section
           className="space-y-4 rounded-2xl border border-stone-200 bg-white p-5 sm:p-7"

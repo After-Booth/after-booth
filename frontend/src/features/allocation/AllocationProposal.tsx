@@ -148,6 +148,13 @@ function RequestAllocationProposal({ request }: { request: PickupRequest }) {
                 {reservation.itemLabel} {reservation.quantity}개 ·{' '}
                 {reservation.status === 'HELD' ? '임시 확보' : '예약 확정'}
               </span>
+              <button
+                className="min-h-12 underline"
+                disabled={allocation.pending}
+                onClick={() => void allocation.cancel(reservation)}
+              >
+                {reservation.itemLabel} 예약 취소
+              </button>
               {reservation.status === 'HELD' && (
                 <button
                   className={button}

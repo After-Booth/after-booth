@@ -10,7 +10,13 @@ const statuses = {
   HANDED_OVER: '인계 완료',
 }
 
-export function AllocationBoard({ requestId }: { requestId?: number }) {
+export function AllocationBoard({
+  requestId,
+  organizationId,
+}: {
+  requestId?: number
+  organizationId?: number
+}) {
   const board = useAllocationBoard(requestId)
   return (
     <main className="min-h-dvh bg-stone-50 px-4 py-8 text-slate-900">
@@ -87,6 +93,15 @@ export function AllocationBoard({ requestId }: { requestId?: number }) {
                 <span className="ml-2 font-semibold text-emerald-900">
                   {statuses[reservation.status]}
                 </span>
+                {reservation.organizationId === organizationId &&
+                  ['HELD', 'CONFIRMED'].includes(reservation.status) && (
+                    <a
+                      className="block min-h-12 py-3 text-emerald-800 underline"
+                      href={`#/allocation?requestId=${reservation.requestId}`}
+                    >
+                      내 예약 관리
+                    </a>
+                  )}
                 {reservation.status === 'HELD' && (
                   <p className="mt-2 text-sm">
                     임시 확보 {countdown(reservation.holdExpiresAt, board.now)}

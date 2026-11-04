@@ -570,3 +570,42 @@ test('keeps the confirm key after an unknown outcome and refreshes an expired ho
     expect(screen.queryByRole('button', { name: '접이식 테이블 예약 확정하기' })).toBeNull(),
   )
 })
+
+test('lets the receiver cancel a confirmed reservation with a stable retry key', async () => {
+  const keys: string[] = []
+  server.use(
+    http.get('*/api/reservations', () =>
+      HttpResponse.json([{ ...reservation, status: 'CONFIRMED' }]),
+    ),
+    http.post('*/api/reservations/9/cancel', ({ request }) => {
+      keys.push(request.headers.get('Idempotency-Key')!)
+      return keys.length === 1
+        ? HttpResponse.error()
+        : HttpResponse.json({ ...reservation, status: 'RELEASED' })
+    }),
+  )
+  render(<AllocationProposal request={request} />)
+  const cancel = await screen.findByRole('button', { name: '접이식 테이블 예약 취소' })
+  await userEvent.click(cancel)
+  await screen.findByRole('alert')
+  await userEvent.click(cancel)
+  await waitFor(() =>
+    expect(
+      screen.queryByRole('button', { name: '접이식 테이블 예약 취소' }),
+    ).not.toBeInTheDocument(),
+  )
+  expect(keys).toHaveLength(2)
+  expect(keys[0]).toBe(keys[1])
+})
+
+test('offers the receiver a route from the board to their reservation management', async () => {
+  server.use(
+    http.get('*/api/reservations', () =>
+      HttpResponse.json([reservation, { ...reservation, id: 10, organizationId: 99 }]),
+    ),
+  )
+  render(<AllocationBoard organizationId={2} />)
+  const links = await screen.findAllByRole('link', { name: '내 예약 관리' })
+  expect(links).toHaveLength(1)
+  expect(links[0]).toHaveAttribute('href', '#/allocation?requestId=1')
+})
