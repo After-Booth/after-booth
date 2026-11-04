@@ -265,6 +265,31 @@ class SignupIntegrationTest {
   }
 
   @Test
+  void pendingExpiryPreservesYoungerAccountAndResponsesDoNotRevealExistence() {
+    String expired = email(), fresh = email(), unknown = email();
+    var accepted = signup.register(new RegisterMemberRequest(expired, password()));
+    assertThat(signup.register(new RegisterMemberRequest(expired, password()))).isEqualTo(accepted);
+    assertThat(signup.register(new RegisterMemberRequest(fresh, password()))).isEqualTo(accepted);
+    var real = signup.requestVerification(fresh);
+    sent.clear();
+    var dummy = signup.requestVerification(unknown);
+    assertThat(dummy.message()).isEqualTo(real.message());
+    assertThat(dummy.challengeId()).hasSize(real.challengeId().length());
+    assertThat(sent).isEmpty();
+    jdbc.update(
+        "UPDATE member SET created_at=statement_timestamp()-interval '86401 seconds' WHERE email_normalized=?",
+        expired);
+    jdbc.update(
+        "UPDATE member SET created_at=statement_timestamp()-interval '86300 seconds' WHERE email_normalized=?",
+        fresh);
+    cleanup.clean();
+    assertThat(count("SELECT count(*) FROM member WHERE email_normalized=?", expired)).isZero();
+    assertThat(count("SELECT count(*) FROM member WHERE email_normalized=?", fresh)).isEqualTo(1);
+    signup.register(new RegisterMemberRequest(expired, password()));
+    assertThat(count("SELECT count(*) FROM member WHERE email_normalized=?", expired)).isEqualTo(1);
+  }
+
+  @Test
   void memberAndSharedSchemaRejectInvalidRowsAndKeepLegacyData() {
     assertThatThrownBy(
             () ->

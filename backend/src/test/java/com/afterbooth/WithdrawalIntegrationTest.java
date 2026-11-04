@@ -47,6 +47,7 @@ class WithdrawalIntegrationTest {
   @Autowired JdbcTemplate jdbc;
   @Autowired JwtService jwt;
   @Autowired Clock clock;
+  @Autowired com.afterbooth.global.security.DomainAccess access;
   @Autowired com.afterbooth.member.service.PasswordService passwords;
   @Autowired com.afterbooth.allocation.service.ReservationService reservations;
   @Autowired com.afterbooth.handover.service.HandoverCompletionService handovers;
@@ -801,6 +802,57 @@ class WithdrawalIntegrationTest {
                 Integer.class,
                 freshOrg))
         .isZero();
+  }
+
+  @Test
+  void freshAccountAfterWithdrawalBlockExpiryCannotOwnPreviousOrganizationEventOrRequest() {
+    var trade = trade();
+    var old = trade.receiver();
+    long oldEvent =
+        jdbc.queryForObject(
+            "insert into event(organization_id,name,venue,teardown_deadline) values(?,'Synthetic past owner','Synthetic venue',statement_timestamp()+interval '1 day') returning id",
+            Long.class,
+            old.org());
+    withdrawals.withdraw(old.principal(), new WithdrawMemberRequest(old.password()));
+    jdbc.update(
+        "update withdrawn_email_block set blocked_until=statement_timestamp()-interval '1 second' where key_version=? and email_hmac=?",
+        hmac.currentVersion(),
+        hmac.currentDigest("withdrawn-email", old.email()));
+    signup.register(
+        new com.afterbooth.member.dto.RegisterMemberRequest(old.email(), old.password()));
+    long fresh =
+        jdbc.queryForObject(
+            "select id from member where email_normalized=?", Long.class, old.email());
+    long freshOrg =
+        jdbc.queryForObject(
+            "select id from organization where primary_member_id=?", Long.class, fresh);
+    assertThat(fresh).isNotEqualTo(old.id());
+    assertThat(freshOrg).isNotEqualTo(old.org());
+    // Activate only this synthetic pending row to test the real ownership policy without email.
+    jdbc.update(
+        "update member set state='ACTIVE',verified_at=statement_timestamp() where id=?", fresh);
+    var login = sessions.login(new LoginMemberRequest(old.email(), old.password()), null);
+    DomainAuthTestSupport.use(jwt.verify(login.response().accessToken(), clock.instant()));
+    try {
+      assertThat(access.organizationId()).isEqualTo(freshOrg);
+      assertThat(access.owner(old.org())).isFalse();
+      assertThatThrownBy(() -> access.event(oldEvent))
+          .isInstanceOfSatisfying(
+              BusinessException.class,
+              e -> assertThat(e.errorCode()).isEqualTo(ErrorCode.NOT_FOUND));
+      assertThatThrownBy(() -> access.request(trade.request()))
+          .isInstanceOfSatisfying(
+              BusinessException.class,
+              e -> assertThat(e.errorCode()).isEqualTo(ErrorCode.NOT_FOUND));
+      assertThat(
+              jdbc.queryForObject(
+                  "select organization_id from pickup_request where id=?",
+                  Long.class,
+                  trade.request()))
+          .isEqualTo(old.org());
+    } finally {
+      org.springframework.security.core.context.SecurityContextHolder.clearContext();
+    }
   }
 
   @Test

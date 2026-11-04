@@ -41,6 +41,17 @@ class LocalFakePasswordHttpsTest {
   private static JsonMapper json;
   private static JdbcTemplate jdbc;
   private static int port;
+  private static final com.afterbooth.ai.AiGateway syntheticAi =
+      org.mockito.Mockito.mock(com.afterbooth.ai.AiGateway.class);
+
+  @org.springframework.boot.test.context.TestConfiguration(proxyBeanMethods = false)
+  static class SyntheticAi {
+    @org.springframework.context.annotation.Bean
+    @org.springframework.context.annotation.Primary
+    com.afterbooth.ai.AiGateway syntheticTransactionGateway() {
+      return syntheticAi;
+    }
+  }
 
   @BeforeAll
   static void startRealLocalFakeHttpsServer() throws Exception {
@@ -64,7 +75,7 @@ class LocalFakePasswordHttpsTest {
     try {
       System.setOut(privateOutput);
       context =
-          new SpringApplicationBuilder(AfterboothApplication.class)
+          new SpringApplicationBuilder(AfterboothApplication.class, SyntheticAi.class)
               .profiles("local")
               .properties(properties)
               .run();
@@ -87,6 +98,7 @@ class LocalFakePasswordHttpsTest {
   void resetOnlyDisposableRateRows() {
     jdbc.update("delete from auth_rate_limit");
     console.reset();
+    org.mockito.Mockito.reset(syntheticAi);
   }
 
   private Account account() {
@@ -140,6 +152,7 @@ class LocalFakePasswordHttpsTest {
       var builder =
           HttpRequest.newBuilder(uri(path))
               .header("Content-Type", "application/json")
+              .header("Idempotency-Key", UUID.randomUUID().toString())
               .POST(HttpRequest.BodyPublishers.ofString(json.writeValueAsString(body)));
       if (!cookies.isEmpty()) builder.header("Cookie", cookie());
       if (origin != null) builder.header("Origin", origin);
@@ -162,6 +175,43 @@ class LocalFakePasswordHttpsTest {
       return client.send(builder.build(), HttpResponse.BodyHandlers.ofString());
     }
 
+    HttpResponse<String> get(String path) throws Exception {
+      var request =
+          HttpRequest.newBuilder(uri(path))
+              .header("Authorization", "Bearer " + access)
+              .GET()
+              .build();
+      return client.send(request, HttpResponse.BodyHandlers.ofString());
+    }
+
+    HttpResponse<String> photo(String path, Long eventId, byte[] image) throws Exception {
+      String boundary = "synthetic" + UUID.randomUUID();
+      var body = new ByteArrayOutputStream();
+      if (eventId != null)
+        body.write(
+            ("--"
+                    + boundary
+                    + "\r\nContent-Disposition: form-data; name=\"eventId\"\r\n\r\n"
+                    + eventId
+                    + "\r\n")
+                .getBytes(StandardCharsets.UTF_8));
+      body.write(
+          ("--"
+                  + boundary
+                  + "\r\nContent-Disposition: form-data; name=\"photo\"; filename=\"synthetic.png\"\r\nContent-Type: image/png\r\n\r\n")
+              .getBytes(StandardCharsets.UTF_8));
+      body.write(image);
+      body.write(("\r\n--" + boundary + "--\r\n").getBytes(StandardCharsets.UTF_8));
+      return client.send(
+          HttpRequest.newBuilder(uri(path))
+              .header("Authorization", "Bearer " + access)
+              .header("Idempotency-Key", UUID.randomUUID().toString())
+              .header("Content-Type", "multipart/form-data; boundary=" + boundary)
+              .POST(HttpRequest.BodyPublishers.ofByteArray(body.toByteArray()))
+              .build(),
+          HttpResponse.BodyHandlers.ofString());
+    }
+
     void login(Account a) throws Exception {
       var response = post("/api/auth/login", Map.of("email", a.email(), "password", a.password()));
       assertThat(response.statusCode()).isEqualTo(200);
@@ -169,6 +219,279 @@ class LocalFakePasswordHttpsTest {
       access = json.readTree(response.body()).get("accessToken").asText();
       csrf();
     }
+  }
+
+  private Account registerThroughLocalFake(Browser browser) throws Exception {
+    browser.csrf();
+    String email = UUID.randomUUID() + "@example.invalid", password = UUID.randomUUID().toString();
+    assertThat(
+            browser
+                .post("/api/auth/registrations", Map.of("email", email, "password", password))
+                .statusCode())
+        .isEqualTo(202);
+    console.reset();
+    var issued = browser.post("/api/auth/email-verifications/request", Map.of("email", email));
+    assertThat(issued.statusCode()).isEqualTo(202);
+    String challenge = json.readTree(issued.body()).get("challengeId").asText();
+    String code = deliveredCode("SIGNUP_VERIFY");
+    assertThat(
+            browser
+                .post(
+                    "/api/auth/email-verifications/confirm",
+                    Map.of(
+                        "email",
+                        email,
+                        "password",
+                        password,
+                        "challengeId",
+                        challenge,
+                        "code",
+                        code))
+                .statusCode())
+        .isEqualTo(204);
+    long id =
+        jdbc.queryForObject("select id from member where email_normalized=?", Long.class, email);
+    var account = new Account(id, email, password);
+    browser.login(account);
+    return account;
+  }
+
+  @Test
+  void authenticatedTwoMemberTransactionCompletesHandoverAndStatsWithSyntheticAi()
+      throws Exception {
+    var giver = new Browser();
+    var receiver = new Browser();
+    var giverAccount = registerThroughLocalFake(giver);
+    var receiverAccount = registerThroughLocalFake(receiver);
+    long receiverOrg =
+        json.readTree(receiver.get("/api/members/me").body()).get("organizationId").asLong();
+    var eventResponse =
+        giver.post(
+            "/api/events",
+            Map.of(
+                "name",
+                "Synthetic HTTPS event",
+                "venue",
+                "Synthetic venue",
+                "teardownDeadline",
+                java.time.OffsetDateTime.now(java.time.ZoneOffset.ofHours(9))
+                    .plusDays(1)
+                    .toString()));
+    assertThat(eventResponse.statusCode()).isEqualTo(201);
+    long event = json.readTree(eventResponse.body()).get("id").asLong();
+    assertThat(receiver.get("/api/events/" + event).statusCode()).isEqualTo(404);
+    byte[] image;
+    try (var bytes = new ByteArrayOutputStream()) {
+      javax.imageio.ImageIO.write(
+          new java.awt.image.BufferedImage(20, 20, java.awt.image.BufferedImage.TYPE_INT_RGB),
+          "png",
+          bytes);
+      image = bytes.toByteArray();
+    }
+    var box =
+        new com.afterbooth.ai.SamSegment(
+            1,
+            new com.afterbooth.ai.PixelBox(2, 2, 11, 11),
+            0.99,
+            new com.afterbooth.ai.SamSegment.Mask(0, 0, "AQ=="));
+    org.mockito.Mockito.when(syntheticAi.segment(org.mockito.ArgumentMatchers.any()))
+        .thenReturn(java.util.List.of(box));
+    org.mockito.Mockito.when(syntheticAi.chat(org.mockito.ArgumentMatchers.any()))
+        .thenReturn(
+            new com.afterbooth.ai.ChatResponse(
+                "{\"lines\":[{\"category\":\"STORAGE_BIN\",\"count\":1,\"boxes\":[{\"x\":0.1,\"y\":0.1,\"width\":0.5,\"height\":0.5}],\"sizeCm\":{\"width\":10,\"depth\":10,\"height\":10},\"condition\":\"GOOD\",\"confidence\":0.99}]}",
+                java.util.List.of(),
+                "stop",
+                null));
+    var uploaded = giver.photo("/api/intake/drafts", event, image);
+    assertThat(uploaded.statusCode()).isEqualTo(202);
+    long draft = json.readTree(uploaded.body()).get("id").asLong();
+    tools.jackson.databind.JsonNode ready = null;
+    long until = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+    while (System.nanoTime() < until) {
+      ready = json.readTree(giver.get("/api/intake/drafts/" + draft).body());
+      if (ready.path("status").asText().equals("READY")) break;
+      Thread.sleep(20);
+    }
+    assertThat(ready.path("status").asText()).isEqualTo("READY");
+    assertThat(ready.path("lines").get(0).path("label").asText()).isEqualTo("Storage bin");
+    assertThat(receiver.get("/api/intake/drafts/" + draft).statusCode()).isEqualTo(404);
+    var confirmed =
+        giver.post(
+            "/api/intake/drafts/" + draft + "/confirm",
+            Map.of(
+                "lines",
+                java.util.List.of(
+                    Map.of(
+                        "lineId",
+                        ready.path("lines").get(0).path("lineId").asLong(),
+                        "category",
+                        "STORAGE_BIN",
+                        "quantity",
+                        2,
+                        "sizeCm",
+                        Map.of("width", 10, "depth", 10, "height", 10),
+                        "condition",
+                        "GOOD"))));
+    assertThat(confirmed.statusCode()).isEqualTo(201);
+    long item = json.readTree(confirmed.body()).get(0).get("id").asLong();
+    var requestResponse =
+        receiver.post(
+            "/api/pickup-requests",
+            Map.of(
+                "organizationId",
+                receiverOrg,
+                "category",
+                "STORAGE_BIN",
+                "quantity",
+                1,
+                "vehicleType",
+                "VAN",
+                "purpose",
+                "Synthetic event storage"));
+    assertThat(requestResponse.statusCode()).isEqualTo(201);
+    long request = json.readTree(requestResponse.body()).get("id").asLong();
+    assertThat(giver.get("/api/pickup-requests/" + request).statusCode()).isEqualTo(404);
+    org.mockito.Mockito.when(syntheticAi.chat(org.mockito.ArgumentMatchers.any()))
+        .thenReturn(
+            new com.afterbooth.ai.ChatResponse(
+                null,
+                java.util.List.of(
+                    new com.afterbooth.ai.ToolCall("search", "searchCandidates", "{}")),
+                "tool_calls",
+                null),
+            new com.afterbooth.ai.ChatResponse(
+                null,
+                java.util.List.of(
+                    new com.afterbooth.ai.ToolCall(
+                        "fit", "checkVehicleFit", "{\"itemId\":" + item + "}")),
+                "tool_calls",
+                null),
+            new com.afterbooth.ai.ChatResponse(
+                null,
+                java.util.List.of(
+                    new com.afterbooth.ai.ToolCall(
+                        "hold", "holdQuantity", "{\"itemId\":" + item + ",\"quantity\":1}")),
+                "tool_calls",
+                null),
+            new com.afterbooth.ai.ChatResponse(
+                "One storage bin is on hold. Please confirm your reservation.",
+                java.util.List.of(),
+                "stop",
+                null));
+    var allocated = receiver.post("/api/pickup-requests/" + request + "/allocation", Map.of());
+    assertThat(allocated.statusCode()).isEqualTo(200);
+    long reservation =
+        json.readTree(allocated.body()).get("reservations").get(0).get("id").asLong();
+    assertThat(
+            receiver.post("/api/reservations/" + reservation + "/confirm", Map.of()).statusCode())
+        .isEqualTo(200);
+    error(
+        giver.delete(
+            "/api/members/me",
+            Map.of("password", giverAccount.password()),
+            "https://localhost:5443",
+            giver.csrf,
+            giver.access),
+        409,
+        "WITHDRAWAL_BLOCKED");
+    error(
+        receiver.delete(
+            "/api/members/me",
+            Map.of("password", receiverAccount.password()),
+            "https://localhost:5443",
+            receiver.csrf,
+            receiver.access),
+        409,
+        "WITHDRAWAL_BLOCKED");
+    org.mockito.Mockito.when(syntheticAi.chat(org.mockito.ArgumentMatchers.any()))
+        .thenReturn(
+            new com.afterbooth.ai.ChatResponse(
+                "{\"count\":0,\"boxes\":[]}", java.util.List.of(), "stop", null));
+    var mismatch = giver.photo("/api/reservations/" + reservation + "/handover", null, image);
+    assertThat(mismatch.statusCode()).isEqualTo(200);
+    assertThat(json.readTree(mismatch.body()).get("status").asText()).isEqualTo("MISMATCH");
+    assertThat(giver.post("/api/reservations/" + reservation + "/cancel", Map.of()).statusCode())
+        .isEqualTo(403);
+    org.mockito.Mockito.when(syntheticAi.chat(org.mockito.ArgumentMatchers.any()))
+        .thenReturn(
+            new com.afterbooth.ai.ChatResponse(
+                "{\"count\":1,\"boxes\":[{\"x\":0.1,\"y\":0.1,\"width\":0.5,\"height\":0.5}]}",
+                java.util.List.of(),
+                "stop",
+                null));
+    var completed = giver.photo("/api/reservations/" + reservation + "/handover", null, image);
+    assertThat(completed.statusCode()).isEqualTo(200);
+    assertThat(json.readTree(completed.body()).get("status").asText()).isEqualTo("COMPLETED");
+    assertThat(
+            json.readTree(receiver.get("/api/reservations/" + reservation).body())
+                .get("status")
+                .asText())
+        .isEqualTo("HANDED_OVER");
+    var stats = giver.get("/api/stats/reuse?eventId=" + event);
+    assertThat(stats.statusCode()).isEqualTo(200);
+    assertThat(json.readTree(stats.body()).get("totalReused").asLong()).isEqualTo(1);
+    assertThat(json.readTree(stats.body()).get("reusedVolumeLiters").asLong()).isEqualTo(1);
+    var secondRequest =
+        receiver.post(
+            "/api/pickup-requests",
+            Map.of(
+                "organizationId",
+                receiverOrg,
+                "category",
+                "STORAGE_BIN",
+                "quantity",
+                1,
+                "vehicleType",
+                "VAN"));
+    assertThat(secondRequest.statusCode()).isEqualTo(201);
+    long secondRequestId = json.readTree(secondRequest.body()).get("id").asLong();
+    var secondHold =
+        receiver.post(
+            "/api/reservations",
+            Map.of("requestId", secondRequestId, "itemId", item, "quantity", 1));
+    assertThat(secondHold.statusCode()).isEqualTo(201);
+    long cancelled = json.readTree(secondHold.body()).get("id").asLong();
+    assertThat(receiver.post("/api/reservations/" + cancelled + "/confirm", Map.of()).statusCode())
+        .isEqualTo(200);
+    org.mockito.Mockito.when(syntheticAi.chat(org.mockito.ArgumentMatchers.any()))
+        .thenReturn(
+            new com.afterbooth.ai.ChatResponse(
+                "{\"count\":0,\"boxes\":[]}", java.util.List.of(), "stop", null));
+    assertThat(
+            giver.photo("/api/reservations/" + cancelled + "/handover", null, image).statusCode())
+        .isEqualTo(200);
+    assertThat(giver.post("/api/reservations/" + cancelled + "/cancel", Map.of()).statusCode())
+        .isEqualTo(403);
+    var cancellation = receiver.post("/api/reservations/" + cancelled + "/cancel", Map.of());
+    assertThat(cancellation.statusCode()).isEqualTo(200);
+    assertThat(json.readTree(cancellation.body()).get("status").asText()).isEqualTo("RELEASED");
+    cleared(
+        giver.delete(
+            "/api/members/me",
+            Map.of("password", giverAccount.password()),
+            "https://localhost:5443",
+            giver.csrf,
+            giver.access));
+    assertThat(receiver.get("/api/reservations/" + reservation).statusCode()).isEqualTo(200);
+    jdbc.update(
+        "update reservation set retention_until=statement_timestamp()-interval '1 second' where id=?",
+        reservation);
+    var expired = receiver.get("/api/reservations/" + reservation);
+    error(expired, 404, "NOT_FOUND");
+    assertThat(json.readTree(expired.body()).get("message").asText())
+        .isEqualTo("The requested resource was not found.");
+    assertThat(
+            jdbc.queryForObject(
+                "select count(*) from reservation where id=?", Integer.class, reservation))
+        .isEqualTo(1);
+    cleared(
+        receiver.delete(
+            "/api/members/me",
+            Map.of("password", receiverAccount.password()),
+            "https://localhost:5443",
+            receiver.csrf,
+            receiver.access));
   }
 
   private String resetCode() throws Exception {
@@ -191,7 +514,7 @@ class LocalFakePasswordHttpsTest {
   private void error(HttpResponse<String> response, int status, String code) {
     assertThat(response.statusCode()).isEqualTo(status);
     assertThat(json.readTree(response.body()).get("code").asText()).isEqualTo(code);
-    assertThat(response.headers().firstValue("cache-control")).contains("no-store");
+    assertThat(response.headers().firstValue("cache-control").orElseThrow()).contains("no-store");
   }
 
   private void cleared(HttpResponse<String> response) {
@@ -213,7 +536,7 @@ class LocalFakePasswordHttpsTest {
     assertThat(headers.stream().anyMatch(h -> h.startsWith("__Host-afterbooth-refresh="))).isTrue();
     assertThat(headers.stream().anyMatch(h -> h.startsWith("__Host-afterbooth-csrf-session=")))
         .isTrue();
-    assertThat(response.headers().firstValue("cache-control")).contains("no-store");
+    assertThat(response.headers().firstValue("cache-control").orElseThrow()).contains("no-store");
   }
 
   @Test
@@ -247,6 +570,7 @@ class LocalFakePasswordHttpsTest {
     assertThat(!browser.access.equals(previousAccess)).isTrue();
     jdbc.update("delete from auth_rate_limit");
     console.reset();
+    org.mockito.Mockito.reset(syntheticAi);
     var expired = browser.post("/api/auth/password-resets/request", Map.of("email", a.email()));
     String expiredId = json.readTree(expired.body()).get("challengeId").asText(),
         expiredCode = resetCode();
