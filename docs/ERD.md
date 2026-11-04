@@ -141,6 +141,7 @@ erDiagram
 ## Migrations
 
 - Version with a timestamp so parallel branches never collide: `V202610311200__create_core_tables.sql` (`V` + `yyyyMMddHHmm`).
+- The authentication foundation is implemented in `backend/src/main/resources/db/migration/V202611031200__create_member_authentication_foundation.sql`. This documentation correction does not change the SQL.
 - #3 creates every table above in one migration. Later changes add new migrations; merged migrations are never edited.
 
 ## Member authentication schema target (#63 design, #65 implementation)

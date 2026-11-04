@@ -31,9 +31,9 @@ The unit of work is a GitHub issue. Owners: **DY** = namdongyeob, **WJ** = WookJ
 | #9 | Allocation agent (function calling, server validation, alternatives) + allocation board | WJ | BE+AI+FE |
 | #10 | Handover recount + reuse stats + screens | WJ | BE+AI+FE |
 
-- [x] #3 · [x] #4 · [x] #5 · [x] #6 · [x] #7 · [x] #8 · [ ] #9 · [x] #10
+- [x] #3 · [x] #4 · [x] #5 · [x] #6 · [x] #7 · [x] #8 · [x] #9 · [x] #10
 
-#9 implementation and local automated checks are complete, but its actual two-browser acceptance criterion remains open. #12 owns that browser scenario and the separately approved live end-to-end run. Do not treat database concurrency tests as browser execution or close #9 before that criterion is verified or explicitly reassigned.
+#9's historical two-browser acceptance criterion is reconciled with #12/PR #46's strengthened HTTP-overlap gate and visible-alternative assertions. The PR #46 author reported clean-DB replay success for main5/main6 at `d89f4e5`; PR #60 also reports a clean-clone full-demo run. These are historical records and author reports, not executions performed for this correction. Authenticated English demo recovery is tracked separately in #17. The detailed evidence levels in the historical concurrency table below remain unchanged.
 
 #7 merged into main in PR #34 (`c414209`). In `backend/`, `./gradlew spotlessApply compileJava compileTestJava spotlessCheck test --tests '*ReservationIntegrationTest' --tests '*DefaultVehicleHoldIntegrationTest' --tests '*VehicleFitPolicyTest' --tests '*ReservationRulesTest' --tests '*ReservationSchedulerTest' --tests 'com.afterbooth.ArchitectureTest' --tests 'com.afterbooth.CoreSchemaIntegrationTest' --tests '*CoreDomainTest' --tests '*GlobalExceptionHandlerTest' --no-daemon` passed all 74 selected tests, including 32 reservation and two default-configuration PostgreSQL HTTP tests. Cargo defaults and overrides follow D-040; #9/#10 integration boundaries follow D-041/D-039. Frontend, live AI and end-to-end demo were not run.
 
@@ -228,7 +228,7 @@ A debug-logged rerun of the twelve-preparation test passed. Its log shows 16 `id
 
 ## Phase 3: Submission (target 11/4 morning)
 
-- [ ] #15 English README (DY)
+- [x] #15 English README (DY) — PR #60, merge `02ab1d9`; clean-clone commands and Mermaid rendering are historical author-reported checks. Post-authentication README updates and revalidation belong to #17, separately from that historical completion.
 - [ ] #16 Demo script + 2–3 minute video (WJ, key B)
 - [ ] #17 Submission checklist (DY, WJ)
 - [ ] **G3 STOP** — report how to run, demo results, self-score, remaining risks
