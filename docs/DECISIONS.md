@@ -148,3 +148,7 @@ Keep production member-owned RECORD forbidden. Use a test-classpath-only REPLAY 
 ## D-089 — [contract] Align the generic error example with the real message (2026-11-04)
 
 The `Error.message` example in `contract/openapi.yaml` now uses the actual QTY_UNAVAILABLE text ("Not enough items remain") instead of an invented sentence. No shape, identifier or behavior change; committed separately per the contract-only rule.
+
+## D-090 — #17 Confirm server logout before ending the signed-in UI (2026-11-04)
+
+PR #77 R1 supersedes D-085's failed-logout local-cleanup policy. A CSRF/transport/logout failure leaves server cookie revocation uncertain; keep the current signed-in state and show an explicit retryable logout failure in both account settings and the refresh-error banner. Clear browser session state only after a successful logout response or independently confirmed session rejection. A reload before successful retry may still restore the valid server session; the UI must never claim logout succeeded in that case. No API, cookie, storage or server authorization change is required.

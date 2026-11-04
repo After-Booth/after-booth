@@ -260,11 +260,15 @@ export function AccountScreen({ member }: { member: MemberView }) {
       setCurrent('')
       setNext('')
     } catch (error) {
-      if (error instanceof ApiError && error.status === 401) {
+      if (action !== 'logout' && error instanceof ApiError && error.status === 401) {
         clearSession()
         return
       }
-      setMessage(errorMessage(error))
+      setMessage(
+        action === 'logout'
+          ? 'Sign out failed. Your session may still be active. Try signing out again.'
+          : errorMessage(error),
+      )
     } finally {
       setBusy(false)
     }

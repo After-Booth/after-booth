@@ -549,3 +549,10 @@ The requested automated replay scope is complete. Human screen review, video, fo
 
 
 Additional domain regressions passed: 71 tests across AllocationIntegrationTest, HandoverIntegrationTest, DomainAuthorizationIntegrationTest and CatalogAuthorizationIntegrationTest. Total affected backend evidence is 28 + 71 passing checks across separate runs, not a full-suite claim. The independent reviewer inspected privacy/scheduling/budget logic but hit its usage limit before a completed verdict; this is not recorded as approval. Final secret/canonical checks passed and the product jar excludes test-only recording tools.
+
+### #17 / PR #77 R1 — confirmed logout and retry (2026-11-04)
+
+- [x] Replace the historical failed-logout local-cleanup policy with D-090: failed CSRF/logout retains the current signed-in state and an explicit retryable warning in the refresh banner and account settings. Successful logout ends the session; epoch checks fence stale refresh/logout results.
+- [x] Frontend: `npm run build && npm test -- --maxWorkers=1 && npm run lint && npm run format:check` passed; 17 suites / 146 tests, with the same two existing handover lint warnings. Includes failed CSRF/logout, retry, refresh recovery, account logout 401 and delayed logout/new-session regressions.
+- [x] E2E: `npm run typecheck` passed. With Java 21, `npm run test:auth -- --grep 'failed sign out'` passed against disposable PostgreSQL and the real local HTTPS jar: aborted logout transport retains error/UI/cookie, successful retry returns 204, and reload stays signed out with no refresh cookie.
+- Read-only review found no actionable blocker in the inspected R1 changes; it did not execute tests. Main independently inspected the diff and ran the checks above. No backend source, API, dependency, schema or recording change. Full demo/backend checks were not repeated for this frontend logout change. Local commit only; no push or PR comment/update in this follow-up.

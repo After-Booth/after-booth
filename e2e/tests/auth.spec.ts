@@ -348,14 +348,14 @@ test('password change and email reset revoke sessions and require fresh login', 
   await context.close();
 });
 
-test('temporary refresh failure banner logs out the real server session', async () => {
+test('failed sign out retains the session until retry revokes the real server session', async () => {
   const context = await browser.newContext({ baseURL: AUTH_ORIGIN });
   const page = await context.newPage();
   await signUp(page, uniqueEmail());
   await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByRole('navigation', { name: 'Main navigation' })).toBeVisible();
-  // Synthetic HTTP outage; the logout request still reaches the real HTTPS server.
+  // Synthetic refresh outage; a later logout retry reaches the real HTTPS server.
   await page.route('**/api/auth/refresh', (route) =>
     route.fulfill({
       status: 503,
@@ -400,6 +400,20 @@ test('temporary refresh failure banner logs out the real server session', async 
       });
     }
   }
+  // A transport failure must not claim logout while the HttpOnly session cookie survives.
+  await page.route('**/api/auth/logout', (route) => route.abort('connectionfailed'));
+  await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+  await expect(page.getByRole('alert').filter({
+    hasText: 'Sign out failed. Your session may still be active. Try signing out again.',
+  })).toBeVisible();
+  await expect(page.getByRole('navigation', { name: 'Main navigation' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Welcome back' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Sign out', exact: true })).toBeEnabled();
+  expect(
+    (await context.cookies()).some((cookie) => cookie.name.includes('refresh')),
+  ).toBe(true);
+
+  await page.unroute('**/api/auth/logout');
   await page.unroute('**/api/events');
   const logout = page.waitForResponse((response) =>
     response.url().endsWith('/api/auth/logout'),

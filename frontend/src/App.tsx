@@ -87,10 +87,12 @@ export default function App() {
   const [startupError, setStartupError] = useState(false)
   const [trouble, setTrouble] = useState(false)
   const [retrying, setRetrying] = useState(false)
+  const [logoutFailed, setLogoutFailed] = useState(false)
   useEffect(() => {
     let active = true
     const unsubscribe = onSessionEnd(() => {
       setMember(undefined)
+      setLogoutFailed(false)
       window.location.hash = '#/'
     })
     const unsubscribeTrouble = onSessionTrouble(setTrouble)
@@ -159,9 +161,13 @@ export default function App() {
   return (
     <>
       {member && <SiteHeader hash={hash} />}
-      {member && trouble && (
+      {member && (trouble || logoutFailed) && (
         <div role="alert" className="session-notice">
-          <p>Unable to refresh your session. Check your connection and try again.</p>
+          <p>
+            {logoutFailed
+              ? 'Sign out failed. Your session may still be active. Try signing out again.'
+              : 'Unable to refresh your session. Check your connection and try again.'}
+          </p>
           <button
             disabled={retrying}
             onClick={() => {
@@ -178,7 +184,7 @@ export default function App() {
             onClick={() => {
               setRetrying(true)
               signOut()
-                .catch(() => undefined)
+                .catch(() => setLogoutFailed(true))
                 .finally(() => setRetrying(false))
             }}
           >

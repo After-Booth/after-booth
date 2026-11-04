@@ -132,11 +132,9 @@ export async function restoreSession(): Promise<MemberView | undefined> {
 }
 
 export async function signOut() {
-  try {
-    await authOperation((csrf) => logoutSession(csrf))
-  } finally {
-    clearSession()
-  }
+  const currentEpoch = ++epoch
+  await authOperation((csrf) => logoutSession(csrf))
+  if (epoch === currentEpoch) clearSession()
 }
 
 installRefresh(renewSession, clearSession)

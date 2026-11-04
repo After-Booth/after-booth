@@ -158,3 +158,82 @@ test('revokes the server session when signing out from a refresh outage', async 
   expect(await screen.findByRole('heading', { name: 'Welcome back' })).toBeInTheDocument()
   expect(revoked).toBe(true)
 })
+
+test.each(['csrf', 'logout'])(
+  'failed %s keeps a visible logout retry after refresh recovers',
+  async (failure) => {
+    window.location.hash = '#/'
+    let refreshes = 0
+    let failing = false
+    let recovered = false
+    let revoked = false
+    server.use(
+      http.post('*/api/auth/refresh', () =>
+        revoked
+          ? HttpResponse.json({ code: 'UNAUTHENTICATED' }, { status: 401 })
+          : ++refreshes === 1 || recovered
+            ? HttpResponse.json({ accessToken: 'test-token', tokenType: 'Bearer', expiresIn: 600 })
+            : HttpResponse.json({ code: 'AUTH_UNAVAILABLE' }, { status: 503 }),
+      ),
+      http.get('*/api/events', () =>
+        recovered
+          ? HttpResponse.json([])
+          : HttpResponse.json({ code: 'UNAUTHENTICATED' }, { status: 401 }),
+      ),
+      http.get('*/api/auth/csrf', () =>
+        failing && failure === 'csrf'
+          ? HttpResponse.json({ code: 'AUTH_UNAVAILABLE' }, { status: 503 })
+          : HttpResponse.json({ csrfToken: 'test-csrf' }),
+      ),
+      http.post('*/api/auth/logout', () => {
+        if (failing) return HttpResponse.json({ code: 'AUTH_UNAVAILABLE' }, { status: 503 })
+        revoked = true
+        return new HttpResponse(null, { status: 204 })
+      }),
+    )
+    const view = render(<App />)
+    await screen.findByRole('alert')
+    failing = true
+    await userEvent.click(screen.getByRole('button', { name: 'Sign out' }))
+    expect(
+      await screen.findByText(
+        'Sign out failed. Your session may still be active. Try signing out again.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Welcome back' })).not.toBeInTheDocument()
+    expect(revoked).toBe(false)
+    failing = false
+    recovered = true
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    expect(screen.getByRole('alert')).toHaveTextContent('Sign out failed.')
+    await userEvent.click(screen.getByRole('button', { name: 'Sign out' }))
+    expect(await screen.findByRole('heading', { name: 'Welcome back' })).toBeInTheDocument()
+    expect(revoked).toBe(true)
+    view.unmount()
+    render(<App />)
+    expect(await screen.findByRole('heading', { name: 'Welcome back' })).toBeInTheDocument()
+  },
+)
+
+test('account settings keeps a failed logout visible even for a 401 response', async () => {
+  window.location.hash = '#/account'
+  let healthy = false
+  server.use(
+    http.post('*/api/auth/logout', () =>
+      healthy
+        ? new HttpResponse(null, { status: 204 })
+        : HttpResponse.json({ code: 'UNAUTHENTICATED' }, { status: 401 }),
+    ),
+  )
+  render(<App />)
+  await userEvent.click(await screen.findByRole('button', { name: 'Sign out' }))
+  expect(
+    await screen.findByText(
+      'Sign out failed. Your session may still be active. Try signing out again.',
+    ),
+  ).toBeInTheDocument()
+  expect(screen.getByRole('heading', { name: 'Account settings' })).toBeInTheDocument()
+  healthy = true
+  await userEvent.click(screen.getByRole('button', { name: 'Sign out' }))
+  expect(await screen.findByRole('heading', { name: 'Welcome back' })).toBeInTheDocument()
+})
