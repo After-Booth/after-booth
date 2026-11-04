@@ -1,5 +1,17 @@
 # fixtures
 
+## Current English/authenticated status (#17)
+
+The authenticated English-output owned-data demo now passes replay. Twenty pre-existing provider recordings remain byte-identical; 12 separately approved genuine Meta recordings add the missing rack intake, SAM and English condition/allocation turns. [english-owned-demo.json](english-owned-demo.json) lists their request keys and usage-derived costs. No recorded response was edited or translated. Strict hashes, authentication, ownership and the member-recording prohibition remain intact.
+
+`npm --prefix e2e test` passed TypeScript, six authentication checks, the complete owned-data demo and ten helpers. Two controlled candidate runs verified both last-item losing branches through completed photo handover/statistics, followed by a natural key-free candidate and the ordinary product jar. ENGLISH_RECORDINGS_READY was cleared only after actual candidate replay success. Synthetic unit-test responses remain test doubles; these new files contain actual Meta responses.
+
+The additional 2026-11-04 approval covered at most $2/30 new attempts. Actual use: 11 Standard Spark calls and one SAM image, estimated $0.03397650; zero failed attempts or new Transcribe calls. The separate initial condition call cost $0.001451. Further paid use requires its own approval. The standalone recorder and private budget ledger never disable member-owned RECORD protection; see [the full replay guide](../docs/ENGLISH_REPLAY.md).
+
+The original audio samples contain Korean speech and the Transcribe configuration keeps its Korean language bias. English voice recognition/structuring/allocation has not been verified. Original user transcripts stay original; English system-generated explanations are a separate requirement.
+
+The historical HTTP Compose and seeded-organization instructions below describe the pre-authentication build only. Use the current [root README](../README.md) and [E2E guide](../e2e/README.md) for current HTTPS authentication prerequisites.
+
 AI responses that `AiGateway` reads when `AI_MODE=replay`, plus input files for E2E and tests. `record` mode writes here.
 
 - No photos or audio with real faces or personal data
@@ -29,6 +41,43 @@ One file per unique recorded request: `fixtures/replay/<capability>/<key>.json`,
 
 ## Recording
 
+### English condition request preparation (#17)
+
+`EnglishConditionRecordingTest.identifiesExactEnglishRequestWithoutNetworkOrInventedResponses`
+serializes the current `ConditionPrompt` through the real gateway request builder without transport.
+It verifies that the receiver sedan request is
+`4c5fb1f9cfcbd4263b79d4c0f71865b7b42eb1e67e0eb7d9351e63dc92ccb711`
+and differs from historical request `0890f3ea8678a3cf3e08248a08b4e7299843bb93cf909058c3e9600cbc5a3dc0`
+only in the system prompt's English purpose instruction/example. Its schema, model, minimal effort,
+`2026-10-31` reference date and original Korean user transcript remain byte-identical.
+This is English output preparation using historical Korean speech, not English voice evidence.
+
+After separate human approval, the opt-in `recordsExactlyOneApprovedSparkRequest` method records
+only that exact request using `muse-spark-1.3` at `https://api.meta.ai/v1/chat/completions`.
+It checks the request hash, endpoint and Standard model before transport, reuses an existing fixture,
+and has one gateway call with no retry or validation re-ask: at most one new paid HTTP attempt per
+invocation. It never enters or clears member-owned work. The production member recording prohibition
+remains in place. The approval property is `afterbooth.english-condition-recording-approved=true`;
+ordinary tests leave this method disabled. Do not run the historical `ConditionInterpretationRecordTest`
+to record authenticated input: the member recording guard intentionally rejects it.
+
+The historical minimal structuring estimate is about $0.0018 per call. Current Standard Spark pricing
+is $1.25 per million input tokens and $4.25 per million output tokens; actual response usage must be
+logged after recording. The one-attempt limit is enforced; a hard dollar limit is not enforced because
+this request does not set an output-token cap. Approve this narrow recording separately from a full
+demo recording, and run `ConditionInterpretationReplayTest` afterward. Recording this one file alone
+does not establish authenticated full-demo readiness.
+
+On 2026-11-04, the separately approved single call succeeded through the real Meta gateway:
+`outcome=recorded`, 2,436 ms, 542 input tokens and 182 output tokens (including 150 reasoning tokens).
+It created the exact `4c5fb1f9cfcbd4263b79d4c0f71865b7b42eb1e67e0eb7d9351e63dc92ccb711.json`
+fixture without changing original recordings. Estimated Standard cost is **$0.001451**
+(`542 × $1.25 / 1,000,000 + 182 × $4.25 / 1,000,000`); billing-dashboard reconciliation was not performed.
+The real response passed the test's schema/domain and English-purpose assertions, and the fixture
+passed the repository secret scan. This historical single-call evidence covers one condition request only. The later separately approved
+full-demo recordings and successful replay are documented at the top of this guide. No additional paid call is
+authorized by that one-call approval.
+
 `AI_MODE=record` reuses an existing fixture without an HTTP call and logs `outcome=reused`. For a missing fixture, it makes the live call and writes the file above. Concurrent identical requests in one gateway share a single in-flight call and its response. Failures propagate to all waiters and are not cached. Later runs add missing branches without overwriting earlier responses; a human deletes an individual file to re-record it. New calls spend credits, so a human runs recording (AGENTS.md hard rule 6; the Claude Code hook asks first), then logs the cost in `docs/BUDGET.md`.
 
 The gateway smoke records one tiny call per model (a Korean Spark text prompt at `reasoning_effort: minimal`, one SAM box prompt on `spike/samples/table-lifetime-single.jpg`, one Transcribe call on `spike/samples/audio-giver-van-tonight.wav`), about $0.004 in total at the spike's per-call costs. From the repo root:
@@ -54,7 +103,7 @@ The windows are `afterbooth.ai.fallback-after.spark=8s`, `afterbooth.ai.fallback
 
 The fallback covers a network loss before a step starts. Inside a step, later calls carry the live answer of the first call (allocation tool-call IDs, Spark boxes sent to SAM), so they have no fixture. Allocation restarts its conversation once from the first turn when a model call fails before any HOLD, which replays the recorded run, and logs one INFO line with the request ID. Intake and handover fail that attempt (`AI_UNAVAILABLE` or a failed draft) and succeed on the retry, because their first call falls back. A stalled (not refused) connection inside a step waits the normal Spark timeout first. For the stage, prefer replay (the compose default) or keep network drops between steps. Every exchange also writes one INFO with capability, mode, outcome (`live`, `recorded`, `reused`, `replay`, `fallback`, or `failed`) and elapsed milliseconds.
 
-## Demo scenario
+## Historical demo scenario (2026-11-01, before authentication)
 
 The recorded demo replays only when every AI input is byte-identical and every step runs in this order from an empty database, because item IDs and stock are part of the allocation prompts (PR #40 R1, R9). Use these inputs; do not edit the intake draft or the interpreted conditions.
 
@@ -74,6 +123,6 @@ docker compose -f docker-compose.yml -f docker-compose.record.yml up --build -d
 
 Network-loss check without spending credits: start live mode with a placeholder key and an unroutable base URL (`AI_MODE: live`, `META_API_KEY: not-a-real-key`, `META_BASE_URL: http://10.255.255.1` in an override file) and run steps 1–7. The first Spark call after a quiet minute waits the 8 s window, then every step completes from fixtures.
 
-No automated test replays these demo fixtures yet; #12's replay E2E is the check that a prompt, schema or model-data change has not orphaned them.
+Historical note: #12 later added the Korean seeded demo replay E2E. Authentication introduced in PR #76 skipped it. #17 makes that gap an explicit failing readiness gate; that gap was subsequently resolved by the approved owned-data English replay described above.
 
 Measured on 2026-11-01 (#13): live text structuring 1.4 s, allocation 7–10 s over 3–4 tool turns, handover recount 3.3 s. The loading screens use these values (`frontend/src/features/aiLatency.ts`).

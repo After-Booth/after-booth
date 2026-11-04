@@ -139,7 +139,7 @@ public class IntakeDraftLine {
   }
 
   public String label() {
-    return label;
+    return category.label();
   }
 
   public int count() {

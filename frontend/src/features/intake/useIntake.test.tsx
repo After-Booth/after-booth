@@ -25,7 +25,7 @@ const draft: IntakeDraft = {
   lines: [
     {
       lineId: 1,
-      label: '진열대',
+      label: 'Display rack',
       category: 'DISPLAY_RACK',
       count: 1,
       boxes: [],
@@ -37,7 +37,7 @@ const draft: IntakeDraft = {
   ],
 }
 const photo = new File(['photo'], 'photo.png', { type: 'image/png' })
-const conflict = () => new ApiError(409, 'IDEMPOTENCY_CONFLICT', '잠시 후 다시 시도해 주세요.')
+const conflict = () => new ApiError(409, 'IDEMPOTENCY_CONFLICT', 'Please try again shortly.')
 
 beforeEach(() => {
   vi.useFakeTimers()
@@ -102,7 +102,7 @@ test.each(['create', 'confirm'] as const)(
         : (args as Parameters<typeof confirmIntakeDraft>)[2]['Idempotency-Key']
     }
     expect(new Set([0, 1, 2, 3].map(keyOf)).size).toBe(1)
-    expect(result.current.error).toBe('잠시 후 다시 시도해 주세요.')
+    expect(result.current.error).toBe('Please try again shortly.')
     expect(result.current.uploading || result.current.confirming).toBe(false)
     await act(async () => {
       void run()
@@ -136,7 +136,7 @@ test.each(['create', 'confirm'] as const)(
 
 test('confirm uses a new key after a server error with an unchanged request', async () => {
   vi.mocked(confirmIntakeDraft).mockRejectedValueOnce(
-    new ApiError(500, 'INTERNAL_ERROR', '잠시 후 다시 시도해 주세요.'),
+    new ApiError(500, 'INTERNAL_ERROR', 'Please try again shortly.'),
   )
   const { result } = renderHook(() => useIntake())
   await act(async () => {
@@ -145,7 +145,7 @@ test('confirm uses a new key after a server error with an unchanged request', as
   await act(async () => {
     await result.current.confirm()
   })
-  expect(result.current.error).toBe('잠시 후 다시 시도해 주세요.')
+  expect(result.current.error).toBe('Please try again shortly.')
   await act(async () => {
     await result.current.confirm()
   })
@@ -159,7 +159,7 @@ test('confirm uses a new key after a server error with an unchanged request', as
 
 test('does not retry a non-conflict mutation error', async () => {
   vi.mocked(createIntakeDraft).mockRejectedValue(
-    new ApiError(400, 'INVALID_INPUT', '사진을 확인해 주세요.'),
+    new ApiError(400, 'INVALID_INPUT', 'Check the photo.'),
   )
   const { result } = renderHook(() => useIntake())
   await act(async () => {
@@ -167,7 +167,7 @@ test('does not retry a non-conflict mutation error', async () => {
   })
   await advance(7000)
   expect(createIntakeDraft).toHaveBeenCalledTimes(1)
-  expect(result.current.error).toBe('사진을 확인해 주세요.')
+  expect(result.current.error).toBe('Check the photo.')
 })
 
 async function processingHook() {
@@ -192,7 +192,7 @@ test('recovers from two transient poll errors and stops after ready', async () =
   const { result } = await processingHook()
   vi.mocked(getIntakeDraft)
     .mockRejectedValueOnce(new TypeError('Network failure'))
-    .mockRejectedValueOnce(new ApiError(503, 'INTERNAL_ERROR', '잠시 후 다시 시도해 주세요.'))
+    .mockRejectedValueOnce(new ApiError(503, 'INTERNAL_ERROR', 'Please try again shortly.'))
     .mockResolvedValueOnce({ data: draft, status: 200, headers: new Headers() })
   await advance(2000)
   expect(result.current.error).toBeUndefined()
@@ -209,7 +209,7 @@ test('stops after three consecutive poll errors with a retake message', async ()
   vi.mocked(getIntakeDraft).mockRejectedValue(new TypeError('Network failure'))
   await advance(3000)
   expect(result.current.draft).toBeUndefined()
-  expect(result.current.error).toContain('다시 찍어 주세요.')
+  expect(result.current.error).toContain('Please retake the photo.')
   await advance(90_000)
   expect(getIntakeDraft).toHaveBeenCalledTimes(3)
 })
@@ -219,7 +219,7 @@ test('stops processing after 90 seconds even if a poll never resolves', async ()
   vi.mocked(getIntakeDraft).mockImplementation(() => new Promise(() => {}))
   await advance(90_000)
   expect(result.current.draft).toBeUndefined()
-  expect(result.current.error).toContain('다시 찍어 주세요.')
+  expect(result.current.error).toContain('Please retake the photo.')
   expect(getIntakeDraft).toHaveBeenCalledTimes(1)
 })
 
@@ -229,7 +229,7 @@ test('does not reset the deadline when processing stages change', async () => {
   expect(result.current.draft?.status).toBe('PROCESSING')
   await advance(1000)
   expect(result.current.draft).toBeUndefined()
-  expect(result.current.error).toContain('다시 찍어 주세요.')
+  expect(result.current.error).toContain('Please retake the photo.')
   expect(getIntakeDraft).toHaveBeenCalledTimes(89)
 })
 

@@ -1,9 +1,9 @@
 package com.afterbooth.inventory.domain;
 
 public enum ItemCategory {
-  DISPLAY_RACK("진열대"),
-  STORAGE_BIN("수납함"),
-  FOLDING_TABLE("접이식 테이블");
+  DISPLAY_RACK("Display rack"),
+  STORAGE_BIN("Storage bin"),
+  FOLDING_TABLE("Folding table");
   private final String label;
 
   ItemCategory(String label) {

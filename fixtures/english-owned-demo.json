@@ -1,0 +1,108 @@
+{
+  "scenario": "synthetic-authenticated-english-owned-demo",
+  "date": "2026-11-04",
+  "source": "Actual Meta Model API recordings; no response editing",
+  "requests": [
+    {
+      "capability": "SPARK",
+      "key": "97e4168ccb9cb37cd0082effe2effc27d42ac36e9bac55a1802322b1e54322ed",
+      "promptTokens": 795,
+      "completionTokens": 404,
+      "chargedOrReserved": "0.00271075",
+      "outcome": "recorded"
+    },
+    {
+      "capability": "SAM",
+      "key": "f59ef05dffd43148b8d3faf5bd919dfd3678933bb68ae86ba1676a1286f2417d",
+      "chargedOrReserved": "0.0025",
+      "outcome": "recorded"
+    },
+    {
+      "capability": "SPARK",
+      "key": "efe26645df8e14991eda96c40960c53d5736873ea9cdafd2f727f47b0879e707",
+      "promptTokens": 765,
+      "completionTokens": 333,
+      "chargedOrReserved": "0.00237150",
+      "outcome": "recorded"
+    },
+    {
+      "capability": "SPARK",
+      "key": "e699d83dc46d93675677593860f86de68cf0dc0b2b5b192be6310f4cc3e4c91f",
+      "promptTokens": 902,
+      "completionTokens": 315,
+      "chargedOrReserved": "0.00246625",
+      "outcome": "recorded"
+    },
+    {
+      "capability": "SPARK",
+      "key": "ff40cc160d5bd7e4d868c96d13a9066fdc492f4eeb5513c8fd4c94f174afcaea",
+      "promptTokens": 1036,
+      "completionTokens": 563,
+      "chargedOrReserved": "0.00368775",
+      "outcome": "recorded"
+    },
+    {
+      "capability": "SPARK",
+      "key": "cb2b5618ecb9dce3701802370f5155490dbeba1e08b7f33c5f94a6fcd9d339ff",
+      "promptTokens": 537,
+      "completionTokens": 128,
+      "chargedOrReserved": "0.00121525",
+      "outcome": "recorded"
+    },
+    {
+      "capability": "SPARK",
+      "key": "1e3d247946cf337670de6a08d20cb01b42c39193bfda8d2c933a3936b27c2b7c",
+      "promptTokens": 764,
+      "completionTokens": 181,
+      "chargedOrReserved": "0.00172425",
+      "outcome": "recorded"
+    },
+    {
+      "capability": "SPARK",
+      "key": "de5ab7a60c3bead7a76ac44919461383635f7961a2d331f088bb262b75529770",
+      "promptTokens": 901,
+      "completionTokens": 369,
+      "chargedOrReserved": "0.00269450",
+      "outcome": "recorded"
+    },
+    {
+      "capability": "SPARK",
+      "key": "8f93e095c6775873f072af8e591cce5692336ab2a8636eead97d4dfd04d6bc92",
+      "promptTokens": 999,
+      "completionTokens": 236,
+      "chargedOrReserved": "0.00225175",
+      "outcome": "recorded"
+    },
+    {
+      "capability": "SPARK",
+      "key": "db3707b4d53aee0264f50d33589dae28413bdafaa3479ded3c42d3dfd3cee5a7",
+      "promptTokens": 1118,
+      "completionTokens": 274,
+      "chargedOrReserved": "0.00256200",
+      "outcome": "recorded"
+    },
+    {
+      "capability": "SPARK",
+      "key": "4533909db01ac20d6fd273e5bc2cce001b2c72fc11da263adb6f0324dab2c99d",
+      "promptTokens": 901,
+      "completionTokens": 820,
+      "chargedOrReserved": "0.00461125",
+      "outcome": "recorded"
+    },
+    {
+      "capability": "SPARK",
+      "key": "d3515c9659a441d0bb5f39de79c5a97f13e45bdd5b9bca5cad93551b6241a7bc",
+      "promptTokens": 1000,
+      "completionTokens": 925,
+      "chargedOrReserved": "0.00518125",
+      "outcome": "recorded"
+    }
+  ],
+  "approval": {
+    "maxNewAttempts": 30,
+    "maxEstimatedOrReservedUsd": "2.00",
+    "actualNewAttempts": 12,
+    "estimatedUsd": "0.03397650",
+    "failedAttempts": 0
+  }
+}

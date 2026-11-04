@@ -1,4 +1,4 @@
-# docker compose up --build runs the whole app on http://localhost:8080 in replay mode (README "Run").
+# Builds the replay app image on HTTP port 8080. Authentication needs HTTPS and auth settings; see README.
 # bootRun starts only the postgres service (spring.docker.compose.start.arguments).
 services:
   postgres:

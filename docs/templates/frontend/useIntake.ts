@@ -35,7 +35,7 @@ export function useIntake() {
           const res = await createIntakeDraft({ photo })
           return { status: 'ready', draft: res.data }
         } catch (e) {
-          return { status: 'error', message: messageOf(e, '사진을 분석하지 못했어요. 다시 찍어 주세요.') }
+          return { status: 'error', message: messageOf(e, 'Unable to analyze the photo. Please retake it.') }
         }
       }),
     [run],
@@ -48,7 +48,7 @@ export function useIntake() {
           await confirmIntakeDraft(draft.id, draft)
           return { status: 'confirmed' }
         } catch (e) {
-          return { status: 'error', message: messageOf(e, '재고로 등록하지 못했어요. 다시 시도해 주세요.') }
+          return { status: 'error', message: messageOf(e, 'Unable to register inventory. Please try again.') }
         }
       }),
     [run],

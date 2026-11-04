@@ -131,3 +131,24 @@ Muse Code orchestrated the stopped #69 worktree to completion: backend-domain su
 
 Logout always clears the in-memory token and signed-in UI, even when the server call fails (AUTH_DESIGN: clear token memory on logout); the error is not retried from a signed-in screen. Passwords are cleared on success and on mode switch, not after every failed attempt, so a mistyped code or password can be retried without retyping; they stay in memory only. A login 401 is shown as "check your email or password" because the server returns the same UNAUTHENTICATED text for every login failure. The event deadline field is read as Korea time. The visual refresh of every screen stays in the #70 branch because the work was commissioned as the frontend design improvement for #70; a reviewer may ask to split it. When a token refresh fails for a reason other than an expired session, the signed-in screen shows a notice with retry and log-out actions instead of silently keeping an expired token; a pending member who logs in can request a new verification code from the login screen.
 
+
+## D-086 — #17 historical completion reconciliation (2026-11-04)
+
+Reconcile #15 as historically complete using its CLOSED state, PR #60 merge `02ab1d9`, and the author's clean-clone and diagram reports. Reconcile #9 against PR #46 R6–R8, the author's main5/main6 reports at `d89f4e5`, visible-alternative assertions and PR #60's full-demo report. These are historical evidence comparisons, not newly executed checks or proof of the post-authentication demo. Add the actual authentication migration filename to ERD without modifying SQL.
+
+## D-087 — #17 English product and replay evidence (2026-11-04)
+
+Current UI, user-facing server messages, AI-generated explanations, README and judging/run guides switch to English. The user's subsequent correction also requires new repository records to be English; final chat reporting remains Korean. Preserve historical TASKS, DECISIONS, BUDGET, reviews and original recordings. Contract-only commit `6216e80` changes display-language descriptions and examples, preserving API identifiers, permissions and shapes. Keep Asia/Seoul time semantics and Korean input support. English prompts change replay keys: do not translate or overwrite original recordings, or present synthetic responses as Meta recordings. New paid recording remains gated on separate approval.
+
+
+## D-088 — #17 synthetic manifest recording preserves member privacy (2026-11-04)
+
+Keep production member-owned RECORD forbidden. Use a test-classpath-only REPLAY application on fresh synthetic owned data to capture missing request manifests, then an independently approved recorder that validates fixed scenario inputs, image digests, canonical keys and a complete typed AiGateway serialization round trip before transport. Record genuine responses only, retain original fixtures, and persist a locked $2/30-attempt budget ledger with conservative per-call reservations and no retries. Controlled replay scheduling changes timing only to verify both real finalization/stock-zero branches. Clear ENGLISH_RECORDINGS_READY only after the shared full scenario actually passes; then verify the ordinary product jar without capture/scheduling. Natural scheduling is replay-only and not part of the paid two-branch runner. Video/forms/submission are out of this task.
+
+## D-089 — [contract] Align the generic error example with the real message (2026-11-04)
+
+The `Error.message` example in `contract/openapi.yaml` now uses the actual QTY_UNAVAILABLE text ("Not enough items remain") instead of an invented sentence. No shape, identifier or behavior change; committed separately per the contract-only rule.
+
+## D-090 — #17 Confirm server logout before ending the signed-in UI (2026-11-04)
+
+PR #77 R1 supersedes D-085's failed-logout local-cleanup policy. A CSRF/transport/logout failure leaves server cookie revocation uncertain; keep the current signed-in state and show an explicit retryable logout failure in both account settings and the refresh-error banner. Clear browser session state only after a successful logout response or independently confirmed session rejection. A reload before successful retry may still restore the valid server session; the UI must never claim logout succeeded in that case. No API, cookie, storage or server authorization change is required.

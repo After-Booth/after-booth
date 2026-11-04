@@ -11,7 +11,7 @@ const server = setupServer(
   http.post('*/api/auth/registrations', () => new HttpResponse(null, { status: 202 })),
   http.post('*/api/auth/email-verifications/request', () =>
     HttpResponse.json(
-      { message: '인증 메일을 확인해 주세요.', challengeId: 'synthetic-challenge' },
+      { message: 'Check your verification email.', challengeId: 'synthetic-challenge' },
       { status: 202 },
     ),
   ),
@@ -22,7 +22,7 @@ const server = setupServer(
     return body.code === '123456'
       ? new HttpResponse(null, { status: 204 })
       : HttpResponse.json(
-          { code: 'INVALID_AUTH_CHALLENGE', message: '인증 정보를 확인해 주세요.' },
+          { code: 'INVALID_AUTH_CHALLENGE', message: 'Check verification details.' },
           { status: 400 },
         )
   }),
@@ -34,40 +34,38 @@ afterAll(() => server.close())
 test('signup retains the chosen password only until successful verification and requires login', async () => {
   const onLogin = vi.fn()
   render(<AuthScreen onLogin={onLogin} />)
-  await userEvent.click(screen.getByRole('button', { name: '회원가입' }))
-  await userEvent.type(screen.getByLabelText('이메일'), 'person@example.test')
-  await userEvent.type(screen.getByLabelText('비밀번호'), 'synthetic-password')
-  await userEvent.click(screen.getByRole('button', { name: '인증 메일 요청' }))
-  const code = await screen.findByLabelText('이메일 인증번호')
+  await userEvent.click(screen.getByRole('button', { name: 'Create account' }))
+  await userEvent.type(screen.getByLabelText('Email'), 'person@example.test')
+  await userEvent.type(screen.getByLabelText('Password'), 'synthetic-password')
+  await userEvent.click(screen.getByRole('button', { name: 'Request verification email' }))
+  const code = await screen.findByLabelText('Email verification code')
   await userEvent.type(code, '000000')
-  await userEvent.click(screen.getByRole('button', { name: '가입 완료' }))
-  expect(await screen.findByText('인증 정보를 확인해 주세요.')).toBeInTheDocument()
+  await userEvent.click(screen.getByRole('button', { name: 'Complete signup' }))
+  expect(await screen.findByText('Check verification details.')).toBeInTheDocument()
   await userEvent.clear(code)
   await userEvent.type(code, '123456')
-  await userEvent.click(screen.getByRole('button', { name: '가입 완료' }))
-  expect(
-    await screen.findByText('이메일 인증이 완료되었어요. 로그인해 주세요.'),
-  ).toBeInTheDocument()
-  expect(screen.getByLabelText('비밀번호')).toHaveValue('')
+  await userEvent.click(screen.getByRole('button', { name: 'Complete signup' }))
+  expect(await screen.findByText('Email verified. Please sign in.')).toBeInTheDocument()
+  expect(screen.getByLabelText('Password')).toHaveValue('')
   expect(onLogin).not.toHaveBeenCalled()
   expect(verificationAttempts).toBe(2)
 })
 
 test.each([
-  [403, 'CSRF_REJECTED', '보안 확인이 만료되었어요. 다시 시도해 주세요.'],
-  [429, 'RATE_LIMITED', '요청이 너무 많아요. 잠시 후 다시 시도해 주세요.'],
-  [503, 'AUTH_UNAVAILABLE', '서비스를 잠시 이용할 수 없어요. 잠시 후 다시 시도해 주세요.'],
-  [401, 'UNAUTHENTICATED', '이메일 또는 비밀번호를 확인해 주세요.'],
+  [403, 'CSRF_REJECTED', 'Security check expired. Please try again.'],
+  [429, 'RATE_LIMITED', 'Too many requests. Please try again shortly.'],
+  [503, 'AUTH_UNAVAILABLE', 'Service temporarily unavailable. Please try again shortly.'],
+  [401, 'UNAUTHENTICATED', 'Check your email or password.'],
 ])('login distinguishes a %i %s failure', async (status, code, message) => {
   server.use(
     http.post('*/api/auth/login', () =>
-      HttpResponse.json({ code, message: '서버 문구' }, { status }),
+      HttpResponse.json({ code, message: 'Server message' }, { status }),
     ),
   )
   render(<AuthScreen onLogin={vi.fn()} />)
-  await userEvent.type(screen.getByLabelText('이메일'), 'person@example.test')
-  await userEvent.type(screen.getByLabelText('비밀번호'), 'synthetic-password')
-  await userEvent.click(screen.getByRole('button', { name: '로그인' }))
+  await userEvent.type(screen.getByLabelText('Email'), 'person@example.test')
+  await userEvent.type(screen.getByLabelText('Password'), 'synthetic-password')
+  await userEvent.click(screen.getByRole('button', { name: 'Sign in' }))
   expect(await screen.findByText(message)).toBeInTheDocument()
 })
 
@@ -75,23 +73,21 @@ test('a pending member who logs in can request a new code and finish verificatio
   server.use(
     http.post('*/api/auth/login', () =>
       HttpResponse.json(
-        { code: 'EMAIL_NOT_VERIFIED', message: '이메일 인증을 완료해 주세요.' },
+        { code: 'EMAIL_NOT_VERIFIED', message: 'Please verify your email.' },
         { status: 403 },
       ),
     ),
   )
   const onLogin = vi.fn()
   render(<AuthScreen onLogin={onLogin} />)
-  await userEvent.type(screen.getByLabelText('이메일'), 'person@example.test')
-  await userEvent.type(screen.getByLabelText('비밀번호'), 'synthetic-password')
-  await userEvent.click(screen.getByRole('button', { name: '로그인' }))
-  expect(await screen.findByText('이메일 인증을 완료해 주세요.')).toBeInTheDocument()
-  await userEvent.click(screen.getByRole('button', { name: '인증번호 다시 받기' }))
-  await userEvent.type(await screen.findByLabelText('이메일 인증번호'), '123456')
-  await userEvent.click(screen.getByRole('button', { name: '가입 완료' }))
-  expect(
-    await screen.findByText('이메일 인증이 완료되었어요. 로그인해 주세요.'),
-  ).toBeInTheDocument()
-  expect(screen.queryByRole('button', { name: '인증번호 다시 받기' })).not.toBeInTheDocument()
+  await userEvent.type(screen.getByLabelText('Email'), 'person@example.test')
+  await userEvent.type(screen.getByLabelText('Password'), 'synthetic-password')
+  await userEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+  expect(await screen.findByText('Please verify your email.')).toBeInTheDocument()
+  await userEvent.click(screen.getByRole('button', { name: 'Resend verification code' }))
+  await userEvent.type(await screen.findByLabelText('Email verification code'), '123456')
+  await userEvent.click(screen.getByRole('button', { name: 'Complete signup' }))
+  expect(await screen.findByText('Email verified. Please sign in.')).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Resend verification code' })).not.toBeInTheDocument()
   expect(onLogin).not.toHaveBeenCalled()
 })

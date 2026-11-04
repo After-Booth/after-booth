@@ -31,9 +31,9 @@ The unit of work is a GitHub issue. Owners: **DY** = namdongyeob, **WJ** = WookJ
 | #9 | Allocation agent (function calling, server validation, alternatives) + allocation board | WJ | BE+AI+FE |
 | #10 | Handover recount + reuse stats + screens | WJ | BE+AI+FE |
 
-- [x] #3 · [x] #4 · [x] #5 · [x] #6 · [x] #7 · [x] #8 · [ ] #9 · [x] #10
+- [x] #3 · [x] #4 · [x] #5 · [x] #6 · [x] #7 · [x] #8 · [x] #9 · [x] #10
 
-#9 implementation and local automated checks are complete, but its actual two-browser acceptance criterion remains open. #12 owns that browser scenario and the separately approved live end-to-end run. Do not treat database concurrency tests as browser execution or close #9 before that criterion is verified or explicitly reassigned.
+#9's historical two-browser acceptance criterion is reconciled with #12/PR #46's strengthened HTTP-overlap gate and visible-alternative assertions. The PR #46 author reported clean-DB replay success for main5/main6 at `d89f4e5`; PR #60 also reports a clean-clone full-demo run. These are historical records and author reports, not executions performed for this correction. Authenticated English demo recovery is tracked separately in #17. The detailed evidence levels in the historical concurrency table below remain unchanged.
 
 #7 merged into main in PR #34 (`c414209`). In `backend/`, `./gradlew spotlessApply compileJava compileTestJava spotlessCheck test --tests '*ReservationIntegrationTest' --tests '*DefaultVehicleHoldIntegrationTest' --tests '*VehicleFitPolicyTest' --tests '*ReservationRulesTest' --tests '*ReservationSchedulerTest' --tests 'com.afterbooth.ArchitectureTest' --tests 'com.afterbooth.CoreSchemaIntegrationTest' --tests '*CoreDomainTest' --tests '*GlobalExceptionHandlerTest' --no-daemon` passed all 74 selected tests, including 32 reservation and two default-configuration PostgreSQL HTTP tests. Cargo defaults and overrides follow D-040; #9/#10 integration boundaries follow D-041/D-039. Frontend, live AI and end-to-end demo were not run.
 
@@ -228,7 +228,7 @@ A debug-logged rerun of the twelve-preparation test passed. Its log shows 16 `id
 
 ## Phase 3: Submission (target 11/4 morning)
 
-- [ ] #15 English README (DY)
+- [x] #15 English README (DY) — PR #60, merge `02ab1d9`; clean-clone commands and Mermaid rendering are historical author-reported checks. Post-authentication README updates and revalidation belong to #17, separately from that historical completion.
 - [ ] #16 Demo script + 2–3 minute video (WJ, key B)
 - [ ] #17 Submission checklist (DY, WJ)
 - [ ] **G3 STOP** — report how to run, demo results, self-score, remaining risks
@@ -493,6 +493,8 @@ Not verified: full backend suite, frontend/browser/E2E (no frontend files change
 
 ## Issue #70 — Frontend authentication and design (2026-11-04)
 
+Historical PR #76 delivery at `d02c982`; the checklist below preserves that delivery record. Current follow-up results and remaining gaps are recorded under #17 below.
+
 - [x] Authentication screens, in-memory session with coordinated refresh, event picker, login gate and visual refresh (PR #76).
 - [x] Real local server run (`cd e2e && npm run test:auth`, Fake mail, replay): signup → verification → login → account → own event → photo intake, cross-member denial, giver/receiver request → hold → confirmation, withdrawal blocked then allowed.
 - [ ] Authenticated demo E2E: `e2e/tests/demo.spec.ts` is skipped. New members cannot own the seeded organizations, and the recorded allocation and handover replay fixtures depend on the seeded database, so the demo needs a login step and new recordings. Owner: demo-qa. Recording needs human approval (credit gate); schedule it before G3, because main has no automated demo run until it lands.
@@ -500,3 +502,57 @@ Not verified: full backend suite, frontend/browser/E2E (no frontend files change
 - [ ] Password change and reset against the real server (component tests only so far).
 - [ ] Decide how the live demo signs in before G3 (signup needs the private Fake code, so a pre-created demo account is needed).
 
+
+## Issue #17 — current authenticated English submission readiness (2026-11-04)
+
+Baseline: fetched `origin/main` `d02c98232cad21ae65d5c94a6bb45fee77bc23f0`; branch `fix/17-submission-readiness` (renamed from `codex/17-submission-readiness`), isolated `/private/tmp/afterbooth-17-submission-readiness`. The original checkout remains on main. The user's latest correction requires all new repository records in English; existing historical content remains unchanged.
+
+- [x] Reconciled historical #9/#15 completion against current GitHub issues/PR evidence; documented the actual authentication migration without changing SQL.
+- [x] Fixed refresh-notice sign-out and giver/receiver cancellation controls, with regression tests and unchanged server permissions.
+- [x] Converted current UI, user messages, labels, AI instructions, contract descriptions and current run guides to English; retained Korean user input, recordings, Unicode passwords and Asia/Seoul semantics.
+- [x] Added actual HTTPS two-member transaction verification through HANDED_OVER and statistics with an explicitly synthetic AiGateway and local Fake mail. This is separate from real Meta replay evidence.
+- [x] Added pending-registration boundary/non-enumeration and re-registration ownership isolation checks. Actual HTTPS verifies expired-history API denial; browser-level time-controlled messaging remains unverified.
+- [x] Real HTTPS browser authentication suite: six tests passed, including password change/reset, resend verification and refresh-trouble logout. The refresh 503 is Playwright-injected; logout/cookies/reload use the real server.
+- [x] Reviewed blank login and credential-free refresh screens at mobile/desktop widths; no human teammate review is inferred.
+- [x] Rewrote the full-demo test for owned events/inventory and three isolated authenticated contexts; strict TypeScript checking and discovery passed. Runtime success is not implied.
+- [x] Authenticated English-output full Meta replay: separately approved real recordings and complete owned-data E2E verified; see the full-demo completion record below. The original ConditionInterpretationReplayTest failure was resolved by the separately approved single-condition recording below; remaining full-demo recordings are still missing.
+- [ ] Actual teammate reviews, current video, submission form access/fields and final external submission.
+
+See [SUBMISSION_READINESS](SUBMISSION_READINESS.md) for commands, evidence boundaries, current failures, G3 report and human actions. #17 and Phase 3 remain incomplete; no push, PR, merge, GitHub write, deployment, upload or external submission was performed. The earlier #70 checklist above is its historical delivery record; this section describes newly verified scope and remaining gaps.
+
+
+### #17 replay recovery preparation (2026-11-04)
+
+Continue the existing `fix/17-submission-readiness` branch from `a9237b0`; preserve preceding commits and original recordings. Reproduced the condition replay failure and verified its exact missing English hash against the original request. Added a separately gated one-attempt condition recorder and deterministic owned-demo database setup/ID assertions. Production member-owned RECORD remains forbidden; no paid call was made. The full-demo recorder and both race recordings remain BLOCKED pending staged preparation and explicit paid approval; ENGLISH_RECORDINGS_READY remains false.
+
+Current checks: 60 focused backend tests and three additional no-network photo/handover request preparation checks plus format/compile passed; E2E type checking passed; six authenticated browser checks passed; owned-demo fresh DB reset smoke passed; demo readiness remains an explicit failure with ten overlap/helper tests passing. See [SUBMISSION_READINESS](SUBMISSION_READINESS.md#replay-recovery-preparation-on-fix17-submission-readiness-2026-11-04) for exact synthetic inputs, request differences, cost limits and unverified scope. No full-demo success or Phase 3 completion is claimed.
+
+
+### #17 approved single-condition recording (2026-11-04)
+
+- [x] The user approved one Spark attempt, $2 ceiling. Recorded the exact missing `4c5fb1…` condition fixture through the real Meta API; no retry or additional paid capability call. Estimated cost $0.001451 is recorded in BUDGET.
+- [x] Replayed the formerly failing ConditionInterpretationReplayTest successfully; 20 related backend checks passed with zero failures/errors/skips. Verified canonical hash, preserved all 19 original recordings and scanned the new fixture for secrets and credential/personal-data patterns.
+- [ ] Full English authenticated demo, both race recordings, real photo handover/statistics and the complete recording runner remain incomplete. ENGLISH_RECORDINGS_READY is still false; approval did not include further paid requests.
+
+Post-recording full E2E command: typecheck, six auth checks and ten helpers passed; the overall command failed at the retained missing-full-demo-recordings gate. No full E2E success is claimed.
+
+
+### #17 full English owned-data replay completed (2026-11-04)
+
+- [x] Preserve branch `fix/17-submission-readiness`, preceding commits and all 20 pre-existing recordings byte-for-byte; no production API, schema, dependency, auth, ownership or member recording protection changes.
+- [x] Separately approved bounded recording: 12 actual Meta exchanges (11 Spark, one SAM), estimated $0.03397650; zero failures/retries and no new Transcribe calls. BUDGET and the curated fixture index record the evidence.
+- [x] Controlled simultaneous rejection and post-commit stock-zero candidates each passed the full shared photo → condition → allocation/race/alternative → receiver confirmation → giver photo handover → HANDED_OVER/statistics assertions. Natural scheduling also passed key-free replay, with no new recording.
+- [x] Cleared ENGLISH_RECORDINGS_READY only after full candidate replay success. The default `npm --prefix e2e test` then passed TypeScript, six auth checks, the complete ordinary-product-jar demo and ten helpers. No capture scheduler or paid recorder is used by that default run.
+- [x] Backend format/compile/bootJar plus 28 related tests passed, zero failures/errors/skips: real new-fixture round trips, budget/privacy/hash/architecture and original condition/intake replay regressions. Initial test-configuration scanning collision was fixed and the affected command passed serially.
+
+The requested automated replay scope is complete. Human screen review, video, forms and external submission are separate issues and were not performed. English speech, live performance and actual billing reconciliation remain unverified. See [ENGLISH_REPLAY](ENGLISH_REPLAY.md) and the latest [SUBMISSION_READINESS](SUBMISSION_READINESS.md) section; earlier blocked entries are historical snapshots. No push, PR, merge, deployment or external submission.
+
+
+Additional domain regressions passed: 71 tests across AllocationIntegrationTest, HandoverIntegrationTest, DomainAuthorizationIntegrationTest and CatalogAuthorizationIntegrationTest. Total affected backend evidence is 28 + 71 passing checks across separate runs, not a full-suite claim. The independent reviewer inspected privacy/scheduling/budget logic but hit its usage limit before a completed verdict; this is not recorded as approval. Final secret/canonical checks passed and the product jar excludes test-only recording tools.
+
+### #17 / PR #77 R1 — confirmed logout and retry (2026-11-04)
+
+- [x] Replace the historical failed-logout local-cleanup policy with D-090: failed CSRF/logout retains the current signed-in state and an explicit retryable warning in the refresh banner and account settings. Successful logout ends the session; epoch checks fence stale refresh/logout results.
+- [x] Frontend: `npm run build && npm test -- --maxWorkers=1 && npm run lint && npm run format:check` passed; 17 suites / 146 tests, with the same two existing handover lint warnings. Includes failed CSRF/logout, retry, refresh recovery, account logout 401 and delayed logout/new-session regressions.
+- [x] E2E: `npm run typecheck` passed. With Java 21, `npm run test:auth -- --grep 'failed sign out'` passed against disposable PostgreSQL and the real local HTTPS jar: aborted logout transport retains error/UI/cookie, successful retry returns 204, and reload stays signed out with no refresh cookie.
+- Read-only review found no actionable blocker in the inspected R1 changes; it did not execute tests. Main independently inspected the diff and ran the checks above. No backend source, API, dependency, schema or recording change. Full demo/backend checks were not repeated for this frontend logout change. Local commit only; no push or PR comment/update in this follow-up.

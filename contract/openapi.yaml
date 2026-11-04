@@ -9,6 +9,7 @@ info:
     Conventions
     - Times are ISO 8601. Responses use the +09:00 offset (Asia/Seoul). Relative times in speech ("8시까지") are
       resolved against the server clock in Asia/Seoul; for GIVER conditions, against the event's date.
+    - Product UI, user-facing messages, category labels and AI-generated explanations are English. Original user input may remain Korean or another supported language. Display times explicitly in Asia/Seoul.
     - Sizes are centimeters. Bounding boxes are normalized to the photo (0..1).
     - Optional fields are omitted when empty, never sent as null.
     - Writes that create or change state take a required `Idempotency-Key` header (UUID, one per user action).
@@ -17,7 +18,7 @@ info:
       while the first call is still running, returns 409 `IDEMPOTENCY_CONFLICT`. A missing key returns 400.
       Client rule: on `IDEMPOTENCY_CONFLICT`, retry with the same key after 1, 2 and 4 seconds (covers the in-flight
       case); if it still fails, show the message and treat the next tap as a new action with a new key.
-    - Errors use the `Error` schema. `message` is Korean and safe to show to users. Any operation may also return
+    - Errors use the `Error` schema. `message` is English and safe to show to users. Any operation may also return
       500 `INTERNAL_ERROR`, and 405/415 `UNSUPPORTED_REQUEST` for a wrong method or content type (for example an
       audio format Voice Transcribe does not accept).
     - Version 0.3.0 is the target authentication contract. Issue #65 implements protected signup and common security/mail foundations first; #66 reuses them for login and sessions. Existing-domain member authorization remains subsequent work; distinguish target permissions from the current runtime implementation.
@@ -1703,7 +1704,7 @@ components:
       properties:
         message:
           type: string
-          description: The same Korean guidance without distinguishing account existence, duplicates, or re-registration
+          description: The same English guidance without distinguishing account existence, duplicates, or re-registration
             blocks
     ChallengeIssued:
       type: object
@@ -1798,8 +1799,8 @@ components:
           $ref: '#/components/schemas/ErrorCode'
         message:
           type: string
-          description: Korean message shown to the user
-          example: 남은 수량이 부족해요.
+          description: English message shown to the user
+          example: Not enough items remain.
     ErrorCode:
       type: string
       enum:
@@ -1834,9 +1835,9 @@ components:
 
         | Category | label |
         |---|---|
-        | DISPLAY_RACK | 진열대 |
-        | STORAGE_BIN | 수납함 |
-        | FOLDING_TABLE | 접이식 테이블 |
+        | DISPLAY_RACK | Display rack |
+        | STORAGE_BIN | Storage bin |
+        | FOLDING_TABLE | Folding table |
       enum:
         - DISPLAY_RACK
         - STORAGE_BIN
@@ -1844,7 +1845,7 @@ components:
     DraftCategory:
       type: string
       description: |
-        ItemCategory plus UNKNOWN (label 미분류), which can only appear in intake drafts and must be fixed before confirm
+        ItemCategory plus UNKNOWN (label Uncategorized), which can only appear in intake drafts and must be fixed before confirm
       enum:
         - DISPLAY_RACK
         - STORAGE_BIN
@@ -1922,7 +1923,7 @@ components:
           format: int64
         name:
           type: string
-          example: 성수 플리마켓 운영팀
+          example: Local Market Team
     Event:
       type: object
       required:
@@ -1937,14 +1938,14 @@ components:
           format: int64
         name:
           type: string
-          example: 성수 가을 팝업
+          example: Autumn Pop-up
         organizationId:
           type: integer
           format: int64
           description: The giver that runs the event
         venue:
           type: string
-          example: 서울 성동구
+          example: Seongdong-gu, Seoul
         teardownDeadline:
           type: string
           format: date-time
@@ -1987,7 +1988,7 @@ components:
           $ref: '#/components/schemas/IntakeStage'
         failureMessage:
           type: string
-          description: Korean, shown to the user when status is FAILED
+          description: English, shown to the user when status is FAILED
         lines:
           type: array
           description: One line per category. Empty until READY
@@ -2015,8 +2016,8 @@ components:
           $ref: '#/components/schemas/DraftCategory'
         label:
           type: string
-          description: Korean category name for display
-          example: 진열대
+          description: English category name for display
+          example: Display rack
         count:
           type: integer
           minimum: 0
@@ -2107,7 +2108,7 @@ components:
           description: GIVER = must be picked up by; RECEIVER = can pick up by
         purpose:
           type: string
-          example: 주말 행사 진열용
+          example: Display equipment for a weekend event
     ConditionInterpretation:
       type: object
       required:
@@ -2224,7 +2225,7 @@ components:
           $ref: '#/components/schemas/ItemCategory'
         label:
           type: string
-          example: 진열대
+          example: Display rack
         sizeCm:
           $ref: '#/components/schemas/SizeCm'
         condition:
@@ -2272,9 +2273,9 @@ components:
           $ref: '#/components/schemas/AllocationStatus'
         explanation:
           type: string
-          description: Korean summary for the receiver, by Muse Spark or a server template if the model failed after
+          description: English summary for the receiver, by Muse Spark or a server template if the model failed after
             a hold
-          example: 높이 180cm라 승용차에 실을 수 없어요. 대신 접이식 테이블 3개 어떠세요?
+          example: At 180 cm tall, it will not fit a sedan. How about 3 folding tables?
         reservations:
           type: array
           description: Reservations the agent held (status HELD only)
@@ -2317,7 +2318,7 @@ components:
           $ref: '#/components/schemas/RejectionCode'
         message:
           type: string
-          example: 높이 180cm라 승용차에 실을 수 없어요.
+          example: At 180 cm tall, it will not fit a sedan.
         limitingDimension:
           type: string
           description: Set for VEHICLE_TOO_SMALL when size (not the giver's requirement) is the reason
@@ -2340,7 +2341,7 @@ components:
           description: Quantity the agent suggests holding, within the request quantity
         reason:
           type: string
-          example: 접이식이라 승용차에 실을 수 있어요.
+          example: It folds to fit in a sedan.
     ToolCall:
       type: object
       required:
@@ -2368,7 +2369,7 @@ components:
           $ref: '#/components/schemas/RejectionCode'
         summary:
           type: string
-          description: Short Korean description of the result
+          description: Short English description of the result
     ReservationStatus:
       type: string
       description: |
@@ -2446,7 +2447,7 @@ components:
           format: int64
         itemLabel:
           type: string
-          example: 진열대
+          example: Display rack
         quantity:
           type: integer
           minimum: 1

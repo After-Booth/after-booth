@@ -32,7 +32,7 @@ cd frontend && npm run build && npm test      # frontend gate (runs gen:api firs
 8. **No photos or audio with real faces or personal data in `fixtures/` or `spike/samples/`.**
 9. **Re-run verification before claiming done, and write down the commands and results.** Keep anything not run under "Not verified". Never present a mock success as a real API check.
 10. When a judgment call is needed, do not stop: decide reasonably and record it in one line in `docs/DECISIONS.md`. Ask a human only at STOP gates.
-11. **Everything in the repo is in English** — docs, comments, commits, PRs, issues, review comments (`docs/CONVENTIONS.md`). Only product UI text and user-facing error messages are Korean. Chat with the team can be Korean. The commit-msg hook checks commit subjects.
+11. **Current product UI, user-facing errors and AI-generated explanations are English.** README and current judging/run guides are English; new repository records are English under the latest #17 instruction. Final chat reports may be Korean. Preserve historical records and original user input. Code comments, commits, PRs and issues retain their English conventions (`docs/CONVENTIONS.md`). The commit-msg hook checks commit subjects.
 12. **Code follows `docs/CONVENTIONS.md` and `docs/templates/`.** Rules live in domain objects, services only orchestrate, controllers only do HTTP. No features outside the spec, no unused code, no comments that repeat the code. `ArchitectureTest` enforces the layering rules.
 
 ## Human checkpoints (STOP)
@@ -90,7 +90,7 @@ Run fully automated, but stop and report at these points only.
 - `backend/`: Java 21, Spring Boot 4.1, `RestClient` to the Meta Model API behind `AiGateway` (D-037), PostgreSQL 17, Flyway, Testcontainers
   - Packages: `com.afterbooth.<domain>` (inventory, intake, request, allocation, handover, stats), shared code in `com.afterbooth.global`, AI in `com.afterbooth.ai`
   - Tables follow `docs/ERD.md`. Schema changes only through Flyway, versioned by timestamp (`V202610311200__create_core_tables.sql`) so parallel branches never collide. `ddl-auto=validate`
-- `frontend/`: React 19 + Vite + TypeScript + Tailwind v4, Korean UI, mobile first. orval generates the API client and MSW mocks from the contract (`src/api/generated/`, not committed). Use the `frontend-design` skill for UI work.
+- `frontend/`: React 19 + Vite + TypeScript + Tailwind v4, English UI, mobile first. orval generates the API client and MSW mocks from the contract (`src/api/generated/`, not committed). Use the `frontend-design` skill for UI work.
 - `contract/openapi.yaml`: API contract of record
 - `fixtures/`: AI responses for replay. `spike/`: throwaway experiments and `REPORT.md`
 - Development tools used (Claude Code, Codex, Muse Code) are disclosed in the README.

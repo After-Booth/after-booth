@@ -39,7 +39,7 @@ export function seoulInput(value?: string) {
 
 function messageOf(error: unknown) {
   if (error instanceof ApiError) return error.message
-  return '요청을 처리하지 못했어요. 연결을 확인하고 다시 시도해 주세요.'
+  return 'Unable to process the request. Check your connection and try again.'
 }
 
 export function useRequest(ownedOrganizationId?: number) {
@@ -146,7 +146,7 @@ export function useRequest(ownedOrganizationId?: number) {
   function interpretAudio(file: File) {
     if (busy.current || status === 'saved') return
     if (!file.name.toLowerCase().endsWith('.wav')) {
-      setMessage('WAV 파일만 올릴 수 있어요. 확장자가 .wav인 녹음 파일을 선택해 주세요.')
+      setMessage('Only WAV files are supported. Choose a recording with a .wav extension.')
       return
     }
     busy.current = true
@@ -161,7 +161,7 @@ export function useRequest(ownedOrganizationId?: number) {
       void interpret({ audio: current.stop() })
     } catch {
       busy.current = false
-      setMessage('녹음된 소리가 없어요. 다시 녹음하거나 글로 입력해 주세요.')
+      setMessage('No audio recorded. Record again or type your request.')
       setStatus('error')
     }
   }
@@ -187,7 +187,7 @@ export function useRequest(ownedOrganizationId?: number) {
     } catch {
       busy.current = false
       if (active.current) {
-        setMessage('마이크를 사용할 수 없어요. 마이크 권한을 허용하거나 아래에 글로 입력해 주세요.')
+        setMessage('Microphone unavailable. Allow microphone access or type below.')
         setStatus('error')
       }
     }

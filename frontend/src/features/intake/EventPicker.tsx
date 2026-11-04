@@ -27,7 +27,7 @@ export function EventPicker({
         if (active) setEvents(result.data)
       })
       .catch(() => {
-        if (active) setMessage('행사 목록을 불러오지 못했어요.')
+        if (active) setMessage('Unable to load events.')
       })
     return () => {
       active = false
@@ -57,11 +57,11 @@ export function EventPicker({
         setVenue('')
         setDeadline('')
         attempt.current = undefined
-        setMessage('행사를 만들었어요. 이제 사진을 등록해 주세요.')
+        setMessage('Event created. Add your photo now.')
       }
     } catch (error) {
       setMessage(
-        error instanceof ApiError ? error.message : '행사를 만들지 못했어요. 다시 시도해 주세요.',
+        error instanceof ApiError ? error.message : 'Unable to create the event. Please try again.',
       )
     } finally {
       setBusy(false)
@@ -72,10 +72,10 @@ export function EventPicker({
   return (
     <section
       className="mb-4 rounded-2xl border border-stone-200 bg-white p-6"
-      aria-label="행사 선택"
+      aria-label="Event selection"
     >
       <label className="block font-bold">
-        등록할 행사
+        Event for registration
         <select
           className={field}
           disabled={disabled || busy}
@@ -85,7 +85,7 @@ export function EventPicker({
             onSelect(Number(e.target.value) || undefined)
           }}
         >
-          <option value="">행사를 선택해 주세요</option>
+          <option value="">Choose an event</option>
           {events.map((event) => (
             <option key={event.id} value={event.id}>
               {event.name}
@@ -95,14 +95,17 @@ export function EventPicker({
       </label>
       {disabled && (
         <p className="mt-2 text-sm text-slate-600">
-          사진 등록 중에는 행사를 바꿀 수 없어요. 다른 행사를 선택하려면 페이지를 새로고침해 주세요.
+          You cannot change events while registering a photo. Reload the page to choose another
+          event.
         </p>
       )}
       <details className="mt-4">
-        <summary className="cursor-pointer font-semibold text-emerald-800">새 행사 만들기</summary>
+        <summary className="cursor-pointer font-semibold text-emerald-800">
+          Create a new event
+        </summary>
         <form className="mt-4 space-y-4" onSubmit={(event) => void create(event)}>
           <label className="block">
-            행사 이름
+            Event name
             <input
               className={field}
               maxLength={100}
@@ -112,7 +115,7 @@ export function EventPicker({
             />
           </label>
           <label className="block">
-            장소
+            Venue
             <input
               className={field}
               maxLength={200}
@@ -122,7 +125,7 @@ export function EventPicker({
             />
           </label>
           <label className="block">
-            철수 마감 시간 (한국 시간)
+            Teardown deadline (Asia/Seoul, KST)
             <input
               type="datetime-local"
               className={field}
@@ -135,7 +138,7 @@ export function EventPicker({
             className="min-h-12 w-full rounded-xl bg-emerald-800 px-5 font-semibold text-white disabled:opacity-50"
             disabled={busy || disabled}
           >
-            {busy ? '만드는 중…' : '행사 만들기'}
+            {busy ? 'Creating…' : 'Create event'}
           </button>
         </form>
       </details>

@@ -4,14 +4,15 @@ How we write code, commits and pull requests in AfterBooth. Agents and humans fo
 
 ## Language
 
-Everything in the repository is English. Only text that Korean users see is Korean.
+Current product UI, user-facing messages and AI-generated explanations are English (#17). Preserve historical records and original inputs; new repository records are English under the latest #17 instruction.
 
 | What | Language |
 |---|---|
-| Docs, harness files (`AGENTS.md`, agents, skills), README, submission text, demo script | English |
+| Current README, judging/run guides, demo script | English |
+| New operational records and task reports | English; preserve historical records |
 | Commit messages, PR titles and descriptions, issues, review comments | English |
 | Code identifiers, code comments, test names | English |
-| Product UI text and user-facing error messages (`ErrorCode` messages) | Korean |
+| Product UI, user-facing error messages, AI-generated explanations | English |
 | Chat between teammates and with Claude | Anything |
 
 Pushed history is never rewritten to change language.
@@ -145,7 +146,7 @@ frontend/src
 └── lib/                    # small framework-free helpers
 ```
 
-- The generated client throws `ApiError` (`src/api/http.ts`) for any non-2xx response, with the server's `code` and Korean `message`. Catch it in the hook and show `message`.
+- The generated client throws `ApiError` (`src/api/http.ts`) for any non-2xx response, with the server's `code` and English `message`. Catch it in the hook and show `message`.
 - Screens call the generated client through a hook. Components receive props and render. No `fetch` in components.
 - TypeScript strict, no `any`. Types come from `api/generated/model`.
 - Tailwind utility classes only. No CSS files per component.

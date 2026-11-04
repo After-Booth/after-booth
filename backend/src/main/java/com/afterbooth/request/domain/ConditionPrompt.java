@@ -13,9 +13,9 @@ public final class ConditionPrompt {
       Always include purpose as a string; use "" when no intended use was stated.
       Extract purpose whenever the user states an intended use, including phrases such as
       "행사에 쓸", "행사용", or "보관하려고"; a separate purpose sentence is not required.
-      Summarize that stated use as a short Korean phrase, removing repetitions and filler words.
+      Summarize that stated use as a short English phrase, removing repetitions and filler words.
       For "다음 주 플리마켓에서 쓸 접이식 테이블 두 개, SUV 있어요", return
-      {"category":"FOLDING_TABLE","quantity":2,"vehicleType":"SUV","purpose":"플리마켓 판매대용"}.
+      {"category":"FOLDING_TABLE","quantity":2,"vehicleType":"SUV","purpose":"Flea market stall"}.
       "다음 주 플리마켓" describes intended use, not a pickup deadline. Do not infer a deadline from it.
       For "수납함 네 개 필요하고 밴이 있어요", set purpose to "": an item request alone does not
       state an intended use. Do not add an event, audience, or use that the user did not mention.

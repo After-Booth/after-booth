@@ -13,7 +13,7 @@ const item: Item = {
   eventId: 1,
   organizationId: 1,
   category: 'FOLDING_TABLE',
-  label: '접이식 테이블',
+  label: 'Folding table',
   sizeCm: { width: 60, depth: 40, height: 10 },
   condition: 'GOOD',
   totalQty: 12,
@@ -29,7 +29,7 @@ export const allocationHandlers = [
     return request
       ? HttpResponse.json(request)
       : HttpResponse.json(
-          { code: 'NOT_FOUND', message: '요청을 찾을 수 없어요. 새 픽업 요청을 작성해 주세요.' },
+          { code: 'NOT_FOUND', message: 'Request not found. Create a new pickup request.' },
           { status: 404 },
         )
   }),
@@ -44,7 +44,7 @@ export const allocationHandlers = [
     const result: AllocationResult = {
       requestId: Number(params.requestId),
       status: 'NO_MATCH',
-      explanation: '진열대가 현재 없어요. 승용차에 실을 수 있는 접이식 테이블을 선택해 주세요.',
+      explanation: 'No display racks available. Choose folding tables that fit in a sedan.',
       reservations: [],
       rejections: [],
       alternatives: item.availableQty
@@ -52,7 +52,7 @@ export const allocationHandlers = [
             {
               item,
               quantity: Math.min(3, item.availableQty),
-              reason: '접으면 승용차에 실을 수 있어요.',
+              reason: 'Fits in a sedan when folded.',
             },
           ]
         : [],
@@ -61,7 +61,7 @@ export const allocationHandlers = [
           name: 'searchCandidates',
           arguments: {},
           outcome: 'OK',
-          summary: '남은 물품과 차량 조건을 확인했어요.',
+          summary: 'Checked available items and vehicle constraints.',
         },
       ],
     }
@@ -71,7 +71,7 @@ export const allocationHandlers = [
     const key = request.headers.get('Idempotency-Key')
     if (!key)
       return HttpResponse.json(
-        { code: 'INVALID_INPUT', message: '요청을 다시 확인해 주세요.' },
+        { code: 'INVALID_INPUT', message: 'Check the request and try again.' },
         { status: 400 },
       )
     if (responses.has(key)) return HttpResponse.json(responses.get(key), { status: 201 })
@@ -80,7 +80,7 @@ export const allocationHandlers = [
       return HttpResponse.json(
         {
           code: 'QTY_UNAVAILABLE',
-          message: '다른 요청이 먼저 확보했어요. 남은 수량을 확인해 주세요.',
+          message: 'Another request held this stock first. Check available quantity.',
         },
         { status: 409 },
       )

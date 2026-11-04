@@ -83,7 +83,7 @@ test('clears the key after a successful save', async () => {
 test('keeps the key during automatic in-flight conflict retries', async () => {
   const { result } = await ready()
   api.create
-    .mockRejectedValueOnce(new ApiError(409, 'IDEMPOTENCY_CONFLICT', '처리 중'))
+    .mockRejectedValueOnce(new ApiError(409, 'IDEMPOTENCY_CONFLICT', 'Processing'))
     .mockResolvedValueOnce({ status: 201, data: { id: 42 } })
   await act(() => result.current.submit())
   expect(keys()).toHaveLength(2)
@@ -92,7 +92,7 @@ test('keeps the key during automatic in-flight conflict retries', async () => {
 
 test('uses a new key on the next submit after exhausting conflict retries', async () => {
   const { result } = await ready()
-  api.create.mockRejectedValue(new ApiError(409, 'IDEMPOTENCY_CONFLICT', '처리 중'))
+  api.create.mockRejectedValue(new ApiError(409, 'IDEMPOTENCY_CONFLICT', 'Processing'))
   vi.useFakeTimers()
   try {
     await act(async () => {

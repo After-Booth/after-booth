@@ -16,24 +16,24 @@ test('shows counts per category after a photo upload', async () => {
     http.post('*/api/intake/drafts', () =>
       HttpResponse.json({
         id: 1,
-        items: [{ category: 'DISPLAY_RACK', label: '진열대', count: 4, needsReview: false }],
+        items: [{ category: 'DISPLAY_RACK', label: 'Display rack', count: 4, needsReview: false }],
       }),
     ),
   )
   render(<IntakeScreen />)
 
   await userEvent.upload(
-    screen.getByLabelText('부스 사진 찍기'),
+    screen.getByLabelText('Take booth photo'),
     new File(['x'], 'booth.jpg', { type: 'image/jpeg' }),
   )
 
-  expect(await screen.findByText('진열대 4개')).toBeInTheDocument()
+  expect(await screen.findByText('Display rack 4 items')).toBeInTheDocument()
 })
 
 test('disables photo selection while analyzing', async () => {
   server.use(http.post('*/api/intake/drafts', () => new Promise<never>(() => {})))
   render(<IntakeScreen />)
-  const input = screen.getByLabelText('부스 사진 찍기')
+  const input = screen.getByLabelText('Take booth photo')
 
   await userEvent.upload(input, new File(['x'], 'booth.jpg', { type: 'image/jpeg' }))
 
@@ -44,7 +44,7 @@ test('asks to retake the photo when analysis fails', async () => {
   server.use(
     http.post('*/api/intake/drafts', () =>
       HttpResponse.json(
-        { code: 'INTERNAL_ERROR', message: '사진을 분석하지 못했어요. 다시 찍어 주세요.' },
+        { code: 'INTERNAL_ERROR', message: 'Unable to analyze the photo. Please retake it.' },
         { status: 500 },
       ),
     ),
@@ -52,9 +52,9 @@ test('asks to retake the photo when analysis fails', async () => {
   render(<IntakeScreen />)
 
   await userEvent.upload(
-    screen.getByLabelText('부스 사진 찍기'),
+    screen.getByLabelText('Take booth photo'),
     new File(['x'], 'booth.jpg', { type: 'image/jpeg' }),
   )
 
-  expect(await screen.findByRole('alert')).toHaveTextContent('다시 찍어 주세요')
+  expect(await screen.findByRole('alert')).toHaveTextContent('Please retake it')
 })

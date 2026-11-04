@@ -1,201 +1,54 @@
-# AfterBooth Playwright E2E (issue #12)
+# AfterBooth browser verification
 
-> **Authentication rollout:** This is the historical, unauthenticated issue #12
-> scenario. It assumes HTTP access and seeded organizations, so it does not
-> verify issue #70 or the authenticated application. Do not report its prior
-> results as evidence for signup, ownership, secure cookies, or current flows.
+## Current commands
 
-## Local HTTPS authentication setup (#70)
-
-### Automated check
-
-`tests/auth.spec.ts` starts the built jar itself over local HTTPS with synthetic
-keys, the local-only Fake mail gateway and `AI_MODE=replay`, then drives the real
-UI: signup, email verification, login, account lookup, own event creation, photo
-intake, session restore after reload, logout, and a second member that can
-neither list nor read the first member's event. Fake codes are read from the
-child process output in memory and are never printed or stored. Chromium pins
-only that run's certificate. Prerequisites: Docker, Java 21, Node.js, a built
-frontend (`npm --prefix frontend run build`) and jar (`cd backend && ./gradlew
-bootJar`), and the disposable database from step 1 below.
+Prerequisites: Docker, Java 21+, Node.js, Chromium, and locally built frontend and backend. Run from the repository root:
 
 ```bash
-cd e2e
+npm --prefix frontend ci
+npm --prefix frontend run build
+cd backend
+./gradlew bootJar
+cd ../e2e
 npm ci
+npm run typecheck
 npm run install-browsers
 npm run test:auth
 ```
 
-Last run on 2026-11-04 (the head SHA is recorded in PR #76) on the developer PC: 3 tests passed (single
-member flow, cross-member denial, giver/receiver request, hold, confirmation and withdrawal
-eligibility). The photo, voice and handover AI steps of the demo cannot replay for new
-members: the recorded fixtures depend on the seeded database, so allocation and handover
-photo recounts need new recordings (a human-approved live run). Password change and reset
-are covered by component tests only.
+`test:auth` starts the built jar on `https://localhost:5443`, a fresh disposable PostgreSQL container on a random loopback port, synthetic signing keys and an ephemeral TLS certificate. Reserve port 5443 for this run. Chromium pins only this certificate. The stack enables the local-only Fake mail gateway and `AI_MODE=replay`. Codes and application output are consumed only in process memory. Traces and automatic failure screenshots are disabled because they can contain credentials, codes, cookies or member data. The container and temporary TLS files are removed on shutdown. No real mailbox delivery or live Meta call is tested.
 
-> `tests/demo.spec.ts` (issue #12) is skipped until it is rewritten for authenticated
-> members. Run it from the history of #12 only if you need its old evidence.
-
-### Manual setup
-
-The steps below are a **manual setup proposal and have not been verified as an
-end-to-end run**. They use disposable local data and synthetic authentication
-keys. They require PowerShell 7, Node.js, Java 21 (including `keytool`), and a
-working Docker engine. Run them from the repository root. Do not reuse these
-keys or the test database for production. The existing `dev:mock` server and
-the HTTP stack below are not suitable for this check: the app and API must share
-the exact HTTPS origin for Secure cookies and Origin checks.
-
-1. Build the frontend and start an isolated PostgreSQL instance. Make sure port
-   `15439` and container name `afterbooth-70-local-db` are available first.
-
-   ```powershell
-   npm --prefix frontend ci
-   npm --prefix frontend run build
-   docker run -d --rm --name afterbooth-70-local-db `
-     -e POSTGRES_DB=afterbooth -e POSTGRES_USER=afterbooth `
-     -e POSTGRES_PASSWORD=local-only -p 127.0.0.1:15439:5432 postgres:17-alpine
-   docker exec afterbooth-70-local-db pg_isready -U afterbooth -d afterbooth
-   ```
-
-   Wait until `pg_isready` reports that the server accepts connections before
-   continuing. This container is disposable and has no persistent volume.
-
-2. Create a short-lived local TLS keystore and generate fresh, synthetic HMAC
-   and RSA keys in this PowerShell process. The fixed keystore password below
-   is only for this disposable local certificate; do not use it elsewhere.
-   Export the public certificate and trust it using your normal local certificate
-   trust procedure before opening the browser; remove that trust after the run.
-   Do not bypass a browser warning.
-
-   ```powershell
-   $taskTlsFile = Join-Path $env:TEMP ('afterbooth-70-' + [guid]::NewGuid() + '.p12')
-   keytool -genkeypair -alias localhost -keyalg RSA -keysize 2048 -validity 2 `
-     -dname 'CN=localhost' -ext 'SAN=dns:localhost,ip:127.0.0.1' `
-     -storetype PKCS12 -keystore $taskTlsFile -storepass local-test-only `
-     -keypass local-test-only -noprompt
-   if ($LASTEXITCODE -ne 0) { throw 'Local TLS key generation failed' }
-   $taskCertFile = [IO.Path]::ChangeExtension($taskTlsFile, '.cer')
-   keytool -exportcert -rfc -alias localhost -keystore $taskTlsFile `
-     -storepass local-test-only -file $taskCertFile
-   if ($LASTEXITCODE -ne 0) { throw 'Local TLS certificate export failed' }
-
-   $taskHmac = New-Object byte[] 32
-   [System.Security.Cryptography.RandomNumberGenerator]::Fill($taskHmac)
-   $taskRsa = [System.Security.Cryptography.RSA]::Create()
-   $taskRsa.KeySize = 2048
-   $taskFrontendUri = ([uri]((Resolve-Path frontend/dist).Path + [IO.Path]::DirectorySeparatorChar)).AbsoluteUri
-   $taskConfig = @{
-     server = @{ port = 5443; ssl = @{
-       enabled = $true; 'key-store' = ([uri]$taskTlsFile).AbsoluteUri; 'key-store-type' = 'PKCS12'
-       'key-store-password' = 'local-test-only'
-     } }
-     spring = @{
-       profiles = @{ active = 'local' }
-       docker = @{ compose = @{ enabled = $false } }
-       datasource = @{ url = 'jdbc:postgresql://127.0.0.1:15439/afterbooth'; username = 'afterbooth'; password = 'local-only' }
-       web = @{ resources = @{ 'static-locations' = $taskFrontendUri } }
-     }
-     afterbooth = @{
-       mail = @{ 'fake-enabled' = $true }
-       auth = @{
-         'allowed-origin' = 'https://localhost:5443'
-         hmac = @{ 'current-version' = 'synthetic'; keys = @{ synthetic = [Convert]::ToBase64String($taskHmac) } }
-         jwt = @{
-           issuer = 'synthetic-issuer'; audience = 'synthetic-audience'; 'current-kid' = 'synthetic'
-           'private-key' = [Convert]::ToBase64String($taskRsa.ExportPkcs8PrivateKey())
-           'public-keys' = @{ synthetic = [Convert]::ToBase64String($taskRsa.ExportSubjectPublicKeyInfo()) }
-         }
-       }
-     }
-   }
-   $taskRsa.Dispose()
-   $env:SPRING_APPLICATION_JSON = $taskConfig | ConvertTo-Json -Depth 10 -Compress
-   $env:AI_MODE = 'replay'
-   ```
-
-3. In the same private PowerShell console, build the backend and start the jar
-   directly from `backend/`. Keeping the server in this private console avoids
-   forwarding Fake output to a Gradle daemon or shared log collector:
-
-   ```powershell
-   Set-Location backend
-   .\gradlew.bat bootJar
-   if ($LASTEXITCODE -ne 0) { throw 'Backend build failed' }
-   java -jar build/libs/afterbooth-0.0.1-SNAPSHOT.jar
-   ```
-
-   The built frontend is intended to be served by the backend at
-   `https://localhost:5443/`; API requests use that same origin. Fake mail is
-   disabled by default and enabled here only by both `local` and the explicit
-   `fake-enabled` setting. During manual signup or reset, read the short-lived
-   purpose/code line only in this private console and enter the code yourself.
-   Do not save or share console output, codes, credentials, cookies, or tokens.
-   Fake mail simulates delivery and does not establish real mailbox ownership.
-   Do not enable Resend or call external AI during this run.
-
-4. Stop the backend, then from the original PowerShell session remove only this
-   run's container and TLS file. Clear the process-scoped configuration:
-
-   ```powershell
-   docker stop afterbooth-70-local-db
-   Remove-Item -LiteralPath $taskTlsFile, $taskCertFile
-   Remove-Item Env:SPRING_APPLICATION_JSON, Env:AI_MODE
-   Remove-Variable taskConfig, taskHmac, taskRsa
-   ```
-
-   Also remove the local certificate from the trust store used above. The
-   synthetic keys remain valid only for this disposable run. Automated
-   tests must capture Fake codes internally in memory and avoid exposing them
-   in logs, traces, screenshots, or a public API.
-
-Replays the full demo scenario against the real stack in `AI_MODE=replay`:
-photo intake -> voice pickup request -> allocation proposal -> two-context race
-for the last display rack -> winner confirms in the UI -> photo handover ->
-reuse stats. Every step drives the real Korean UI; the API is used only for
-setup guards and result verification, never to stand in for a user action.
-
-## Stack
-
-A dedicated compose project keeps parallel sessions untouched (own ports,
-own volume, own network). Run from the repo root:
+The authentication suite uses independent browser contexts and synthetic members. Its checks cover signup and verification, login/session restoration/logout, member-owned events, cross-member access denial, an inventory/request/HOLD/confirmation path and withdrawal eligibility. A cancellation after confirmation is not handover completion. The exact newly executed scope and failures must be recorded separately; an older run is not current evidence.
 
 ```bash
-docker compose -p afterbooth-e2e-12 -f docker-compose.yml -f e2e/docker-compose.e2e.yml up --build -d
-curl -s http://localhost:18080/api/health   # {"status":"UP","aiMode":"replay"}
+npm run test:demo  # Complete owned-data demo, verified in replay.
+npm test          # Authentication checks, followed by the full-demo gate.
 ```
 
-Reset the demo database between runs (this project only):
+The default command runs the complete authenticated HTTPS owned-data scenario; no demo is skipped. `demo.spec.ts` and the separate candidate suite share every assertion in `demoScenario.ts`: giver-owned event and photo inventory, two authenticated receivers racing for the last rack, exactly one HOLD, a visible enabled loser alternative, receiver confirmation, giver photo handover, HANDED_OVER and event-filtered statistics matching the API. ENGLISH_RECORDINGS_READY was cleared after actual replay candidate success, then `npm test` passed against the normal product jar.
 
-```bash
-docker compose -p afterbooth-e2e-12 -f docker-compose.yml -f e2e/docker-compose.e2e.yml down -v
-docker compose -p afterbooth-e2e-12 -f docker-compose.yml -f e2e/docker-compose.e2e.yml up -d
-```
+The default completed run includes TypeScript, six auth browser checks, the full demo and ten overlap/helpers. Candidate runs also completed both controlled losing branches (simultaneous finalization rejection and stock zero after the winner commits), plus a natural replay race. The test-only scheduler controls timing without altering responses, stock or ownership; the default product run uses no scheduler. Replay latency attachments contain only timing numbers, never auth payloads. These are replay timings, not live-model measurements.
 
-Tear down everything this suite started:
+## TypeScript and IDE checks
 
-```bash
-docker compose -p afterbooth-e2e-12 -f docker-compose.yml -f e2e/docker-compose.e2e.yml down -v
-```
+Run `npm ci` in `e2e/`, then `npm run typecheck`. This package declares its own TypeScript and Node type dependencies. Its `tsconfig.json` covers the tests, stack, reporter and Playwright configuration with modern ECMAScript modules, Node types and DOM iteration types. IDEs can use this committed project configuration instead of inferred defaults or unrelated frontend options. The default `npm test` runs this type check before browser tests. No frontend installation or command-line type-root override is required for E2E type checking.
 
-## Run
+TypeScript configuration is separate from actual replay fixture matching. A successful type check does not establish full-demo runtime success.
 
-```bash
-cd e2e
-npm ci
-npm run install-browsers   # Chromium (headless shell) only
-E2E_RUN_TAG=run1 npx playwright test
-```
+## Recording prerequisite
 
-Inputs come from `../spike/samples/` (byte-identical files) and the exact
-race phrase in `tests/demo.spec.ts`; replay fixtures will not match anything
-else. `E2E_BASE_URL` overrides the default `http://localhost:18080`.
+The existing recorded allocation requests contain a seeded display rack (`itemId: 1`, Korean label), its stock and Korean tool feedback. Member-owned inventory has different item identifiers. English system prompts, descriptions and tool feedback also change the exact request hash. `FixtureStore` hashes method, path and canonical request JSON, including tool results. These are concrete request mismatches; changing a lookup key or deleting request fields would invalidate replay evidence.
 
-## Evidence
+Original recordings remain unchanged. Separately approved real Meta recordings now cover the owned-data requests; fixture responses were not translated or fabricated. The exact race input is `We need one display rack. We will collect it in a van.` Generated purpose and allocation explanations are checked for English. The original WAV remains Korean, so this does not validate English speech.
 
-- `test-results/<test>/latency-<tag>.json`: wall-clock latency per step plus the
-  race overlap gaps and the executed race branch (`simultaneous-reject` or
-  `stock-0-after-commit`). The console prints the same table. Each run wipes
-  `test-results/`, so copy the file aside to keep several runs.
-- Traces and screenshots are kept on failure only. Scan them for secrets
-  before sharing: replay mode sends no keys, but check anyway.
+For future fixture preparation, `npm run test:demo:candidate` requires a private `AFTERBOOTH_REPLAY_CAPTURE_DIR` and backend `prepareReplayTools`. Select `AFTERBOOTH_REPLAY_RACE_BRANCH=simultaneous-reject|stock-0-after-commit` for deterministic branches, or `natural` for a key-free unscheduled check. The test-only application always runs REPLAY and captures missing requests, never provider responses. See [ENGLISH_REPLAY](../docs/ENGLISH_REPLAY.md) for the exact safe recording procedure and budget gates. The two-branch paid runner does not authorize paid natural-branch extensions.
+
+## Historical evidence
+
+Issue #12's unauthenticated, seeded-organization scenario used HTTP and Korean UI. Its past measurements and successful race/alternative assertions concern that historical code only. PR #76's earlier authentication report described three checks, including confirmation followed by cancellation; it did not establish completed handover, current English replay, password recovery, or real mail delivery. The earlier manual PowerShell setup proposal was not a verified end-to-end run.
+
+Do not run the old HTTP Compose recipe as an authenticated demo: Secure cookies and same-origin CSRF checks require HTTPS. Do not rely on seeded organization ownership. Current manual setup and submission status are documented in the root README and `docs/DEMO_SCRIPT.md`.
+
+The current suite also checks wrong-current-password rejection, successful password change and email reset with fresh login, unverified login → resend → verification, and a simulated HTTP refresh outage followed by **real server logout** and recovery. The outage is injected by Playwright; it does not establish real database outage recovery. Desktop/mobile login overflow checks use blank forms. Screenshots are not saved by default. To opt into visual review, set `E2E_VISUAL_DIR` to a temporary directory outside the repository. Only the blank login and credential-free refresh notice views are saved there; no auth traces are retained. Inspect those images before sharing.
+
+Still separate: expired/used reset-code and time-controlled 24-hour/30-day cases belong to the backend integration checks; the browser suite does not claim those. Full AI allocation, photo handover and statistics with exact member-owned English-output recordings are now verified in replay; live performance and English speech remain unverified.

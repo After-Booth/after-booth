@@ -24,7 +24,7 @@ const server = setupServer(
       category: 'DISPLAY_RACK',
       quantity: 3,
       vehicleType: 'SEDAN',
-      purpose: '주말 행사 진열용',
+      purpose: 'Weekend event display',
       pickupDeadline: '2026-11-01T09:00:00Z',
     },
     missingFields: [],
@@ -44,9 +44,9 @@ async function enterText() {
   const user = userEvent.setup()
   render(<RequestScreen />)
   await screen.findByRole('option', { name: '주말 행사팀' })
-  await user.selectOptions(screen.getByLabelText('1. 받는 단체'), '7')
-  await user.type(screen.getByLabelText('글로 입력하기'), transcript)
-  await user.click(screen.getByRole('button', { name: '입력한 내용 해석하기' }))
+  await user.selectOptions(screen.getByLabelText('1. Receiving organization'), '7')
+  await user.type(screen.getByLabelText('Type your request'), transcript)
+  await user.click(screen.getByRole('button', { name: 'Interpret request' }))
   return user
 }
 
@@ -66,7 +66,7 @@ test('interprets receiver text, edits all fields and saves the edited body with 
           category: 'DISPLAY_RACK',
           quantity: 3,
           vehicleType: 'SEDAN',
-          purpose: '주말 행사 진열용',
+          purpose: 'Weekend event display',
           pickupDeadline: '2026-11-01T09:00:00Z',
         },
         missingFields: [],
@@ -82,23 +82,23 @@ test('interprets receiver text, edits all fields and saves the edited body with 
     }),
   )
   const user = await enterText()
-  expect(await screen.findByText('입력 원문')).toBeInTheDocument()
+  expect(await screen.findByText('Original input')).toBeInTheDocument()
   expect(screen.getByText(transcript, { selector: 'p' })).toBeInTheDocument()
-  expect(screen.getByLabelText(/픽업 가능 시각/)).toHaveValue('2026-11-01T18:00')
-  expect(screen.getByLabelText('1. 받는 단체')).toHaveValue('7')
-  await user.selectOptions(screen.getByLabelText('1. 받는 단체'), '8')
-  await user.selectOptions(screen.getByLabelText('물품 종류'), 'STORAGE_BIN')
-  await user.clear(screen.getByLabelText('수량'))
-  await user.type(screen.getByLabelText('수량'), '5')
-  await user.selectOptions(screen.getByLabelText('가져갈 차량'), 'VAN')
-  await user.clear(screen.getByLabelText('사용 목적'))
-  await user.type(screen.getByLabelText('사용 목적'), '축제 물품 보관용')
-  const time = screen.getByLabelText(/픽업 가능 시각/)
+  expect(screen.getByLabelText(/Pickup time/)).toHaveValue('2026-11-01T18:00')
+  expect(screen.getByLabelText('1. Receiving organization')).toHaveValue('7')
+  await user.selectOptions(screen.getByLabelText('1. Receiving organization'), '8')
+  await user.selectOptions(screen.getByLabelText('Item category'), 'STORAGE_BIN')
+  await user.clear(screen.getByLabelText('Quantity'))
+  await user.type(screen.getByLabelText('Quantity'), '5')
+  await user.selectOptions(screen.getByLabelText('Pickup vehicle'), 'VAN')
+  await user.clear(screen.getByLabelText('Purpose'))
+  await user.type(screen.getByLabelText('Purpose'), '축제 물품 보관용')
+  const time = screen.getByLabelText(/Pickup time/)
   // datetime-local has no cross-browser userEvent typing support.
   const { fireEvent } = await import('@testing-library/react')
   fireEvent.change(time, { target: { value: '2026-11-02T10:30' } })
-  await user.click(screen.getByRole('button', { name: '픽업 요청 저장' }))
-  expect(await screen.findByText('픽업 요청을 저장했어요')).toBeInTheDocument()
+  await user.click(screen.getByRole('button', { name: 'Save pickup request' }))
+  expect(await screen.findByText('Pickup request saved')).toBeInTheDocument()
   expect(sent).toEqual({
     organizationId: 8,
     category: 'STORAGE_BIN',
@@ -109,8 +109,8 @@ test('interprets receiver text, edits all fields and saves the edited body with 
     transcript,
   })
   expect(key).toMatch(/^[0-9a-f-]{36}$/)
-  expect(screen.getByText('수납함 5개')).toBeInTheDocument()
-  expect(screen.getByLabelText('녹음 파일 올리기 (WAV)')).toBeDisabled()
+  expect(screen.getByText('Storage bin 5 items')).toBeInTheDocument()
+  expect(screen.getByLabelText('Upload recording (WAV)')).toBeDisabled()
 })
 
 test('highlights missing fields and defaults quantity to one before allowing manual completion', async () => {
@@ -123,26 +123,26 @@ test('highlights missing fields and defaults quantity to one before allowing man
     }),
   )
   const user = await enterText()
-  const category = await screen.findByLabelText(/물품 종류/)
-  expect(category).toHaveAccessibleDescription('확인 필요 · 직접 입력해 주세요')
-  expect(screen.getByLabelText(/가져갈 차량/)).toHaveAccessibleDescription(
-    '확인 필요 · 직접 입력해 주세요',
+  const category = await screen.findByLabelText(/Item category/)
+  expect(category).toHaveAccessibleDescription('Needs review · Enter manually')
+  expect(screen.getByLabelText(/Pickup vehicle/)).toHaveAccessibleDescription(
+    'Needs review · Enter manually',
   )
   expect(category).toHaveClass('border-amber-600')
-  expect(screen.getByLabelText('수량')).toHaveValue(1)
-  expect(screen.getByRole('button', { name: '픽업 요청 저장' })).toBeDisabled()
+  expect(screen.getByLabelText('Quantity')).toHaveValue(1)
+  expect(screen.getByRole('button', { name: 'Save pickup request' })).toBeDisabled()
   await user.selectOptions(category, 'FOLDING_TABLE')
-  await user.selectOptions(screen.getByLabelText(/가져갈 차량/), 'SEDAN')
-  expect(screen.getByRole('button', { name: '픽업 요청 저장' })).toBeEnabled()
+  await user.selectOptions(screen.getByLabelText(/Pickup vehicle/), 'SEDAN')
+  expect(screen.getByRole('button', { name: 'Save pickup request' })).toBeEnabled()
 })
 
 test.each([400, 415, 503])(
   'shows the Korean API error on %s and allows another attempt',
   async (status) => {
     const messages: Record<number, string> = {
-      400: '입력한 내용을 확인해 주세요.',
-      415: 'WAV 형식으로 다시 녹음해 주세요.',
-      503: '음성 해석을 잠시 사용할 수 없어요. 다시 시도해 주세요.',
+      400: 'Check your input.',
+      415: 'Record again in WAV format.',
+      503: 'Voice interpretation is temporarily unavailable. Please try again.',
     }
     server.use(
       http.post('*/api/conditions/interpret', () =>
@@ -151,7 +151,7 @@ test.each([400, 415, 503])(
     )
     await enterText()
     expect(await screen.findByRole('alert')).toHaveTextContent(messages[status])
-    expect(screen.getByRole('button', { name: '입력한 내용 해석하기' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Interpret request' })).toBeEnabled()
   },
 )
 
@@ -163,9 +163,9 @@ test('offers text entry when microphone permission is denied', async () => {
     },
   })
   render(<RequestScreen />)
-  await userEvent.click(screen.getByRole('button', { name: '마이크로 말하기' }))
-  expect(await screen.findByRole('alert')).toHaveTextContent('마이크 권한을 허용하거나')
-  expect(screen.getByLabelText('글로 입력하기')).toBeEnabled()
+  await userEvent.click(screen.getByRole('button', { name: 'Speak your request' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent('Allow microphone access')
+  expect(screen.getByLabelText('Type your request')).toBeEnabled()
 })
 
 test('shows an empty interpretation and permits text retry', async () => {
@@ -178,8 +178,8 @@ test('shows an empty interpretation and permits text retry', async () => {
     }),
   )
   await enterText()
-  expect(await screen.findByText(/들을 수 있는 내용이 없었어요/)).toBeInTheDocument()
-  expect(screen.queryByRole('button', { name: '픽업 요청 저장' })).not.toBeInTheDocument()
+  expect(await screen.findByText(/No speech detected/)).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Save pickup request' })).not.toBeInTheDocument()
 })
 
 test('omits blank optional fields and prevents duplicate submissions while saving', async () => {
@@ -208,7 +208,7 @@ test('omits blank optional fields and prevents duplicate submissions while savin
     }),
   )
   const user = await enterText()
-  const save = await screen.findByRole('button', { name: '픽업 요청 저장' })
+  const save = await screen.findByRole('button', { name: 'Save pickup request' })
   await user.dblClick(save)
   await waitFor(() => expect(calls).toBe(1))
   expect(save).toBeDisabled()
@@ -219,9 +219,9 @@ test('omits blank optional fields and prevents duplicate submissions while savin
     vehicleType: 'SEDAN',
     transcript,
   })
-  expect(screen.getByLabelText('녹음 파일 올리기 (WAV)')).toBeDisabled()
+  expect(screen.getByLabelText('Upload recording (WAV)')).toBeDisabled()
   complete?.()
-  expect(await screen.findByText('픽업 요청을 저장했어요')).toBeInTheDocument()
+  expect(await screen.findByText('Pickup request saved')).toBeInTheDocument()
 })
 
 test.each(['audio/wav', 'audio/x-wav', ''])(
@@ -239,20 +239,20 @@ test.each(['audio/wav', 'audio/x-wav', ''])(
       )
     })
     render(<RequestScreen />)
-    const input = screen.getByLabelText('녹음 파일 올리기 (WAV)')
+    const input = screen.getByLabelText('Upload recording (WAV)')
     expect(input).toHaveAttribute('accept', 'audio/wav,.wav')
-    expect(input).toHaveAccessibleDescription('16 kHz 모노 WAV 파일을 올려 주세요 · 최대 60초')
+    expect(input).toHaveAccessibleDescription('Upload a 16 kHz mono WAV file · Up to 60 seconds')
     // Checked synchronously after the change, before the upload can answer
     fireEvent.change(input, { target: { files: [new File([bytes], 'sample.WAV', { type })] } })
     expect(
       screen.getByText(
-        '음성은 Muse Voice Transcribe로 받아쓰고, Muse Spark가 조건을 정리하고 있어요…',
+        'Muse Voice Transcribe is transcribing audio and Muse Spark is structuring your requirements…',
       ),
     ).toBeInTheDocument()
-    expect(screen.getByText('0초 경과 · 보통 약 5초 걸려요')).toBeInTheDocument()
+    expect(screen.getByText('0s elapsed · Usually about 5s')).toBeInTheDocument()
     expect(input).toBeDisabled()
-    expect(screen.getByRole('button', { name: '마이크로 말하기' })).toBeDisabled()
-    expect(await screen.findByText('입력 원문')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Speak your request' })).toBeDisabled()
+    expect(await screen.findByText('Original input')).toBeInTheDocument()
     expect(sent?.get('context')).toBe('RECEIVER')
     expect(sent?.has('text')).toBe(false)
     const audio = sent?.get('audio') as File
@@ -274,12 +274,12 @@ test('rejects non-WAV uploads before calling the interpretation API', async () =
   render(<RequestScreen />)
   const user = userEvent.setup({ applyAccept: false })
   await user.upload(
-    screen.getByLabelText('녹음 파일 올리기 (WAV)'),
+    screen.getByLabelText('Upload recording (WAV)'),
     new File(['audio'], 'recording.mp3', { type: 'audio/wav' }),
   )
-  expect(await screen.findByRole('alert')).toHaveTextContent('WAV 파일만 올릴 수 있어요.')
+  expect(await screen.findByRole('alert')).toHaveTextContent('Only WAV files are supported.')
   expect(calls).toBe(0)
-  expect(screen.getByLabelText('녹음 파일 올리기 (WAV)')).toBeEnabled()
+  expect(screen.getByLabelText('Upload recording (WAV)')).toBeEnabled()
 })
 
 test('uses the shorter text interpretation estimate', async () => {
@@ -298,9 +298,9 @@ test('uses the shorter text interpretation estimate', async () => {
     }),
   )
   await enterText()
-  expect(screen.getByText('0초 경과 · 보통 약 2초 걸려요')).toBeInTheDocument()
-  expect(screen.getByLabelText('녹음 파일 올리기 (WAV)')).toBeDisabled()
+  expect(screen.getByText('0s elapsed · Usually about 2s')).toBeInTheDocument()
+  expect(screen.getByLabelText('Upload recording (WAV)')).toBeDisabled()
   await waitFor(() => expect(complete).toBeTypeOf('function'))
   complete?.()
-  await screen.findByText('입력 원문')
+  await screen.findByText('Original input')
 })

@@ -1,7 +1,7 @@
 import { http as mockHttp, HttpResponse } from 'msw'
 import { setupServer } from 'msw/node'
 import { afterAll, afterEach, beforeAll, expect, test, vi } from 'vitest'
-import { http, setAccessToken } from '../../api/http'
+import { getAccessToken, http, setAccessToken } from '../../api/http'
 import { changePassword } from '../../api/generated/afterbooth'
 import {
   authOperation,
@@ -24,10 +24,7 @@ const server = setupServer(
   mockHttp.get('*/api/private', ({ request }) =>
     request.headers.get('Authorization') === 'Bearer new-token'
       ? HttpResponse.json({ ok: true })
-      : HttpResponse.json(
-          { code: 'UNAUTHENTICATED', message: '로그인해 주세요.' },
-          { status: 401 },
-        ),
+      : HttpResponse.json({ code: 'UNAUTHENTICATED', message: 'Please sign in.' }, { status: 401 }),
   ),
 )
 beforeAll(() => server.listen())
@@ -59,7 +56,7 @@ test('a request from an old session is not retried after account change', async 
       calls += 1
       await wait
       return HttpResponse.json(
-        { code: 'UNAUTHENTICATED', message: '로그인해 주세요.' },
+        { code: 'UNAUTHENTICATED', message: 'Please sign in.' },
         { status: 401 },
       )
     }),
@@ -80,7 +77,7 @@ test('an expired refresh session clears the access token and is not retried', as
     mockHttp.post('*/api/auth/refresh', () => {
       refreshes += 1
       return HttpResponse.json(
-        { code: 'UNAUTHENTICATED', message: '로그인해 주세요.' },
+        { code: 'UNAUTHENTICATED', message: 'Please sign in.' },
         { status: 401 },
       )
     }),
@@ -103,7 +100,7 @@ test('a temporary refresh failure reports the error without clearing the current
   server.use(
     mockHttp.post('*/api/auth/refresh', () =>
       HttpResponse.json(
-        { code: 'AUTH_UNAVAILABLE', message: '잠시 후 다시 시도해 주세요.' },
+        { code: 'AUTH_UNAVAILABLE', message: 'Please try again shortly.' },
         { status: 503 },
       ),
     ),
@@ -121,30 +118,66 @@ test('a temporary refresh failure reports the error without clearing the current
   expect(authorization).toBe('Bearer expired-token')
 })
 
-test('logout clears the access token locally even when the server call fails', async () => {
-  server.use(
-    mockHttp.post('*/api/auth/logout', () =>
-      HttpResponse.json(
-        { code: 'AUTH_UNAVAILABLE', message: '잠시 후 다시 시도해 주세요.' },
-        { status: 503 },
+test.each(['csrf', 'logout'])(
+  'failed %s keeps the session until logout retry succeeds',
+  async (failure) => {
+    let healthy = false
+    let calls = 0
+    server.use(
+      mockHttp.get('*/api/auth/csrf', () =>
+        failure === 'csrf' && !healthy
+          ? HttpResponse.json({ code: 'AUTH_UNAVAILABLE' }, { status: 503 })
+          : HttpResponse.json({ csrfToken: 'synthetic-csrf' }),
       ),
-    ),
-  )
-  const ended = vi.fn()
-  const unsubscribe = onSessionEnd(ended)
-  setAccessToken('new-token')
-  await expect(signOut()).rejects.toMatchObject({ status: 503 })
-  expect(ended).toHaveBeenCalledOnce()
-  unsubscribe()
-  let authorization: string | null = 'unknown'
+      mockHttp.post('*/api/auth/logout', () => {
+        calls += 1
+        return healthy
+          ? new HttpResponse(null, { status: 204 })
+          : HttpResponse.json({ code: 'AUTH_UNAVAILABLE' }, { status: 503 })
+      }),
+    )
+    const ended = vi.fn()
+    const unsubscribe = onSessionEnd(ended)
+    setAccessToken('new-token')
+    try {
+      await expect(signOut()).rejects.toMatchObject({ status: 503 })
+      expect(ended).not.toHaveBeenCalled()
+      expect(getAccessToken()).toBe('new-token')
+      expect(calls).toBe(failure === 'csrf' ? 0 : 1)
+      healthy = true
+      await signOut()
+      expect(ended).toHaveBeenCalledOnce()
+      expect(getAccessToken()).toBeUndefined()
+    } finally {
+      unsubscribe()
+    }
+  },
+)
+
+test('a logout response cannot clear a newer session', async () => {
+  let release!: () => void
+  let started!: () => void
+  const requested = new Promise<void>((resolve) => {
+    started = resolve
+  })
+  const wait = new Promise<void>((resolve) => {
+    release = resolve
+  })
   server.use(
-    mockHttp.get('*/api/private', ({ request }) => {
-      authorization = request.headers.get('Authorization')
-      return HttpResponse.json({ ok: true })
+    mockHttp.post('*/api/auth/logout', async () => {
+      started()
+      await wait
+      return new HttpResponse(null, { status: 204 })
     }),
   )
-  await http('/api/private')
-  expect(authorization).toBeNull()
+  setAccessToken('old-token')
+  const logout = signOut()
+  await requested
+  clearSession()
+  setAccessToken('other-member-token')
+  release()
+  await logout
+  expect(getAccessToken()).toBe('other-member-token')
 })
 
 test('a 401 that persists after a successful refresh ends the session without more retries', async () => {
@@ -153,7 +186,7 @@ test('a 401 that persists after a successful refresh ends the session without mo
     mockHttp.get('*/api/private', () => {
       protectedCalls += 1
       return HttpResponse.json(
-        { code: 'UNAUTHENTICATED', message: '로그인이 필요해요.' },
+        { code: 'UNAUTHENTICATED', message: 'Sign in required.' },
         { status: 401 },
       )
     }),
@@ -174,7 +207,7 @@ test('an authentication retry does not refresh again when the token was already 
     mockHttp.post('*/api/members/me/password', () =>
       ++attempts === 1
         ? HttpResponse.json(
-            { code: 'UNAUTHENTICATED', message: '로그인이 필요해요.' },
+            { code: 'UNAUTHENTICATED', message: 'Sign in required.' },
             { status: 401 },
           )
         : new HttpResponse(null, { status: 204 }),
@@ -209,7 +242,7 @@ test('a protected authentication mutation refreshes once and obtains a fresh CSR
       })
       return requests.length === 1
         ? HttpResponse.json(
-            { code: 'UNAUTHENTICATED', message: '로그인해 주세요.' },
+            { code: 'UNAUTHENTICATED', message: 'Please sign in.' },
             { status: 401 },
           )
         : new HttpResponse(null, { status: 204 })
@@ -237,7 +270,7 @@ test('a temporary refresh failure is reported as session trouble until a refresh
     mockHttp.post('*/api/auth/refresh', () =>
       failing
         ? HttpResponse.json(
-            { code: 'AUTH_UNAVAILABLE', message: '잠시 후 다시 시도해 주세요.' },
+            { code: 'AUTH_UNAVAILABLE', message: 'Please try again shortly.' },
             { status: 503 },
           )
         : HttpResponse.json({ accessToken: 'new-token', tokenType: 'Bearer', expiresIn: 600 }),

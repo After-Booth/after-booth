@@ -21,23 +21,26 @@ beforeAll(() => server.listen())
 afterEach(() => server.resetHandlers())
 afterAll(() => server.close())
 
-test('shows the server status in Korean', async () => {
+test('shows the server status in English', async () => {
   render(<App />)
-  expect(await screen.findByText('서버 UP · AI replay')).toBeInTheDocument()
+  expect(await screen.findByText('Server UP · AI replay')).toBeInTheDocument()
 })
 
 test('puts the photo capture first, links the screens and keeps one main landmark', async () => {
   render(<App />)
-  const capture = await screen.findByLabelText('부스 사진 찍기')
-  const health = await screen.findByText('서버 UP · AI replay')
+  const capture = await screen.findByLabelText('Take booth photo')
+  const health = await screen.findByText('Server UP · AI replay')
   expect(capture.compareDocumentPosition(health) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   expect(screen.getAllByRole('main')).toHaveLength(1)
-  expect(screen.getByRole('link', { name: '물품 픽업 요청하기' })).toHaveAttribute(
+  expect(screen.getByRole('link', { name: 'Request item pickup' })).toHaveAttribute(
     'href',
     '#/request',
   )
-  expect(screen.getByRole('link', { name: '배정 보드' })).toHaveAttribute('href', '#/allocation')
-  expect(screen.getByRole('link', { name: '물품 인계 및 재사용 통계' })).toHaveAttribute(
+  expect(screen.getByRole('link', { name: 'Allocation board' })).toHaveAttribute(
+    'href',
+    '#/allocation',
+  )
+  expect(screen.getByRole('link', { name: 'Item handover and reuse stats' })).toHaveAttribute(
     'href',
     '#/handover',
   )
@@ -55,10 +58,7 @@ test('switching accounts in one tab never shows the previous member’s data', a
   const bearer = (request: Request) => request.headers.get('Authorization') ?? ''
   server.use(
     http.post('*/api/auth/refresh', () =>
-      HttpResponse.json(
-        { code: 'UNAUTHENTICATED', message: '로그인이 필요해요.' },
-        { status: 401 },
-      ),
+      HttpResponse.json({ code: 'UNAUTHENTICATED', message: 'Sign in required.' }, { status: 401 }),
     ),
     http.post('*/api/auth/login', async ({ request }) => {
       const { email } = (await request.json()) as { email: string }
@@ -83,26 +83,26 @@ test('switching accounts in one tab never shows the previous member’s data', a
     http.post('*/api/auth/logout', () => new HttpResponse(null, { status: 204 })),
   )
   const signIn = async (email: string) => {
-    await userEvent.type(await screen.findByLabelText('이메일'), email)
-    await userEvent.type(screen.getByLabelText('비밀번호'), 'synthetic-password')
-    await userEvent.click(screen.getByRole('button', { name: '로그인' }))
+    await userEvent.type(await screen.findByLabelText('Email'), email)
+    await userEvent.type(screen.getByLabelText('Password'), 'synthetic-password')
+    await userEvent.click(screen.getByRole('button', { name: 'Sign in' }))
   }
 
   render(<App />)
   await signIn('a@example.test')
   expect(await screen.findByRole('option', { name: 'Member A private event' })).toBeInTheDocument()
 
-  await userEvent.click(screen.getByRole('link', { name: '계정 관리' }))
-  await userEvent.click(await screen.findByRole('button', { name: '로그아웃' }))
-  expect(await screen.findByRole('heading', { name: '다시 만나요' })).toBeInTheDocument()
+  await userEvent.click(screen.getByRole('link', { name: 'Account settings' }))
+  await userEvent.click(await screen.findByRole('button', { name: 'Sign out' }))
+  expect(await screen.findByRole('heading', { name: 'Welcome back' })).toBeInTheDocument()
   expect(screen.queryByText('Member A private event')).not.toBeInTheDocument()
 
   await signIn('b@example.test')
-  await screen.findByLabelText('등록할 행사')
+  await screen.findByLabelText('Event for registration')
   expect(screen.queryByRole('option', { name: 'Member A private event' })).not.toBeInTheDocument()
   expect(screen.getAllByRole('option')).toHaveLength(1)
   // Let the home screen's health request finish so nothing resolves after the test ends.
-  expect(await screen.findByText('서버 UP · AI replay')).toBeInTheDocument()
+  expect(await screen.findByText('Server UP · AI replay')).toBeInTheDocument()
 })
 
 test('shows a notice when the session cannot be refreshed and recovers on retry', async () => {
@@ -115,24 +115,125 @@ test('shows a notice when the session cannot be refreshed and recovers on retry'
       return refreshes === 1 || healthy
         ? HttpResponse.json({ accessToken: 'test-token', tokenType: 'Bearer', expiresIn: 600 })
         : HttpResponse.json(
-            { code: 'AUTH_UNAVAILABLE', message: '잠시 후 다시 시도해 주세요.' },
+            { code: 'AUTH_UNAVAILABLE', message: 'Please try again shortly.' },
             { status: 503 },
           )
     }),
     http.get('*/api/events', () =>
-      HttpResponse.json(
-        { code: 'UNAUTHENTICATED', message: '로그인이 필요해요.' },
-        { status: 401 },
-      ),
+      HttpResponse.json({ code: 'UNAUTHENTICATED', message: 'Sign in required.' }, { status: 401 }),
     ),
   )
   render(<App />)
   const notice = await screen.findByRole('alert')
-  expect(notice).toHaveTextContent('로그인 상태를 확인하지 못했어요')
-  expect(screen.getByRole('navigation', { name: '주요 메뉴' })).toBeInTheDocument()
+  expect(notice).toHaveTextContent('Unable to refresh your session')
+  expect(screen.getByRole('navigation', { name: 'Main navigation' })).toBeInTheDocument()
 
   healthy = true
-  await userEvent.click(screen.getByRole('button', { name: '다시 시도' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Try again' }))
   await vi.waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
-  expect(await screen.findByText('서버 UP · AI replay')).toBeInTheDocument()
+  expect(await screen.findByText('Server UP · AI replay')).toBeInTheDocument()
+})
+
+test('revokes the server session when signing out from a refresh outage', async () => {
+  window.location.hash = '#/'
+  let refreshes = 0
+  let revoked = false
+  server.use(
+    http.post('*/api/auth/refresh', () =>
+      ++refreshes === 1
+        ? HttpResponse.json({ accessToken: 'test-token', tokenType: 'Bearer', expiresIn: 600 })
+        : HttpResponse.json({ code: 'AUTH_UNAVAILABLE', message: 'Unavailable' }, { status: 503 }),
+    ),
+    http.get('*/api/events', () =>
+      HttpResponse.json({ code: 'UNAUTHENTICATED', message: 'Expired' }, { status: 401 }),
+    ),
+    http.post('*/api/auth/logout', () => {
+      revoked = true
+      return new HttpResponse(null, { status: 204 })
+    }),
+  )
+  render(<App />)
+  await screen.findByRole('alert')
+  await userEvent.click(screen.getByRole('button', { name: 'Sign out' }))
+  expect(await screen.findByRole('heading', { name: 'Welcome back' })).toBeInTheDocument()
+  expect(revoked).toBe(true)
+})
+
+test.each(['csrf', 'logout'])(
+  'failed %s keeps a visible logout retry after refresh recovers',
+  async (failure) => {
+    window.location.hash = '#/'
+    let refreshes = 0
+    let failing = false
+    let recovered = false
+    let revoked = false
+    server.use(
+      http.post('*/api/auth/refresh', () =>
+        revoked
+          ? HttpResponse.json({ code: 'UNAUTHENTICATED' }, { status: 401 })
+          : ++refreshes === 1 || recovered
+            ? HttpResponse.json({ accessToken: 'test-token', tokenType: 'Bearer', expiresIn: 600 })
+            : HttpResponse.json({ code: 'AUTH_UNAVAILABLE' }, { status: 503 }),
+      ),
+      http.get('*/api/events', () =>
+        recovered
+          ? HttpResponse.json([])
+          : HttpResponse.json({ code: 'UNAUTHENTICATED' }, { status: 401 }),
+      ),
+      http.get('*/api/auth/csrf', () =>
+        failing && failure === 'csrf'
+          ? HttpResponse.json({ code: 'AUTH_UNAVAILABLE' }, { status: 503 })
+          : HttpResponse.json({ csrfToken: 'test-csrf' }),
+      ),
+      http.post('*/api/auth/logout', () => {
+        if (failing) return HttpResponse.json({ code: 'AUTH_UNAVAILABLE' }, { status: 503 })
+        revoked = true
+        return new HttpResponse(null, { status: 204 })
+      }),
+    )
+    const view = render(<App />)
+    await screen.findByRole('alert')
+    failing = true
+    await userEvent.click(screen.getByRole('button', { name: 'Sign out' }))
+    expect(
+      await screen.findByText(
+        'Sign out failed. Your session may still be active. Try signing out again.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Welcome back' })).not.toBeInTheDocument()
+    expect(revoked).toBe(false)
+    failing = false
+    recovered = true
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    expect(screen.getByRole('alert')).toHaveTextContent('Sign out failed.')
+    await userEvent.click(screen.getByRole('button', { name: 'Sign out' }))
+    expect(await screen.findByRole('heading', { name: 'Welcome back' })).toBeInTheDocument()
+    expect(revoked).toBe(true)
+    view.unmount()
+    render(<App />)
+    expect(await screen.findByRole('heading', { name: 'Welcome back' })).toBeInTheDocument()
+  },
+)
+
+test('account settings keeps a failed logout visible even for a 401 response', async () => {
+  window.location.hash = '#/account'
+  let healthy = false
+  server.use(
+    http.post('*/api/auth/logout', () =>
+      healthy
+        ? new HttpResponse(null, { status: 204 })
+        : HttpResponse.json({ code: 'UNAUTHENTICATED' }, { status: 401 }),
+    ),
+  )
+  render(<App />)
+  await userEvent.click(await screen.findByRole('button', { name: 'Sign out' }))
+  expect(
+    await screen.findByText(
+      'Sign out failed. Your session may still be active. Try signing out again.',
+    ),
+  ).toBeInTheDocument()
+  expect(screen.getByRole('heading', { name: 'Account settings' })).toBeInTheDocument()
+  healthy = true
+  await userEvent.click(screen.getByRole('button', { name: 'Sign out' }))
+  expect(await screen.findByRole('heading', { name: 'Welcome back' })).toBeInTheDocument()
 })

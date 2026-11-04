@@ -1,6 +1,6 @@
 import { defineConfig } from '@playwright/test';
 
-const baseURL = process.env.E2E_BASE_URL ?? 'http://localhost:18080';
+const baseURL = process.env.E2E_BASE_URL ?? 'https://localhost:5443';
 
 export default defineConfig({
   testDir: './tests',
@@ -13,8 +13,8 @@ export default defineConfig({
   },
   use: {
     baseURL,
-    trace: 'retain-on-failure',
-    screenshot: 'only-on-failure',
+    trace: 'off',
+    screenshot: 'off',
   },
-  reporter: [['list']],
+  reporter: [['./privacyReporter.ts']],
 });

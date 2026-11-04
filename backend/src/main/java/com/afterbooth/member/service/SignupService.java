@@ -135,7 +135,8 @@ public class SignupService {
                     : null;
               });
       if (message != null) dispatch(message);
-      return new ChallengeIssued("요청을 처리했어요. 이메일의 인증 코드를 확인해 주세요.", id);
+      return new ChallengeIssued(
+          "Request processed. Check your email for a verification code.", id);
     } catch (DataAccessException | TransactionException e) {
       throw unavailable();
     }

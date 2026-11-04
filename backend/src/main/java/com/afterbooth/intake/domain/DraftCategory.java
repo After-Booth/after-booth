@@ -1,10 +1,10 @@
 package com.afterbooth.intake.domain;
 
 public enum DraftCategory {
-  DISPLAY_RACK("진열대"),
-  STORAGE_BIN("수납함"),
-  FOLDING_TABLE("접이식 테이블"),
-  UNKNOWN("미분류");
+  DISPLAY_RACK("Display rack"),
+  STORAGE_BIN("Storage bin"),
+  FOLDING_TABLE("Folding table"),
+  UNKNOWN("Unclassified");
   private final String label;
 
   DraftCategory(String label) {

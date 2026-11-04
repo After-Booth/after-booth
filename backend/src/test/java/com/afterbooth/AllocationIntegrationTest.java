@@ -126,7 +126,7 @@ class AllocationIntegrationTest {
         idempotency.executePrepared(
             key, "POST", path, new byte[0], 200, () -> allocations.prepare(request));
     assertThat(result.getStatusCode().value()).isEqualTo(200);
-    assertThat(result.getBody()).contains("HELD", "5개 중 2개", "alternatives");
+    assertThat(result.getBody()).contains("HELD", "Held 2 of 5", "alternatives");
     assertThat(stock(item)).isZero();
     var alternatives = json.readTree(result.getBody()).get("alternatives");
     assertThat(alternatives.size()).isEqualTo(1);
@@ -160,7 +160,7 @@ class AllocationIntegrationTest {
 
     AllocationResult result = allocations.run(request);
     assertThat(result.status()).isEqualTo("HELD");
-    assertThat(result.explanation()).contains("5개 중 2개");
+    assertThat(result.explanation()).contains("Held 2 of 5");
     assertThat(result.reservations())
         .singleElement()
         .satisfies(r -> assertThat(r.quantity()).isEqualTo(2));
@@ -341,7 +341,7 @@ class AllocationIntegrationTest {
                 null);
     AllocationResult result = allocations.run(request);
     assertThat(result.status()).isEqualTo("HELD");
-    assertThat(result.explanation()).contains("1개 중 1개");
+    assertThat(result.explanation()).contains("Held 1 of 1");
     assertThat(result.toolCalls()).hasSize(1);
     assertThat(reservations.list(request, null))
         .singleElement()

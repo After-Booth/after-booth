@@ -234,17 +234,19 @@ class AllocationServiceTest {
 
   @Test
   void searchWithoutCategoryDescribesRequestedInventory() {
-    assertSearchSummary("{}", "요청한 종류의 재고를 조회했어요.");
+    assertSearchSummary("{}", "Checked inventory in the requested category.");
   }
 
   @Test
   void searchWithRequestedCategoryDescribesRequestedInventory() {
-    assertSearchSummary("{\"category\":\"DISPLAY_RACK\"}", "요청한 종류의 재고를 조회했어요.");
+    assertSearchSummary(
+        "{\"category\":\"DISPLAY_RACK\"}", "Checked inventory in the requested category.");
   }
 
   @Test
   void searchWithAnotherCategoryDescribesOtherInventory() {
-    assertSearchSummary("{\"category\":\"FOLDING_TABLE\"}", "다른 종류의 재고도 살펴봤어요.");
+    assertSearchSummary(
+        "{\"category\":\"FOLDING_TABLE\"}", "Checked inventory in other categories.");
   }
 
   private void assertSearchSummary(String arguments, String summary) {

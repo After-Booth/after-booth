@@ -30,7 +30,7 @@ afterAll(() => server.close())
 const line = (overrides: Partial<DraftLine> = {}): DraftLine => ({
   lineId: 11,
   category: 'DISPLAY_RACK',
-  label: '진열대',
+  label: 'Display rack',
   count: 4,
   boxes: [{ x: 0.1, y: 0.2, width: 0.3, height: 0.4 }],
   sizeCm: { width: 90, depth: 40, height: 180 },
@@ -54,7 +54,7 @@ const createReturns = (body: IntakeDraft) =>
 
 async function uploadPhoto() {
   await userEvent.upload(
-    screen.getByLabelText('부스 사진 찍기'),
+    screen.getByLabelText('Take booth photo'),
     new File(['x'], 'booth.jpg', { type: 'image/jpeg' }),
   )
 }
@@ -63,10 +63,10 @@ test('keeps the selected event fixed once a photo draft has started', async () =
   createReturns(draft())
   render(<IntakeScreen showEvents />)
   await screen.findByRole('option', { name: 'Demo' })
-  const selector = screen.getByLabelText('등록할 행사')
+  const selector = screen.getByLabelText('Event for registration')
   await userEvent.selectOptions(selector, '7')
   await uploadPhoto()
-  expect(await screen.findByText('진열대 4개')).toBeInTheDocument()
+  expect(await screen.findByText('Display rack 4 items')).toBeInTheDocument()
   expect(selector).toBeDisabled()
   expect(selector).toHaveValue('7')
 })
@@ -86,26 +86,28 @@ test('polls while processing, showing the stage, until the draft is ready', asyn
 
   await uploadPhoto()
 
-  expect(await screen.findByText('Muse Spark가 사진에서 물품을 세는 중이에요…')).toBeInTheDocument()
-  expect(screen.getByRole('status')).toHaveTextContent('보통 약 8초 걸려요')
+  expect(await screen.findByText('Muse Spark is counting items in the photo…')).toBeInTheDocument()
+  expect(screen.getByRole('status')).toHaveTextContent('Usually about 8s')
   expect(
-    await screen.findByText('SAM 3.1이 물품마다 윤곽을 확인하는 중이에요…', undefined, {
+    await screen.findByText('SAM 3.1 is checking each item outline…', undefined, {
       timeout: 3000,
     }),
   ).toBeInTheDocument()
-  expect(screen.getByRole('status')).not.toHaveTextContent('0초 경과')
-  expect(await screen.findByText('진열대 4개', undefined, { timeout: 3000 })).toBeInTheDocument()
+  expect(screen.getByRole('status')).not.toHaveTextContent('0s elapsed')
+  expect(
+    await screen.findByText('Display rack 4 items', undefined, { timeout: 3000 }),
+  ).toBeInTheDocument()
   expect(screen.getAllByTestId('box')).toHaveLength(1)
 })
 
 test('shows the server failure message and lets the user retake the photo', async () => {
-  createReturns(draft({ status: 'FAILED', lines: [], failureMessage: '사진이 너무 어두워요.' }))
+  createReturns(draft({ status: 'FAILED', lines: [], failureMessage: 'The photo is too dark.' }))
   render(<IntakeScreen />)
 
   await uploadPhoto()
 
-  expect(await screen.findByRole('alert')).toHaveTextContent('사진이 너무 어두워요.')
-  expect(screen.getByLabelText('다시 찍기')).toBeEnabled()
+  expect(await screen.findByRole('alert')).toHaveTextContent('The photo is too dark.')
+  expect(screen.getByLabelText('Retake photo')).toBeEnabled()
 })
 
 test('starts a second upload when the same photo is selected after a failed draft', async () => {
@@ -114,7 +116,7 @@ test('starts a second upload when the same photo is selected after a failed draf
     http.post('*/api/intake/drafts', () => {
       createRequests += 1
       return HttpResponse.json(
-        draft({ status: 'FAILED', lines: [], failureMessage: '사진이 너무 어두워요.' }),
+        draft({ status: 'FAILED', lines: [], failureMessage: 'The photo is too dark.' }),
         { status: 202 },
       )
     }),
@@ -122,11 +124,11 @@ test('starts a second upload when the same photo is selected after a failed draf
   const photo = new File(['x'], 'booth.jpg', { type: 'image/jpeg' })
   render(<IntakeScreen />)
 
-  await userEvent.upload(screen.getByLabelText('부스 사진 찍기'), photo)
-  expect(await screen.findByRole('alert')).toHaveTextContent('사진이 너무 어두워요.')
+  await userEvent.upload(screen.getByLabelText('Take booth photo'), photo)
+  expect(await screen.findByRole('alert')).toHaveTextContent('The photo is too dark.')
   expect(createRequests).toBe(1)
 
-  await userEvent.upload(screen.getByLabelText('다시 찍기'), photo)
+  await userEvent.upload(screen.getByLabelText('Retake photo'), photo)
 
   await waitFor(() => expect(createRequests).toBe(2))
 })
@@ -137,7 +139,7 @@ test('highlights lines that need review', async () => {
 
   await uploadPhoto()
 
-  expect(await screen.findByText('확인 필요')).toBeInTheDocument()
+  expect(await screen.findByText('Needs review')).toBeInTheDocument()
 })
 
 test('sends the edited quantity and category when confirming', async () => {
@@ -148,21 +150,21 @@ test('sends the edited quantity and category when confirming', async () => {
     http.post('*/api/intake/drafts/5/confirm', async ({ request }) => {
       body = await request.json()
       idempotencyKey = request.headers.get('Idempotency-Key')
-      return HttpResponse.json([{ id: 1, label: '수납함', totalQty: 6 }], { status: 201 })
+      return HttpResponse.json([{ id: 1, label: 'Storage bin', totalQty: 6 }], { status: 201 })
     }),
   )
   render(<IntakeScreen />)
   await uploadPhoto()
-  await screen.findByText('진열대 4개')
+  await screen.findByText('Display rack 4 items')
 
-  const quantity = screen.getByLabelText('진열대 수량')
+  const quantity = screen.getByLabelText('Display rack Quantity')
   await userEvent.clear(quantity)
   await userEvent.type(quantity, '6')
-  await userEvent.selectOptions(screen.getByLabelText('진열대 분류'), '수납함')
-  await userEvent.click(screen.getByRole('button', { name: '재고로 등록' }))
+  await userEvent.selectOptions(screen.getByLabelText('Display rack Category'), 'Storage bin')
+  await userEvent.click(screen.getByRole('button', { name: 'Register inventory' }))
 
-  expect(await screen.findByText('재고로 등록했어요.')).toBeInTheDocument()
-  expect(screen.getByText('수납함 6개')).toBeInTheDocument()
+  expect(await screen.findByText('Inventory registered.')).toBeInTheDocument()
+  expect(screen.getByText('Storage bin 6 items')).toBeInTheDocument()
   expect(body).toEqual({
     lines: [
       {
@@ -179,16 +181,18 @@ test('sends the edited quantity and category when confirming', async () => {
 
 test('blocks confirming while a line is unclassified', async () => {
   createReturns(
-    draft({ lines: [line({ category: 'UNKNOWN', label: '미분류', needsReview: true })] }),
+    draft({ lines: [line({ category: 'UNKNOWN', label: 'Unclassified', needsReview: true })] }),
   )
   render(<IntakeScreen />)
 
   await uploadPhoto()
 
-  expect(await screen.findByText('분류를 골라 주세요')).toBeInTheDocument()
-  expect(screen.getByRole('button', { name: '재고로 등록' })).toBeDisabled()
-  await userEvent.selectOptions(screen.getByLabelText('미분류 분류'), '진열대')
-  await waitFor(() => expect(screen.getByRole('button', { name: '재고로 등록' })).toBeEnabled())
+  expect(await screen.findByText('Choose a category')).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Register inventory' })).toBeDisabled()
+  await userEvent.selectOptions(screen.getByLabelText('Unclassified Category'), 'Display rack')
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Register inventory' })).toBeEnabled(),
+  )
 })
 
 test('shows an empty state when nothing was found', async () => {
@@ -197,25 +201,22 @@ test('shows an empty state when nothing was found', async () => {
 
   await uploadPhoto()
 
-  expect(await screen.findByText(/물품을 찾지 못했어요/)).toBeInTheDocument()
-  expect(screen.queryByRole('button', { name: '재고로 등록' })).not.toBeInTheDocument()
+  expect(await screen.findByText(/No items found/)).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Register inventory' })).not.toBeInTheDocument()
 })
 
 test('shows the server validation error when confirming is rejected', async () => {
   createReturns(draft())
   server.use(
     http.post('*/api/intake/drafts/5/confirm', () =>
-      HttpResponse.json(
-        { code: 'BAD_REQUEST', message: '수량이 올바르지 않아요.' },
-        { status: 400 },
-      ),
+      HttpResponse.json({ code: 'BAD_REQUEST', message: 'Invalid quantity.' }, { status: 400 }),
     ),
   )
   render(<IntakeScreen />)
   await uploadPhoto()
-  await screen.findByText('진열대 4개')
+  await screen.findByText('Display rack 4 items')
 
-  await userEvent.click(screen.getByRole('button', { name: '재고로 등록' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Register inventory' }))
 
-  expect(await screen.findByRole('alert')).toHaveTextContent('수량이 올바르지 않아요.')
+  expect(await screen.findByRole('alert')).toHaveTextContent('Invalid quantity.')
 })

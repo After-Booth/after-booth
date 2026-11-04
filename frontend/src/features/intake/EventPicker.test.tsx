@@ -23,10 +23,13 @@ afterEach(() => {
 afterAll(() => server.close())
 
 async function fillForm() {
-  await userEvent.click(screen.getByText('새 행사 만들기'))
-  await userEvent.type(screen.getByLabelText('행사 이름'), 'Spring Expo')
-  await userEvent.type(screen.getByLabelText('장소'), 'COEX')
-  await userEvent.type(screen.getByLabelText('철수 마감 시간 (한국 시간)'), '2026-11-07T18:00')
+  await userEvent.click(screen.getByText('Create a new event'))
+  await userEvent.type(screen.getByLabelText('Event name'), 'Spring Expo')
+  await userEvent.type(screen.getByLabelText('Venue'), 'COEX')
+  await userEvent.type(
+    screen.getByLabelText('Teardown deadline (Asia/Seoul, KST)'),
+    '2026-11-07T18:00',
+  )
 }
 
 test('creates an event, selects it and reports the new id', async () => {
@@ -41,10 +44,10 @@ test('creates an event, selects it and reports the new id', async () => {
   const onSelect = vi.fn()
   render(<EventPicker onSelect={onSelect} />)
   await fillForm()
-  await userEvent.click(screen.getByRole('button', { name: '행사 만들기' }))
-  expect(await screen.findByText('행사를 만들었어요. 이제 사진을 등록해 주세요.')).toBeVisible()
+  await userEvent.click(screen.getByRole('button', { name: 'Create event' }))
+  expect(await screen.findByText('Event created. Add your photo now.')).toBeVisible()
   expect(onSelect).toHaveBeenCalledWith(9)
-  expect(screen.getByLabelText('등록할 행사')).toHaveValue('9')
+  expect(screen.getByLabelText('Event for registration')).toHaveValue('9')
   expect(keys).toHaveLength(1)
   expect(keys[0]).not.toBe('')
   // The deadline is typed in Korea time regardless of the browser's time zone.
@@ -59,7 +62,7 @@ test('keeps the typed event and reuses the idempotency key when a failed create 
       attempts += 1
       return attempts === 1
         ? HttpResponse.json(
-            { code: 'INTERNAL', message: '잠시 후 다시 시도해 주세요.' },
+            { code: 'INTERNAL', message: 'Please try again shortly.' },
             { status: 500 },
           )
         : HttpResponse.json(created, { status: 201 })
@@ -68,13 +71,13 @@ test('keeps the typed event and reuses the idempotency key when a failed create 
   const onSelect = vi.fn()
   render(<EventPicker onSelect={onSelect} />)
   await fillForm()
-  await userEvent.click(screen.getByRole('button', { name: '행사 만들기' }))
-  expect(await screen.findByText('잠시 후 다시 시도해 주세요.')).toBeVisible()
+  await userEvent.click(screen.getByRole('button', { name: 'Create event' }))
+  expect(await screen.findByText('Please try again shortly.')).toBeVisible()
   expect(onSelect).not.toHaveBeenCalled()
-  expect(screen.getByLabelText('행사 이름')).toHaveValue('Spring Expo')
+  expect(screen.getByLabelText('Event name')).toHaveValue('Spring Expo')
 
-  await userEvent.click(screen.getByRole('button', { name: '행사 만들기' }))
-  expect(await screen.findByText('행사를 만들었어요. 이제 사진을 등록해 주세요.')).toBeVisible()
+  await userEvent.click(screen.getByRole('button', { name: 'Create event' }))
+  expect(await screen.findByText('Event created. Add your photo now.')).toBeVisible()
   expect(keys).toHaveLength(2)
   expect(keys[1]).toBe(keys[0])
 })
@@ -82,5 +85,5 @@ test('keeps the typed event and reuses the idempotency key when a failed create 
 test('shows a message when the event list cannot be loaded', async () => {
   server.use(http.get('*/api/events', () => HttpResponse.error()))
   render(<EventPicker onSelect={vi.fn()} />)
-  expect(await screen.findByText('행사 목록을 불러오지 못했어요.')).toBeVisible()
+  expect(await screen.findByText('Unable to load events.')).toBeVisible()
 })

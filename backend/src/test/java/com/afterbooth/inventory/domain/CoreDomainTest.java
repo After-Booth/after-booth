@@ -105,7 +105,7 @@ class CoreDomainTest {
             true);
     assertThat(line.count()).isZero();
     assertThat(line.boxes()).isEmpty();
-    assertThat(line.label()).isEqualTo("미분류");
+    assertThat(line.label()).isEqualTo("Unclassified");
   }
 
   @Test

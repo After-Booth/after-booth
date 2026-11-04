@@ -97,12 +97,13 @@ class IntakeProcessorTest {
   }
 
   @Test
-  void estimationFailureFailsWithKoreanMessageAndSkipsSam() {
+  void estimationFailureFailsWithEnglishMessageAndSkipsSam() {
     when(pipeline.estimate(photo)).thenThrow(new IllegalStateException());
     processor.process(event);
     var message = ArgumentCaptor.forClass(String.class);
     verify(store).fail(eq(1L), message.capture(), eq(actor));
-    assertThat(message.getValue()).matches(".*[\uac00-\ud7a3].*");
+    assertThat(message.getValue())
+        .isEqualTo("The items in the photo could not be processed. Please upload it again.");
     verify(pipeline, never()).segment(any(), any());
   }
 
@@ -148,7 +149,8 @@ class IntakeProcessorTest {
 
     assertThat(draft.status()).isEqualTo(IntakeStatus.FAILED);
     assertThat(draft.stage()).isEqualTo(IntakeStage.ESTIMATE);
-    assertThat(draft.failureMessage()).matches(".*[\uac00-\ud7a3].*");
+    assertThat(draft.failureMessage())
+        .isEqualTo("The items in the photo could not be processed. Please upload it again.");
     verify(pipeline, never()).segment(any(), any());
     verify(store, never()).ready(any(), any(), any());
   }
@@ -176,7 +178,8 @@ class IntakeProcessorTest {
 
     assertThat(draft.status()).isEqualTo(IntakeStatus.FAILED);
     assertThat(draft.stage()).isEqualTo(IntakeStage.SEGMENT);
-    assertThat(draft.failureMessage()).matches(".*[\uac00-\ud7a3].*");
+    assertThat(draft.failureMessage())
+        .isEqualTo("The items in the photo could not be processed. Please upload it again.");
     verify(store).fail(eq(1L), anyString(), eq(actor));
   }
 
@@ -190,7 +193,8 @@ class IntakeProcessorTest {
 
     assertThat(draft.status()).isEqualTo(IntakeStatus.FAILED);
     assertThat(draft.stage()).isEqualTo(IntakeStage.ESTIMATE);
-    assertThat(draft.failureMessage()).matches(".*[\uac00-\ud7a3].*");
+    assertThat(draft.failureMessage())
+        .isEqualTo("The items in the photo could not be processed. Please upload it again.");
     verify(store, never()).segment(any(), any());
   }
 
@@ -236,7 +240,8 @@ class IntakeProcessorTest {
         .process(event);
     assertThat(draft.status()).isEqualTo(IntakeStatus.FAILED);
     assertThat(draft.stage()).isEqualTo(IntakeStage.ESTIMATE);
-    assertThat(draft.failureMessage()).matches(".*[\uac00-\ud7a3].*");
+    assertThat(draft.failureMessage())
+        .isEqualTo("The items in the photo could not be processed. Please upload it again.");
     verify(gateway, times(2)).chat(any());
     verify(gateway, never()).segment(any());
     verify(store, never()).ready(any(), any(), any());

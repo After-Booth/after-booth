@@ -7,16 +7,16 @@ import { useState } from 'react'
 import { EventPicker } from './EventPicker'
 
 const STAGE_TEXT: Record<IntakeStage, string> = {
-  ESTIMATE: 'Muse Spark가 사진에서 물품을 세는 중이에요…',
-  SEGMENT: 'SAM 3.1이 물품마다 윤곽을 확인하는 중이에요…',
+  ESTIMATE: 'Muse Spark is counting items in the photo…',
+  SEGMENT: 'SAM 3.1 is checking each item outline…',
 }
 
-const CONDITION_LABEL: Record<Condition, string> = { GOOD: '양호', FAIR: '보통', POOR: '불량' }
+const CONDITION_LABEL: Record<Condition, string> = { GOOD: 'Good', FAIR: 'Fair', POOR: 'Poor' }
 
 const SIZE_FIELDS = [
-  ['width', '가로'],
-  ['depth', '깊이'],
-  ['height', '높이'],
+  ['width', 'Width'],
+  ['depth', 'Depth'],
+  ['height', 'Height'],
 ] as const
 
 const fieldClass = 'mt-1 h-12 w-full rounded-lg border border-slate-300 bg-white px-3 text-base'
@@ -55,16 +55,15 @@ export function IntakeScreen({ showEvents = false }: { showEvents?: boolean }) {
   return (
     <main className="mx-auto max-w-2xl px-5 py-8 text-slate-900 sm:py-12">
       <div className="intake-intro">
-        <p className="section-kicker">행사가 끝난 다음을 위해</p>
+        <p className="section-kicker">For what comes after the event</p>
         <h1 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">
-          남은 물품에
-          <br />
-          새로운 쓰임을
+          Give leftover equipment
+          <br />a new purpose
         </h1>
         <p className="mt-4 leading-relaxed text-blue-50">
-          부스를 찍으면 물품을 자동으로 세어 드려요.
+          Photograph your booth to count equipment automatically.
           <br />
-          확인 후 등록하면 다음 행사와 연결할 수 있어요.
+          Review and register it for the next event.
         </p>
       </div>
       {showEvents && (
@@ -74,14 +73,14 @@ export function IntakeScreen({ showEvents = false }: { showEvents?: boolean }) {
           disabled={busy || !!photoUrl}
         />
       )}
-      <section className="capture-panel" aria-label="남은 물품 등록">
+      <section className="capture-panel" aria-label="Register leftover equipment">
         <div className="capture-heading">
           <span className="capture-icon" aria-hidden="true">
             ▧
           </span>
           <div>
-            <h2 className="text-lg font-bold">남은 물품 등록</h2>
-            <p className="mt-1 text-sm text-slate-600">사진 한 장으로 간편하게 시작해요</p>
+            <h2 className="text-lg font-bold">Register leftover equipment</h2>
+            <p className="mt-1 text-sm text-slate-600">Start with a single photo</p>
           </div>
         </div>
 
@@ -90,7 +89,7 @@ export function IntakeScreen({ showEvents = false }: { showEvents?: boolean }) {
             busy || creatingEvent || (showEvents && !eventId) ? 'bg-slate-400' : 'bg-emerald-800'
           }`}
         >
-          {photoUrl ? '다시 찍기' : '부스 사진 찍기'}
+          {photoUrl ? 'Retake photo' : 'Take booth photo'}
           <input
             type="file"
             accept="image/jpeg,image/png"
@@ -105,14 +104,12 @@ export function IntakeScreen({ showEvents = false }: { showEvents?: boolean }) {
           />
         </label>
         {showEvents && !eventId && (
-          <p className="mt-2 text-sm text-slate-600">
-            먼저 등록할 행사를 선택하거나 만들어 주세요.
-          </p>
+          <p className="mt-2 text-sm text-slate-600">Choose or create an event first.</p>
         )}
 
         {photoUrl && (
           <div className="relative mt-4 overflow-hidden rounded-xl bg-slate-100">
-            <img src={photoUrl} alt="부스 사진" className="block w-full" />
+            <img src={photoUrl} alt="Booth photo" className="block w-full" />
             {ready &&
               lines.flatMap((line) =>
                 line.boxes.map((box, i) => (
@@ -135,7 +132,7 @@ export function IntakeScreen({ showEvents = false }: { showEvents?: boolean }) {
         {(uploading || processing) && (
           <div className="mt-4">
             <AiProgress
-              label={uploading ? '사진을 올리는 중이에요…' : STAGE_TEXT[draft?.stage ?? 'ESTIMATE']}
+              label={uploading ? 'Uploading photo…' : STAGE_TEXT[draft?.stage ?? 'ESTIMATE']}
               expectedSeconds={AI_EXPECTED_SECONDS.intake}
             />
           </div>
@@ -147,26 +144,26 @@ export function IntakeScreen({ showEvents = false }: { showEvents?: boolean }) {
         )}
         {draft?.status === 'FAILED' && (
           <p role="alert" className="mt-4 rounded-lg bg-red-50 p-3 text-red-700">
-            {draft.failureMessage ?? '사진을 분석하지 못했어요. 다시 찍어 주세요.'}
+            {draft.failureMessage ?? 'Unable to analyze the photo. Please retake it.'}
           </p>
         )}
 
         {ready && lines.length === 0 && (
           <p className="mt-4 rounded-lg bg-slate-100 p-3">
-            물품을 찾지 못했어요. 부스 전체가 보이게 다시 찍어 주세요.
+            No items found. Retake a photo of the whole booth.
           </p>
         )}
 
         {ready && lines.length > 0 && (
           <section className="mt-4">
-            <ul className="flex flex-wrap gap-2" aria-label="분류별 수량">
+            <ul className="flex flex-wrap gap-2" aria-label="Quantity by category">
               {countsByCategory(lines).map(([category, total]) => (
                 <li
                   key={category}
                   className="flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1"
                 >
                   <span className={`size-3 rounded-full ${CATEGORY_COLOR[category].dot}`} />
-                  {CATEGORY_LABEL[category]} {total}개
+                  {CATEGORY_LABEL[category]} {total} items
                 </li>
               ))}
             </ul>
@@ -190,14 +187,14 @@ export function IntakeScreen({ showEvents = false }: { showEvents?: boolean }) {
                       </span>
                       {line.needsReview && (
                         <span className="rounded bg-amber-500 px-2 py-0.5 text-sm font-semibold text-white">
-                          확인 필요
+                          Needs review
                         </span>
                       )}
                     </div>
 
                     <div className="mt-2 grid grid-cols-2 gap-3">
                       <label className="text-sm">
-                        {line.originalLabel} 분류
+                        {line.originalLabel} Category
                         <select
                           className={fieldClass}
                           value={line.category}
@@ -213,7 +210,7 @@ export function IntakeScreen({ showEvents = false }: { showEvents?: boolean }) {
                         </select>
                       </label>
                       <label className="text-sm">
-                        {line.originalLabel} 수량
+                        {line.originalLabel} Quantity
                         <input
                           type="number"
                           inputMode="numeric"
@@ -242,7 +239,7 @@ export function IntakeScreen({ showEvents = false }: { showEvents?: boolean }) {
                     </div>
 
                     <label className="mt-3 block text-sm">
-                      {line.originalLabel} 상태
+                      {line.originalLabel} Status
                       <select
                         className={fieldClass}
                         value={line.condition}
@@ -271,18 +268,18 @@ export function IntakeScreen({ showEvents = false }: { showEvents?: boolean }) {
               disabled={!canConfirm || confirming}
               onClick={() => void confirm()}
             >
-              {confirming ? '등록하는 중이에요…' : '재고로 등록'}
+              {confirming ? 'Registering…' : 'Register inventory'}
             </button>
           </section>
         )}
 
         {items && (
           <section className="mt-4 rounded-xl bg-emerald-50 p-4">
-            <p className="font-semibold text-emerald-800">재고로 등록했어요.</p>
+            <p className="font-semibold text-emerald-800">Inventory registered.</p>
             <ul className="mt-2 space-y-1">
               {items.map((item) => (
                 <li key={item.id}>
-                  {item.label} {item.totalQty}개
+                  {item.label} {item.totalQty} items
                 </li>
               ))}
             </ul>

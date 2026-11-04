@@ -42,6 +42,13 @@ class ConditionOutputTest {
   }
 
   @Test
+  void englishPurposePromptPreservesKoreanInputAndSeoulTimeRules() {
+    assertThat(ConditionPrompt.SYSTEM)
+        .contains("short English phrase", "Flea market stall", "진열대", "Asia/Seoul", "+09:00")
+        .doesNotContain("short Korean phrase");
+  }
+
+  @Test
   void schemaRequiresStringPurpose() {
     var schema = JsonMapper.builder().build().readTree(ConditionPrompt.SCHEMA);
     assertThat(schema.get("required").size()).isEqualTo(1);

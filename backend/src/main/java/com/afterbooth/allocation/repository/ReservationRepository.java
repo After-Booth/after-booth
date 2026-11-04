@@ -31,7 +31,7 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long> 
       @Param("next") ReservationStatus next);
 
   @Query(
-      "select new com.afterbooth.allocation.repository.ReservationListing(r, i.label) "
+      "select new com.afterbooth.allocation.repository.ReservationListing(r, i.category) "
           + "from Reservation r join Item i on i.id=r.itemId "
           + "where (:requestId is null or r.requestId=:requestId) "
           + "and (:eventId is null or i.eventId=:eventId) order by r.id")

@@ -142,7 +142,7 @@ public class Item {
   }
 
   public String label() {
-    return label;
+    return category.label();
   }
 
   public Dimensions dimensions() {
