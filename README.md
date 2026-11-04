@@ -6,12 +6,13 @@ Built for the Meta Global AI Developer Hackathon (Indie track) by a team of two.
 
 ## How it works
 
-1. **Photograph the booth.** The giver takes one photo. Muse Spark finds and counts each item, SAM 3.1 checks every box Spark drew, and the result becomes an inventory draft that a person corrects and confirms.
-2. **Say what you need.** The receiver speaks or types a request, for example "display racks for a weekend event, I only have a sedan". Muse Voice Transcribe turns speech into text and Muse Spark turns it into structured conditions (category, quantity, vehicle, pickup time).
-3. **Get an allocation.** A Muse Spark agent searches stock, checks whether the item fits the receiver's vehicle and places a temporary hold, all through server tools. When nothing fits, the person gets the server's alternatives, such as folding tables instead of a 180 cm rack that will not fit in a sedan.
-4. **Race for the last item.** Two receivers can ask for the last display rack at the same moment. Exactly one hold succeeds; the other side sees an alternative.
-5. **Hand over with a photo.** At pickup, one photo is recounted by Spark and checked by SAM 3.1. Only a matching count completes the handover; otherwise a person settles the difference.
-6. **See what was reused.** Statistics show the reused count per category and per event, and the reused volume in liters from the items' registered sizes.
+1. **Use only your own work.** An active member creates a private organization and events. Events, inventory, requests, reservations, and statistics are authorized from that member’s organization; seeded or another member’s organization cannot be selected or taken over.
+2. **Photograph the booth.** The giver takes one photo. Muse Spark finds and counts each item, SAM 3.1 checks every box Spark drew, and the result becomes an inventory draft that a person reviews and confirms.
+3. **Say what you need.** The receiver speaks or types a request, for example “display racks for a weekend event, I only have a sedan.” Muse Voice Transcribe turns supported WAV input into text and Muse Spark turns it into structured conditions (category, quantity, vehicle, pickup time).
+4. **Get an allocation.** A Muse Spark agent searches stock, checks whether the item fits the receiver’s vehicle, and can place a temporary HOLD through server tools. When nothing fits, the person gets the server’s alternatives, such as folding tables instead of a 180 cm rack that will not fit in a sedan.
+5. **Race for the last item.** Two receivers can ask for the last display rack at the same moment. Exactly one HOLD succeeds; the other side sees an alternative.
+6. **Hand over with a photo.** At pickup, one photo is recounted by Spark and checked by SAM 3.1. Only a matching count completes the handover; otherwise a person settles the difference.
+7. **See what was reused.** Statistics show the reused count per category and per event, and the reused volume in liters from the items’ registered sizes.
 
 ## Meta models in the product
 
@@ -54,7 +55,7 @@ flowchart TD
 - **Stock never goes negative.** A hold decrements stock with a conditional update (`available_qty >= :q`). Zero affected rows means the hold failed. Cancel and expiry change the reservation status with a conditional update (`status = :expected`) and restore stock only when that update wins, so stock comes back exactly once.
 - **One request, one quantity.** Holds for the same pickup request take the request row lock, so holds on different items never exceed the requested quantity, whether a person or the agent places them.
 - **State machine.** `HELD → CONFIRMED → HANDED_OVER`, `HELD | CONFIRMED → RELEASED`, `HELD → EXPIRED`. Forbidden transitions are rejected. A scheduler expires holds past their TTL and releases confirmed reservations past the pickup deadline, and a confirm racing that expiry has exactly one winner.
-- **Idempotency.** Every mutating request carries an `Idempotency-Key`. A repeat with the same body replays the stored response without running the action again; the same key with a different body is a conflict.
+- **Idempotency.** Domain writes that create or change state carry an `Idempotency-Key` (a UUID per user action). The server fingerprints method, path, and body (or a multipart file hash): the same key and fingerprint replays the first response, while a different fingerprint or an in-flight original returns `IDEMPOTENCY_CONFLICT`. Before replaying, the server authenticates the member and rechecks authorization on the original resource; keys are scoped to the server-derived member. Authentication APIs, membership withdrawal, and password change are exempt. Credentials, verification codes, tokens, and their responses are never stored in the idempotency record.
 - **Crash recovery for idempotency keys** ([D-067](docs/DECISIONS.md)). A request holds a PostgreSQL session advisory lock on a dedicated connection for its whole lifetime, including AI preparation. If the process dies, PostgreSQL releases that lock, and a retry with the same key and body recovers the abandoned `IN_PROGRESS` record. While the original request is still running and holds its lock, a retry gets `IDEMPOTENCY_CONFLICT`. There is no age threshold and no background sweep, so recovery happens on a matching retry once the database has noticed the dead connection.
 
 The required tests run against a real PostgreSQL in Testcontainers (`backend/src/test/java/com/afterbooth/ReservationIntegrationTest.java`):
@@ -79,26 +80,32 @@ Idempotency crash recovery is covered by `IdempotencyRecoveryIntegrationTest`, w
 
 Because the key covers the exact request bytes, replay only answers the recorded demo inputs in the recorded order. New photos or recordings need live mode.
 
+`RECORD` is deliberately rejected while processing member-owned work, so an authenticated person’s photos, audio, or request data cannot be captured by turning recording on. The approved fixture process instead prepares only reviewed synthetic inputs outside a member request, verifies the exact serialized gateway request before transport, and requires separate human approval for every paid recording scope. [ENGLISH_REPLAY](docs/ENGLISH_REPLAY.md) defines that boundary; it is not a way to enable recording for manual use.
+
 ## Run and verify locally
 
 Authentication is required. The root `docker-compose.yml` provides PostgreSQL and the app image in replay mode, but its app service exposes HTTP and supplies no authentication HMAC/JWT settings or mail activation. **The old “Docker only” command is not a supported signup/login or complete-demo recipe after authentication.** Starting a container or getting `/api/health` is separate from proving authentication and the transaction flow. Do not disable authentication to revive the old demo.
 
-For the automated local HTTPS environment, install Docker, Java 21, Node.js and Chromium. From the repository root:
+### Automated local verification
 
-```bash
-npm --prefix frontend ci
-npm --prefix frontend run build
-cd backend
-./gradlew bootJar
-cd ../e2e
-npm ci
-npm run install-browsers
-npm run test:auth
-```
+Install Docker, Java 21+, **Node.js 24**, and Chromium. Run each command from the directory shown; `npm --prefix` commands are intentionally run from the repository root.
 
-The authentication harness starts a disposable PostgreSQL 17 database on a random loopback port and the real jar at `https://localhost:5443`. It generates signing/HMAC keys in memory and a short-lived TLS keystore in a temporary directory, uses the `local` profile with explicitly enabled local-only Fake mail, and pins Chromium to that certificate. It removes its database and TLS files on shutdown. Do not put generated keys, certificates, codes or accounts in Git. Fake mail proves local behavior, not real mailbox ownership or delivery. AI replay makes no paid provider calls. See [`e2e/README.md`](e2e/README.md) for the exact test scope and prerequisites.
+| Working directory | Command | Purpose |
+|---|---|---|
+| repository root | `npm --prefix frontend ci` | Install the frontend lockfile dependencies. |
+| repository root | `npm --prefix frontend run build` | Generate the API client and build the frontend. |
+| `backend/` | `./gradlew bootJar` | Build the jar used by the browser harness. |
+| `e2e/` | `npm ci` | Install the independent E2E lockfile dependencies. |
+| `e2e/` | `npm run install-browsers` | Install the Playwright Chromium shell. |
+| `e2e/` | `npm test` | Run TypeScript, authentication browser checks, and the full owned-data replay demo. |
 
-A manual local installation needs the same configuration: a private PostgreSQL database, HTTPS and a locally trusted certificate, exact `afterbooth.auth.allowed-origin`, HMAC current-version/key map, JWT issuer/audience/current-kid/private-key/public-key map, and explicitly selected local Fake mail. Generate keys locally and keep their values outside the checkout. The automated harness in [`e2e/tests/authStack.ts`](e2e/tests/authStack.ts) is the executable reference for the property structure. Default mail is disabled; Fake is rejected outside `local` or alongside production profiles. Actual delivery requires deployment-only Resend configuration and separate verification. The automated harness consumes Fake codes privately in memory; it adds no public code lookup, auto-fill or verification bypass.
+The harness starts the real jar at `https://localhost:5443`, a disposable PostgreSQL 17 container on a random loopback port, in-memory signing/HMAC material, and a short-lived TLS directory. It uses the `local` profile with explicitly enabled local-only Fake mail and `AI_MODE=replay`; Chromium pins only that temporary certificate. On normal completion and startup/test failure cleanup, it stops the temporary server and database container and removes the TLS directory. Do not put generated keys, certificates, codes, accounts, or test output in Git. Fake mail proves local behavior, not real mailbox ownership or delivery. Replay makes no paid provider calls. See [`e2e/README.md`](e2e/README.md) for the exact scope and prerequisites.
+
+### Manual local use — not executed here
+
+A manual local setup needs a private PostgreSQL database, HTTPS with a locally trusted certificate, exact `afterbooth.auth.allowed-origin`, an HMAC current-version/key map, JWT issuer/audience/current-kid/private-key/public-key maps, and explicitly selected local Fake mail. Generate keys locally and keep their values outside the checkout. The automated harness in [`e2e/tests/authStack.ts`](e2e/tests/authStack.ts) is the executable property-structure reference, not a copy-and-paste production configuration. Default mail is disabled; Fake is rejected outside `local` or alongside production profiles. Actual delivery requires deployment-only Resend configuration and separate verification.
+
+For a manual flow, sign in as synthetic members in separate HTTPS browser sessions. The giver creates their own event and inventory; the receiver creates their own request, receives a HOLD, and confirms it; a last-item race needs a second receiver session. The giver performs photo recount and any quantity settlement, while a receiver cancels only their own reservation. Never select or take over a seeded organization. No manual setup or manual end-to-end run was executed for this documentation change.
 
 ### Current demo status
 
@@ -111,15 +118,21 @@ npm --prefix e2e test          # TypeScript, 6 auth checks, full demo and 10 hel
 
 Authentication checks alone do not certify allocation-agent → completed photo handover → statistics. Confirmation followed by cancellation is not completed handover. The current evidence, blockers and required human actions are in [`docs/SUBMISSION_READINESS.md`](docs/SUBMISSION_READINESS.md).
 
-For a manual judging session, prepare verified synthetic members in separate HTTPS browser sessions: one giver owns a newly created event and its inventory; one receiver owns the request, HOLD and confirmation. A last-item race needs a second receiver in a third session. Never select or take over seeded organizations. The giver handles photo recount and quantity settlement; a receiver cancels their own reservation. The automated exact-input replay is verified through HANDED_OVER and statistics. For any separately scoped manual/video work, follow [`docs/DEMO_SCRIPT.md`](docs/DEMO_SCRIPT.md). No completed current manual run is claimed.
+The automated exact-input replay is verified through HANDED_OVER and statistics; it is not evidence of a completed manual run. For the current manual boundaries and the supplied-video script, see [Manual local use](#manual-local-use--not-executed-here) and [`docs/DEMO_SCRIPT.md`](docs/DEMO_SCRIPT.md).
 
 ### Historical replay inputs
 
 The former unauthenticated Korean demo used `spike/samples/bins-orange-stack.jpg`, the **Korean** WAV `spike/samples/audio-receiver-racks-sedan.wav`, the original text `진열대 한 개가 필요해요. 밴으로 가져갈게요.`, and `spike/samples/rack-gondola-single.jpg`. These are historical inputs, not a working authenticated English demo recipe. Preserve their bytes and do not rename the WAV as English. Existing samples and original recordings do not need a real API key; missing exact requests fail rather than inventing responses.
 
-### Paid provider modes
+### Provider cost and recording boundary
 
-Live/record modes need separate human approval before any call. The approved English replay work recorded 12 additional exchanges for an estimated $0.03397650; this is separate from the earlier $0.001451 condition recording. The historical live/record Compose overrides do not supply the new HTTPS/authentication setup, so they are not a current full-demo run recipe. Configure and verify authentication first; then approve a bounded recording plan and record its actual cost in [`docs/BUDGET.md`](docs/BUDGET.md). Keep key files human-managed and outside committed data.
+[`docs/BUDGET.md`](docs/BUDGET.md) is the single source of truth for planned and recorded Meta provider cost, approval boundaries, dates, and the cost ledger. Automated replay and the supplied-video review make no provider call. Any future `live` or `record` call needs separate human approval first, must keep keys human-managed and outside committed data, and must append its actual outcome/cost to that ledger. The historical Compose overrides do not supply the current HTTPS/authentication setup, so they are not a current complete-demo recipe.
+
+### Demo video
+
+- **Supplied attachment:** a private 00:50 video reviewed for this documentation update. It is not committed to this repository and is not a public link.
+- **Public video:** no public URL has been supplied. No upload or link was created by this work.
+- **Script and limits:** [`docs/DEMO_SCRIPT.md`](docs/DEMO_SCRIPT.md) maps the attachment’s observed scenes and identifies what it does not establish.
 
 ## Historical measurements (before authentication and English conversion)
 
@@ -129,8 +142,7 @@ The following are historical project records, not runs performed for the current
   - one through the UI with Playwright: photo to result in 6.4 s, the whole scenario in 38.2 s ([`docs/TASKS.md`](docs/TASKS.md) #12);
   - two through the HTTP API on 2026-11-02: the whole flow in 40.7 s and 36.3 s.
 
-  That is three runs, not a benchmark. Each costs about $0.04 ([`docs/BUDGET.md`](docs/BUDGET.md)).
-- Total estimated Meta API spend for the project so far, including the Phase 0 spike: about $0.61, plus Muse Code usage whose billing was not measured ([`docs/BUDGET.md`](docs/BUDGET.md)).
+  That is three runs, not a benchmark. The authoritative historical and current provider-cost ledger is [`docs/BUDGET.md`](docs/BUDGET.md); this README intentionally does not duplicate its amounts.
 
 ## Development tools
 
