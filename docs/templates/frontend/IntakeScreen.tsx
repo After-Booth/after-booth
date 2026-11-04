@@ -7,10 +7,10 @@ export function IntakeScreen() {
 
   return (
     <main className="mx-auto min-h-dvh max-w-md px-4 py-6">
-      <h1 className="text-xl font-bold">남은 물품 등록</h1>
+      <h1 className="text-xl font-bold">Register leftover equipment</h1>
 
       <label className="mt-6 block rounded-xl bg-slate-900 py-4 text-center text-white">
-        부스 사진 찍기
+        Take booth photo
         <input
           type="file"
           accept="image/*"
@@ -21,19 +21,19 @@ export function IntakeScreen() {
         />
       </label>
 
-      {state.status === 'loading' && <p className="mt-6">물품을 세는 중이에요…</p>}
+      {state.status === 'loading' && <p className="mt-6">Counting items in the photo…</p>}
       {state.status === 'error' && (
         <p role="alert" className="mt-6 text-red-600">
           {state.message}
         </p>
       )}
-      {state.status === 'confirmed' && <p className="mt-6">재고로 등록했어요.</p>}
+      {state.status === 'confirmed' && <p className="mt-6">Inventory registered.</p>}
       {state.status === 'ready' && (
         <section className="mt-6">
           <ul>
             {state.draft.items.map((item) => (
               <li key={item.category}>
-                {item.label} {item.count}개{item.needsReview && ' · 확인 필요'}
+                {item.label} {item.count} items{item.needsReview && ' · Needs review'}
               </li>
             ))}
           </ul>
@@ -41,7 +41,7 @@ export function IntakeScreen() {
             className="mt-4 w-full rounded-xl bg-emerald-600 py-4 text-white"
             onClick={() => confirm(state.draft)}
           >
-            재고로 등록
+            Register inventory
           </button>
         </section>
       )}
