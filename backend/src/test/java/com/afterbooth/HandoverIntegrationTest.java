@@ -200,7 +200,7 @@ class HandoverIntegrationTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.totalReused").value(3))
         .andExpect(jsonPath("$.reusedVolumeLiters").value(24))
-        .andExpect(jsonPath("$.byCategory[0].label").value("수납함"))
+        .andExpect(jsonPath("$.byCategory[0].label").value("Storage bin"))
         .andExpect(jsonPath("$.byEvent[0].eventId").value(1));
     mvc.perform(get("/api/reservations").param("eventId", "1"))
         .andExpect(status().isOk())

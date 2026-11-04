@@ -31,7 +31,7 @@ class GlobalExceptionHandlerTest {
         .perform(get("/fake/missing"))
         .andExpect(status().isNotFound())
         .andExpect(jsonPath("$.code").value("NOT_FOUND"))
-        .andExpect(jsonPath("$.message").value("대상을 찾을 수 없어요."));
+        .andExpect(jsonPath("$.message").value("The requested resource was not found."));
   }
 
   @Test
@@ -72,7 +72,7 @@ class GlobalExceptionHandlerTest {
         .perform(get("/fake/boom"))
         .andExpect(status().isInternalServerError())
         .andExpect(jsonPath("$.code").value("INTERNAL_ERROR"))
-        .andExpect(jsonPath("$.message").value("잠시 후 다시 시도해 주세요."));
+        .andExpect(jsonPath("$.message").value("Please try again shortly."));
   }
 
   @Test

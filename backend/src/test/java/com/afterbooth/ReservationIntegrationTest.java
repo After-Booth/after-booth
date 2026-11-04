@@ -1003,7 +1003,7 @@ class ReservationIntegrationTest {
       var result = reservations.list(firstRequest, 1L);
       assertThat(result).hasSize(1);
       assertThat(result.getFirst().itemId()).isEqualTo(firstItem);
-      assertThat(result.getFirst().itemLabel()).isEqualTo("수납함");
+      assertThat(result.getFirst().itemLabel()).isEqualTo("Storage bin");
       assertThat(result.getFirst().transitions()).isNull();
       assertThat(stats.getPrepareStatementCount()).isEqualTo(1);
       assertThat(reservations.list(firstRequest, event)).isEmpty();
