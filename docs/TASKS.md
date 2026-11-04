@@ -505,7 +505,7 @@ Historical PR #76 delivery at `d02c982`; the checklist below preserves that deli
 
 ## Issue #17 — current authenticated English submission readiness (2026-11-04)
 
-Baseline: fetched `origin/main` `d02c98232cad21ae65d5c94a6bb45fee77bc23f0`; branch `codex/17-submission-readiness`, isolated `/private/tmp/afterbooth-17-submission-readiness`. The original checkout remains on main. The user's latest correction requires all new repository records in English; existing historical content remains unchanged.
+Baseline: fetched `origin/main` `d02c98232cad21ae65d5c94a6bb45fee77bc23f0`; branch `fix/17-submission-readiness` (renamed from `codex/17-submission-readiness`), isolated `/private/tmp/afterbooth-17-submission-readiness`. The original checkout remains on main. The user's latest correction requires all new repository records in English; existing historical content remains unchanged.
 
 - [x] Reconciled historical #9/#15 completion against current GitHub issues/PR evidence; documented the actual authentication migration without changing SQL.
 - [x] Fixed refresh-notice sign-out and giver/receiver cancellation controls, with regression tests and unchanged server permissions.

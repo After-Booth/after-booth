@@ -36,7 +36,7 @@ Current product language (#17): fixed UI, user-facing server messages, category 
 ### 4. Allocation agent
 - Spark calls Spring domain tools through function calling: `searchCandidates`, `checkVehicleFit`, `holdQuantity`
 - The server validates. When conditions do not match, Spark explains why and offers an alternative in English
-  - e.g. "높이 180cm라 승용차 불가, 대신 접이식 테이블 3개 어떠세요?" ("180 cm tall, will not fit a sedan. How about 3 folding tables instead?")
+  - e.g. "At 180 cm tall, it will not fit a sedan. How about 3 folding tables?"
 
 ### 5. Handover confirmation
 - One photo at pickup → Spark counts the reserved category and SAM 3.1 segments each counted item from Spark's boxes → the count matches only if it equals the reserved quantity and SAM segmented every box; then the handover completes and the reused quantity is recorded, otherwise it is a mismatch for a person to settle (D-032)

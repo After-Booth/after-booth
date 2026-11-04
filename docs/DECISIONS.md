@@ -144,3 +144,7 @@ Current UI, user-facing server messages, AI-generated explanations, README and j
 ## D-088 — #17 synthetic manifest recording preserves member privacy (2026-11-04)
 
 Keep production member-owned RECORD forbidden. Use a test-classpath-only REPLAY application on fresh synthetic owned data to capture missing request manifests, then an independently approved recorder that validates fixed scenario inputs, image digests, canonical keys and a complete typed AiGateway serialization round trip before transport. Record genuine responses only, retain original fixtures, and persist a locked $2/30-attempt budget ledger with conservative per-call reservations and no retries. Controlled replay scheduling changes timing only to verify both real finalization/stock-zero branches. Clear ENGLISH_RECORDINGS_READY only after the shared full scenario actually passes; then verify the ordinary product jar without capture/scheduling. Natural scheduling is replay-only and not part of the paid two-branch runner. Video/forms/submission are out of this task.
+
+## D-089 — [contract] Align the generic error example with the real message (2026-11-04)
+
+The `Error.message` example in `contract/openapi.yaml` now uses the actual QTY_UNAVAILABLE text ("Not enough items remain") instead of an invented sentence. No shape, identifier or behavior change; committed separately per the contract-only rule.

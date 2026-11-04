@@ -5,7 +5,7 @@
 ## Baseline and scope
 
 - Fetched remote main: `d02c98232cad21ae65d5c94a6bb45fee77bc23f0` (PR #76).
-- Branch: `codex/17-submission-readiness`; worktree: `/private/tmp/afterbooth-17-submission-readiness`.
+- Branch: `fix/17-submission-readiness` (renamed from `codex/17-submission-readiness`); worktree: `/private/tmp/afterbooth-17-submission-readiness`.
 - The original checkout stays on `main`; it started clean. No shared-folder branch switch occurred.
 - Reviewed tracked source, Markdown, contract, build, Compose, CI and tests. Generated API clients/MSW files are intentionally untracked build outputs, not missing source.
 - Current UI, server messages, AI explanations, README and run guides are English. The user's latest correction also requires new repository records in English. Preserve historical records and original Korean inputs.
@@ -105,15 +105,19 @@ Intentional Korean remains in original user/transcript examples and the request 
 | `3c56d5a` | Actual HTTPS synthetic-AI transactions and time/ownership checks |
 | `dc73532` | Reservation listing display projection fix and remaining affected English assertions |
 | `e86b788` | Isolated authentication E2E, recovery/privacy checks, owned-data demo gate, standalone TypeScript configuration and E2E run guide |
+| `a9237b0` | Authenticated English submission readiness report and run-guide updates |
+| `cce5370` | Exact English replay recording inputs and deterministic demo-state preparation |
+| `e5d7b28` | Approved single-condition recording and replay recovery |
+| `1fe9ab4` | Full owned-data English replay, both race branches and E2E pass |
 
-The final documentation commit adds current README/fixture/run guidance, this G3 report, exact verification records and TASKS status. Local commits are the endpoint: no push, PR, main merge, GitHub issue/comment/status change, visibility change, deployment, video upload or external submission occurred. The original checkout remains on main.
+The documentation commit `a9237b0` adds current README/fixture/run guidance, this G3 report, exact verification records and TASKS status. The rows above also cover the later replay preparation, approved recordings and full-demo verification. Local commits are the endpoint: no push, PR, main merge, GitHub issue/comment/status change, visibility change, deployment, video upload or external submission occurred. The original checkout remains on main.
 
 
 ## Replay recovery preparation on `fix/17-submission-readiness` (2026-11-04)
 
 This section is the pre-approval snapshot committed in `cce5370`. The approved execution below supersedes its statements about the missing condition fixture and zero calls; full-demo blockers remain.
 
-This follow-up started at `a9237b0` on the existing `fix/17-submission-readiness` branch with a clean working tree. No branch switch, new worktree or main-based reset was performed. The earlier baseline section describes the preceding work, not the current branch name.
+This follow-up started at `a9237b0` on the existing `fix/17-submission-readiness` branch with a clean working tree. No branch switch, new worktree or main-based reset was performed. The branch was renamed from `codex/17-submission-readiness` to its current name during this work; the baseline above uses the current name.
 
 ### Reproduced failure and exact input
 
