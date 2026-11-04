@@ -6,7 +6,13 @@ import { RequestScreen } from './features/request/RequestScreen'
 import { IntakeScreen } from './features/intake/IntakeScreen'
 import { HandoverScreen } from './features/handover/HandoverScreen'
 import { AccountScreen, AuthScreen } from './features/auth/AuthScreen'
-import { onSessionEnd, restoreSession } from './features/auth/session'
+import {
+  clearSession,
+  onSessionEnd,
+  onSessionTrouble,
+  renewSession,
+  restoreSession,
+} from './features/auth/session'
 import type { MemberView } from './api/generated/model'
 
 const links = [
@@ -79,12 +85,15 @@ export default function App() {
   const [member, setMember] = useState<MemberView>()
   const [checking, setChecking] = useState(true)
   const [startupError, setStartupError] = useState(false)
+  const [trouble, setTrouble] = useState(false)
+  const [retrying, setRetrying] = useState(false)
   useEffect(() => {
     let active = true
     const unsubscribe = onSessionEnd(() => {
       setMember(undefined)
       window.location.hash = '#/'
     })
+    const unsubscribeTrouble = onSessionTrouble(setTrouble)
     restoreSession()
       .then((current) => {
         if (active) {
@@ -101,6 +110,7 @@ export default function App() {
     return () => {
       active = false
       unsubscribe()
+      unsubscribeTrouble()
     }
   }, [])
   useEffect(() => {
@@ -145,6 +155,23 @@ export default function App() {
   return (
     <>
       {member && <SiteHeader hash={hash} />}
+      {member && trouble && (
+        <div role="alert" className="session-notice">
+          <p>로그인 상태를 확인하지 못했어요. 연결을 확인한 뒤 다시 시도해 주세요.</p>
+          <button
+            disabled={retrying}
+            onClick={() => {
+              setRetrying(true)
+              renewSession()
+                .catch(() => undefined)
+                .finally(() => setRetrying(false))
+            }}
+          >
+            다시 시도
+          </button>
+          <button onClick={clearSession}>로그아웃</button>
+        </div>
+      )}
       {screen}
     </>
   )

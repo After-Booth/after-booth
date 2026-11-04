@@ -70,3 +70,28 @@ test.each([
   await userEvent.click(screen.getByRole('button', { name: '로그인' }))
   expect(await screen.findByText(message)).toBeInTheDocument()
 })
+
+test('a pending member who logs in can request a new code and finish verification', async () => {
+  server.use(
+    http.post('*/api/auth/login', () =>
+      HttpResponse.json(
+        { code: 'EMAIL_NOT_VERIFIED', message: '이메일 인증을 완료해 주세요.' },
+        { status: 403 },
+      ),
+    ),
+  )
+  const onLogin = vi.fn()
+  render(<AuthScreen onLogin={onLogin} />)
+  await userEvent.type(screen.getByLabelText('이메일'), 'person@example.test')
+  await userEvent.type(screen.getByLabelText('비밀번호'), 'synthetic-password')
+  await userEvent.click(screen.getByRole('button', { name: '로그인' }))
+  expect(await screen.findByText('이메일 인증을 완료해 주세요.')).toBeInTheDocument()
+  await userEvent.click(screen.getByRole('button', { name: '인증번호 다시 받기' }))
+  await userEvent.type(await screen.findByLabelText('이메일 인증번호'), '123456')
+  await userEvent.click(screen.getByRole('button', { name: '가입 완료' }))
+  expect(
+    await screen.findByText('이메일 인증이 완료되었어요. 로그인해 주세요.'),
+  ).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: '인증번호 다시 받기' })).not.toBeInTheDocument()
+  expect(onLogin).not.toHaveBeenCalled()
+})

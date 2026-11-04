@@ -3,7 +3,14 @@ import { setupServer } from 'msw/node'
 import { afterAll, afterEach, beforeAll, expect, test, vi } from 'vitest'
 import { http, setAccessToken } from '../../api/http'
 import { changePassword } from '../../api/generated/afterbooth'
-import { authOperation, clearSession, onSessionEnd, signOut } from './session'
+import {
+  authOperation,
+  clearSession,
+  onSessionEnd,
+  onSessionTrouble,
+  renewSession,
+  signOut,
+} from './session'
 
 let refreshes = 0
 const server = setupServer(
@@ -222,4 +229,27 @@ test('a protected authentication mutation refreshes once and obtains a fresh CSR
     { token: 'Bearer expired-token', csrf: 'csrf-1' },
     { token: 'Bearer new-token', csrf: 'csrf-3' },
   ])
+})
+
+test('a temporary refresh failure is reported as session trouble until a refresh succeeds', async () => {
+  let failing = true
+  server.use(
+    mockHttp.post('*/api/auth/refresh', () =>
+      failing
+        ? HttpResponse.json(
+            { code: 'AUTH_UNAVAILABLE', message: '잠시 후 다시 시도해 주세요.' },
+            { status: 503 },
+          )
+        : HttpResponse.json({ accessToken: 'new-token', tokenType: 'Bearer', expiresIn: 600 }),
+    ),
+  )
+  const changes: boolean[] = []
+  const unsubscribe = onSessionTrouble((troubled) => changes.push(troubled))
+  setAccessToken('expired-token')
+  await expect(http('/api/private')).rejects.toMatchObject({ status: 503 })
+  expect(changes).toEqual([true])
+  failing = false
+  await expect(renewSession()).resolves.toBe(true)
+  expect(changes).toEqual([true, false])
+  unsubscribe()
 })

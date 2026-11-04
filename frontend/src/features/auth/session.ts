@@ -12,6 +12,21 @@ let epoch = 0
 let pendingRefresh: Promise<boolean> | undefined
 let queue: Promise<unknown> = Promise.resolve()
 const listeners = new Set<() => void>()
+const troubleListeners = new Set<(troubled: boolean) => void>()
+let troubled = false
+
+function setTrouble(value: boolean) {
+  if (troubled === value) return
+  troubled = value
+  troubleListeners.forEach((listener) => listener(value))
+}
+
+export function onSessionTrouble(listener: (troubled: boolean) => void) {
+  troubleListeners.add(listener)
+  return () => {
+    troubleListeners.delete(listener)
+  }
+}
 
 export function onSessionEnd(listener: () => void) {
   listeners.add(listener)
@@ -23,6 +38,7 @@ export function onSessionEnd(listener: () => void) {
 export function clearSession() {
   epoch += 1
   setAccessToken()
+  setTrouble(false)
   listeners.forEach((listener) => listener())
 }
 
@@ -61,6 +77,7 @@ export async function authOperation<T>(
 export async function signIn(email: string, password: string): Promise<MemberView> {
   const currentEpoch = ++epoch
   setAccessToken()
+  setTrouble(false)
   const result = await authOperation((csrf) => loginMember({ email, password }, csrf))
   if (result.status !== 200 || epoch !== currentEpoch)
     throw new Error('로그인을 다시 시도해 주세요.')
@@ -83,6 +100,7 @@ export function renewSession(): Promise<boolean> {
     .then((result) => {
       if (result.status !== 200 || currentEpoch !== epoch) return false
       setAccessToken(result.data.accessToken, true)
+      setTrouble(false)
       return true
     })
     .catch((error: unknown) => {
@@ -90,6 +108,7 @@ export function renewSession(): Promise<boolean> {
         if (currentEpoch === epoch) clearSession()
         return false
       }
+      if (currentEpoch === epoch) setTrouble(true)
       throw error
     })
     .finally(() => {

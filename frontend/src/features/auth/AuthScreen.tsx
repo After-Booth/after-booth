@@ -36,7 +36,9 @@ export function AuthScreen({ onLogin }: { onLogin: (member: MemberView) => void 
   const [challenge, setChallenge] = useState('')
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
+  const [unverified, setUnverified] = useState(false)
   function switchMode(next: Mode) {
+    setUnverified(false)
     setPassword('')
     setCode('')
     setChallenge('')
@@ -48,6 +50,7 @@ export function AuthScreen({ onLogin }: { onLogin: (member: MemberView) => void 
     if (busy) return
     setBusy(true)
     setMessage('')
+    setUnverified(false)
     try {
       if (mode === 'login') {
         const member = await signIn(email, password)
@@ -94,6 +97,27 @@ export function AuthScreen({ onLogin }: { onLogin: (member: MemberView) => void 
       }
     } catch (error) {
       setMessage(errorMessage(error, mode === 'login'))
+      if (mode === 'login' && error instanceof ApiError && error.code === 'EMAIL_NOT_VERIFIED')
+        setUnverified(true)
+    } finally {
+      setBusy(false)
+    }
+  }
+  async function resendVerification() {
+    if (busy) return
+    setBusy(true)
+    setMessage('')
+    try {
+      const response = await authOperation((csrf) => requestEmailVerification({ email }, csrf))
+      if (response.status === 202) {
+        setUnverified(false)
+        setCode('')
+        setChallenge(response.data.challengeId)
+        setMessage(response.data.message)
+        setMode('verify')
+      }
+    } catch (error) {
+      setMessage(errorMessage(error))
     } finally {
       setBusy(false)
     }
@@ -167,6 +191,16 @@ export function AuthScreen({ onLogin }: { onLogin: (member: MemberView) => void 
           <p role="status" className="rounded-xl bg-emerald-50 p-4 text-emerald-900">
             {message}
           </p>
+        )}
+        {unverified && (
+          <button
+            type="button"
+            disabled={busy}
+            className="min-h-12 font-semibold text-emerald-800 underline"
+            onClick={() => void resendVerification()}
+          >
+            인증번호 다시 받기
+          </button>
         )}
         <button disabled={busy} className={button}>
           {busy

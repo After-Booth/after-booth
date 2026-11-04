@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { setupServer } from 'msw/node'
-import { afterAll, afterEach, beforeAll, expect, test } from 'vitest'
+import { afterAll, afterEach, beforeAll, expect, test, vi } from 'vitest'
 import App from './App'
 
 const server = setupServer(
@@ -102,5 +102,37 @@ test('switching accounts in one tab never shows the previous member’s data', a
   expect(screen.queryByRole('option', { name: 'Member A private event' })).not.toBeInTheDocument()
   expect(screen.getAllByRole('option')).toHaveLength(1)
   // Let the home screen's health request finish so nothing resolves after the test ends.
+  expect(await screen.findByText('서버 UP · AI replay')).toBeInTheDocument()
+})
+
+test('shows a notice when the session cannot be refreshed and recovers on retry', async () => {
+  window.location.hash = '#/'
+  let refreshes = 0
+  let healthy = false
+  server.use(
+    http.post('*/api/auth/refresh', () => {
+      refreshes += 1
+      return refreshes === 1 || healthy
+        ? HttpResponse.json({ accessToken: 'test-token', tokenType: 'Bearer', expiresIn: 600 })
+        : HttpResponse.json(
+            { code: 'AUTH_UNAVAILABLE', message: '잠시 후 다시 시도해 주세요.' },
+            { status: 503 },
+          )
+    }),
+    http.get('*/api/events', () =>
+      HttpResponse.json(
+        { code: 'UNAUTHENTICATED', message: '로그인이 필요해요.' },
+        { status: 401 },
+      ),
+    ),
+  )
+  render(<App />)
+  const notice = await screen.findByRole('alert')
+  expect(notice).toHaveTextContent('로그인 상태를 확인하지 못했어요')
+  expect(screen.getByRole('navigation', { name: '주요 메뉴' })).toBeInTheDocument()
+
+  healthy = true
+  await userEvent.click(screen.getByRole('button', { name: '다시 시도' }))
+  await vi.waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
   expect(await screen.findByText('서버 UP · AI replay')).toBeInTheDocument()
 })
