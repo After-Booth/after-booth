@@ -2,11 +2,11 @@
 
 ## Current English/authenticated status (#17)
 
-The original recordings below are historical provider evidence and remain unchanged. They do **not** currently certify the authenticated English demo. English condition/allocation prompts, English category labels and tool feedback change the canonical request hash. Allocation recordings also contain seeded `itemId: 1`; fresh member-owned inventory has different IDs. Authentication never grants access to those seeded owners. Do not remove inputs from the hash or manually translate recorded request/response files to force a match.
+The authenticated English-output owned-data demo now passes replay. Twenty pre-existing provider recordings remain byte-identical; 12 separately approved genuine Meta recordings add the missing rack intake, SAM and English condition/allocation turns. [english-owned-demo.json](english-owned-demo.json) lists their request keys and usage-derived costs. No recorded response was edited or translated. Strict hashes, authentication, ownership and the member-recording prohibition remain intact.
 
-`npm --prefix e2e run test:auth` verifies its documented subset with local Fake mail and replay; it is separate from `npm --prefix e2e run test:demo`, which fails explicitly until the authenticated English full-demo prerequisites are met. `npm --prefix e2e test` includes that readiness gate. Synthetic AI unit/integration test responses are test doubles, not Meta recordings or real-model end-to-end evidence.
+`npm --prefix e2e test` passed TypeScript, six authentication checks, the complete owned-data demo and ten helpers. Two controlled candidate runs verified both last-item losing branches through completed photo handover/statistics, followed by a natural key-free candidate and the ordinary product jar. ENGLISH_RECORDINGS_READY was cleared only after actual candidate replay success. Synthetic unit-test responses remain test doubles; these new files contain actual Meta responses.
 
-A new English recording needs separate human approval and a bounded cost plan. Prepare verified synthetic giver/receiver accounts in separate HTTPS sessions, create an owned event and inventory, and record exact approved inputs through allocation, completed handover and statistics. A concurrent last-item race requires another receiver session. Validate both race outcomes without weakening the server rules. Never commit credentials, codes or temporary test keys. On 2026-11-04, separate human approval authorized one English condition Spark recording described below. Authenticated full-demo recording remains incomplete and requires separate approval.
+The additional 2026-11-04 approval covered at most $2/30 new attempts. Actual use: 11 Standard Spark calls and one SAM image, estimated $0.03397650; zero failed attempts or new Transcribe calls. The separate initial condition call cost $0.001451. Further paid use requires its own approval. The standalone recorder and private budget ledger never disable member-owned RECORD protection; see [the full replay guide](../docs/ENGLISH_REPLAY.md).
 
 The original audio samples contain Korean speech and the Transcribe configuration keeps its Korean language bias. English voice recognition/structuring/allocation has not been verified. Original user transcripts stay original; English system-generated explanations are a separate requirement.
 
@@ -74,9 +74,8 @@ It created the exact `4c5fb1f9cfcbd4263b79d4c0f71865b7b42eb1e67e0eb7d9351e63dc92
 fixture without changing original recordings. Estimated Standard cost is **$0.001451**
 (`542 × $1.25 / 1,000,000 + 182 × $4.25 / 1,000,000`); billing-dashboard reconciliation was not performed.
 The real response passed the test's schema/domain and English-purpose assertions, and the fixture
-passed the repository secret scan. This evidence covers this one condition request only; the
-authenticated allocation, both last-item race outcomes, completed photo handover, `HANDED_OVER`
-and statistics remain unverified against current real Meta recordings. No additional paid call is
+passed the repository secret scan. This historical single-call evidence covers one condition request only. The later separately approved
+full-demo recordings and successful replay are documented at the top of this guide. No additional paid call is
 authorized by that one-call approval.
 
 `AI_MODE=record` reuses an existing fixture without an HTTP call and logs `outcome=reused`. For a missing fixture, it makes the live call and writes the file above. Concurrent identical requests in one gateway share a single in-flight call and its response. Failures propagate to all waiters and are not cached. Later runs add missing branches without overwriting earlier responses; a human deletes an individual file to re-record it. New calls spend credits, so a human runs recording (AGENTS.md hard rule 6; the Claude Code hook asks first), then logs the cost in `docs/BUDGET.md`.
@@ -124,6 +123,6 @@ docker compose -f docker-compose.yml -f docker-compose.record.yml up --build -d
 
 Network-loss check without spending credits: start live mode with a placeholder key and an unroutable base URL (`AI_MODE: live`, `META_API_KEY: not-a-real-key`, `META_BASE_URL: http://10.255.255.1` in an override file) and run steps 1–7. The first Spark call after a quiet minute waits the 8 s window, then every step completes from fixtures.
 
-Historical note: #12 later added the Korean seeded demo replay E2E. Authentication introduced in PR #76 skipped it. #17 makes that gap an explicit failing readiness gate; there is no current authenticated English full-demo pass.
+Historical note: #12 later added the Korean seeded demo replay E2E. Authentication introduced in PR #76 skipped it. #17 makes that gap an explicit failing readiness gate; that gap was subsequently resolved by the approved owned-data English replay described above.
 
 Measured on 2026-11-01 (#13): live text structuring 1.4 s, allocation 7–10 s over 3–4 tool turns, handover recount 3.3 s. The loading screens use these values (`frontend/src/features/aiLatency.ts`).

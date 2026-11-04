@@ -1,6 +1,6 @@
 # Issue #17 submission readiness — 2026-11-04
 
-**Not submission-ready. No external submission was made.** Automated checks, authenticated transactions, real Meta recordings, human screen review and submission are separate evidence categories.
+**Not submission-ready. No external submission was made.** The requested automated English owned-data replay scope is now complete; see the latest full-demo verification section below. Video, forms and submission remain outside this task. Automated checks, authenticated transactions, real Meta recordings, human screen review and submission are separate evidence categories.
 
 ## Baseline and scope
 
@@ -170,3 +170,24 @@ ENGLISH_RECORDINGS_READY remains false. The full-demo recording runner, owned-ra
 
 
 Post-recording `npm --prefix e2e test` was run in full: TypeScript passed; all six authentication browser checks passed against a fresh disposable HTTPS stack; ten overlap/helper checks passed; the full demo failed explicitly at the unchanged ENGLISH_RECORDINGS_READY prerequisite. The overall command exited 1. This is a verified remaining failure, not a full E2E pass.
+
+
+## Full owned-data English replay verification completed (2026-11-04)
+
+This result supersedes the earlier missing-recordings/full-runner blockers for the automated replay scope only. Work continued from `e5d7b28` on the same clean `fix/17-submission-readiness` branch; no branch reset or external write occurred. The user explicitly approved additional bounded recording, separate from the initial one-condition call.
+
+- Actual new Meta exchanges: 12 successful recordings, 11 `muse-spark-1.3` Standard and one `sam-3.1`; no retry, failed attempt or new Transcribe call. Spark usage: 9,718 input / 4,548 output tokens. Estimated total $0.03397650 under the $2 / 30-attempt session limits, recorded in BUDGET. Prior condition-call cost remains separate. Actual dashboard billing was not inspected.
+- All 20 pre-existing fixture files are byte-identical to the pre-run digest baseline. The new fixture index lists actual request hashes and usage metadata; all canonical keys are recomputed and new responses are replayed through the actual AiGateway. No response was translated, fabricated or edited.
+- The product stayed in REPLAY. A test-classpath-only application captured missing request manifests; an independent approved recorder reconstructed typed gateway inputs and validated the complete serialized request before calling the provider. Production member-owned RECORD protection and all authorization/idempotency/quantity rules remain unchanged. No member work scope was cleared or moved to an unowned executor.
+- Both controlled full candidates passed: two plans propose against stock one and finalization rejects the loser; or the second active server request searches after the first real HOLD commits and sees stock zero. Test-only barriers/waits change timing only, never stock, tool results or model replies. Both runs assert actual HTTP interval overlap, exactly one winner, zero loser holds, QTY_UNAVAILABLE and a visible enabled alternative. Each completes receiver confirmation, giver photo handover, HANDED_OVER and API/UI statistics. A separate natural scheduling replay candidate passed without paid calls.
+- Only after actual full replay success was ENGLISH_RECORDINGS_READY set true. The default `npm --prefix e2e test` then passed on the ordinary product jar: TypeScript, 6 auth checks, 1 full owned-data scenario and 10 overlap/helper checks; exit 0. It uses no capture application/scheduler and never calls Meta.
+- Backend Java 21 `spotlessApply compileJava compileTestJava spotlessCheck test ... bootJar prepareReplayTools` passed all 28 selected tests with zero failures/errors/skips. Classes: EnglishOwnedDemoReplayTest, EnglishReplayRecorderTest, ConditionInterpretationReplayTest, IntakePipelineReplayTest, MemberInputPrivacyTest, FixtureStoreTest and ArchitectureTest. The original two replay tests first exposed a test-configuration scan collision; explicit preparation-main activation fixed it, and the successful combined run was serial.
+
+The shared scenario keeps every original domain/outcome assertion. Its event/reservation filters now target the native combobox's actual accessible name, including dynamic option text. Account navigation waits for the account screen before resetting intake/request screens. Original hashes and fixed photo bytes remain authoritative. The live rack detection supplied one GOOD rack, 90 × 60 × 150 cm; no dimensions were edited to force success. The owned rack is item #2; bins are item #1.
+
+A proposed paid extension for natural scheduling was rejected by automatic approval review as outside the approved two-branch scope; that command did not execute. The natural candidate was instead run as replay only and passed, so no additional paid scope was needed. Independent read-only review inspected the member protection, scheduling and reservation design without finding an actionable blocker in the inspected portion, but the reviewer hit its usage limit before completing a final verdict; no completed independent approval is claimed.
+
+No manual/video capture, form work, submission, screenshots for D-061/D-062/D-084 or real mailbox delivery was performed. The source WAV and existing Transcribe evidence remain Korean; English speech recognition and live-model performance are not established by replay. Temporary credentials/TLS/HMAC/JWT material and private request/budget session files stay outside Git. Current executable details are in [ENGLISH_REPLAY](ENGLISH_REPLAY.md).
+
+
+Final additional regression run: AllocationIntegrationTest (15), HandoverIntegrationTest (15), DomainAuthorizationIntegrationTest (35), CatalogAuthorizationIntegrationTest (6) — 71 passed, zero failures/errors/skips against disposable PostgreSQL. Together with the separately successful 28 replay/tool/privacy/architecture checks, 99 backend checks passed across two runs; no full-backend-suite pass is claimed. Changed-file secret scanning and all 12 new fixture canonical/status/credential/email/inline-media inspections passed; all 20 originals remain byte-identical. The ordinary product jar was inspected and contains none of the test-only capture/recorder classes.

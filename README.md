@@ -102,16 +102,16 @@ A manual local installation needs the same configuration: a private PostgreSQL d
 
 ### Current demo status
 
-The authenticated English full AI demo is **not ready or verified**. The existing recordings were captured for Korean prompts and seeded inventory. English prompts and newly owned inventory change exact replay requests. Original recordings are preserved; no English model recording or English voice success is claimed. [`fixtures/README.md`](fixtures/README.md) explains the matching boundary.
+The authenticated English-output full demo is **verified in replay** with three synthetic members and owned data. Separately approved real Meta recordings cover the changed requests; original recordings remain unchanged. Both last-item race branches passed complete candidate runs, followed by the ordinary product-jar E2E. The original WAV is Korean: English speech recognition is not claimed. See [`docs/ENGLISH_REPLAY.md`](docs/ENGLISH_REPLAY.md) for exact inputs, recording boundaries and checks.
 
 ```bash
-npm --prefix e2e run test:demo  # Explicit full-demo readiness gate; currently fails.
-npm --prefix e2e test          # Auth checks followed by that gate; cannot hide a skipped demo.
+npm --prefix e2e run test:demo  # Full owned-data demo, verified in replay.
+npm --prefix e2e test          # TypeScript, 6 auth checks, full demo and 10 helpers.
 ```
 
 Authentication checks alone do not certify allocation-agent → completed photo handover → statistics. Confirmation followed by cancellation is not completed handover. The current evidence, blockers and required human actions are in [`docs/SUBMISSION_READINESS.md`](docs/SUBMISSION_READINESS.md).
 
-For a manual judging session, prepare verified synthetic members in separate HTTPS browser sessions: one giver owns a newly created event and its inventory; one receiver owns the request, HOLD and confirmation. A last-item race needs a second receiver in a third session. Never select or take over seeded organizations. The giver handles photo recount and quantity settlement; a receiver cancels their own reservation. Before filming, approve and prepare exact English replay inputs, validate all steps through HANDED_OVER and statistics, then follow [`docs/DEMO_SCRIPT.md`](docs/DEMO_SCRIPT.md). No completed current manual run is claimed.
+For a manual judging session, prepare verified synthetic members in separate HTTPS browser sessions: one giver owns a newly created event and its inventory; one receiver owns the request, HOLD and confirmation. A last-item race needs a second receiver in a third session. Never select or take over seeded organizations. The giver handles photo recount and quantity settlement; a receiver cancels their own reservation. The automated exact-input replay is verified through HANDED_OVER and statistics. For any separately scoped manual/video work, follow [`docs/DEMO_SCRIPT.md`](docs/DEMO_SCRIPT.md). No completed current manual run is claimed.
 
 ### Historical replay inputs
 
@@ -119,7 +119,7 @@ The former unauthenticated Korean demo used `spike/samples/bins-orange-stack.jpg
 
 ### Paid provider modes
 
-Live/record modes need separate human approval before any call. This change performs none. The historical live/record Compose overrides do not supply the new HTTPS/authentication setup, so they are not a current full-demo run recipe. Configure and verify authentication first; then approve a bounded recording plan and record its actual cost in [`docs/BUDGET.md`](docs/BUDGET.md). Keep key files human-managed and outside committed data.
+Live/record modes need separate human approval before any call. The approved English replay work recorded 12 additional exchanges for an estimated $0.03397650; this is separate from the earlier $0.001451 condition recording. The historical live/record Compose overrides do not supply the new HTTPS/authentication setup, so they are not a current full-demo run recipe. Configure and verify authentication first; then approve a bounded recording plan and record its actual cost in [`docs/BUDGET.md`](docs/BUDGET.md). Keep key files human-managed and outside committed data.
 
 ## Historical measurements (before authentication and English conversion)
 

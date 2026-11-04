@@ -29,7 +29,7 @@ function run(command: string, args: string[]): void {
  * memory; nothing from that stream is logged or written to disk.
  */
 export async function startAuthStack(
-  options: { ownedDemo?: boolean } = {},
+  options: { ownedDemo?: boolean; captureDirectory?: string; raceBranch?: string } = {},
 ): Promise<AuthStack> {
   const jar = path.join(REPO, 'backend', 'build', 'libs', 'afterbooth-0.0.1-SNAPSHOT.jar');
   const dist = path.join(REPO, 'frontend', 'dist');
@@ -153,9 +153,22 @@ export async function startAuthStack(
       },
     };
 
-    child = spawn('java', ['-jar', jar], {
+    const preparation = options.captureDirectory;
+    if (preparation && (!options.ownedDemo || !path.isAbsolute(preparation)))
+      throw new Error('Capture requires the isolated owned demo and a private absolute directory');
+    const javaArgs = preparation
+      ? ['-cp', fs.readFileSync(path.join(REPO, 'backend/build/replay-preparation.classpath'), 'utf8'), 'com.afterbooth.ai.ReplayPreparationApplication']
+      : ['-jar', jar];
+    child = spawn('java', javaArgs, {
       cwd: path.join(REPO, 'backend'),
-      env: { ...process.env, SPRING_APPLICATION_JSON: JSON.stringify(config), AI_MODE: 'replay' },
+      env: {
+        ...process.env, SPRING_APPLICATION_JSON: JSON.stringify(config), AI_MODE: 'replay',
+        META_API_KEY: '',
+        ...(preparation ? {
+          AFTERBOOTH_REPLAY_CAPTURE_DIR: preparation,
+          AFTERBOOTH_REPLAY_RACE_BRANCH: options.raceBranch ?? '',
+        } : {}),
+      },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     child.stderr?.resume();
@@ -187,7 +200,7 @@ export async function startAuthStack(
           const waiter = waiters.findIndex((w) => w.purpose === mail[1]);
           if (waiter >= 0) waiters.splice(waiter, 1)[0].resolve(mail[2]);
           else codes[mail[1]].push(mail[2]);
-        } else if (line.includes('Started AfterboothApplication')) {
+        } else if ((line.includes('Started AfterboothApplication') || (preparation && /Started [A-Za-z]+ in /.test(line)))) {
           ready();
         }
       }

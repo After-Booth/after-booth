@@ -515,7 +515,7 @@ Baseline: fetched `origin/main` `d02c98232cad21ae65d5c94a6bb45fee77bc23f0`; bran
 - [x] Real HTTPS browser authentication suite: six tests passed, including password change/reset, resend verification and refresh-trouble logout. The refresh 503 is Playwright-injected; logout/cookies/reload use the real server.
 - [x] Reviewed blank login and credential-free refresh screens at mobile/desktop widths; no human teammate review is inferred.
 - [x] Rewrote the full-demo test for owned events/inventory and three isolated authenticated contexts; strict TypeScript checking and discovery passed. Runtime success is not implied.
-- [ ] Authenticated English full Meta demo and new English replay: separate paid recording approval required. The original ConditionInterpretationReplayTest failure was resolved by the separately approved single-condition recording below; remaining full-demo recordings are still missing.
+- [x] Authenticated English-output full Meta replay: separately approved real recordings and complete owned-data E2E verified; see the full-demo completion record below. The original ConditionInterpretationReplayTest failure was resolved by the separately approved single-condition recording below; remaining full-demo recordings are still missing.
 - [ ] Actual teammate reviews, current video, submission form access/fields and final external submission.
 
 See [SUBMISSION_READINESS](SUBMISSION_READINESS.md) for commands, evidence boundaries, current failures, G3 report and human actions. #17 and Phase 3 remain incomplete; no push, PR, merge, GitHub write, deployment, upload or external submission was performed. The earlier #70 checklist above is its historical delivery record; this section describes newly verified scope and remaining gaps.
@@ -535,3 +535,17 @@ Current checks: 60 focused backend tests and three additional no-network photo/h
 - [ ] Full English authenticated demo, both race recordings, real photo handover/statistics and the complete recording runner remain incomplete. ENGLISH_RECORDINGS_READY is still false; approval did not include further paid requests.
 
 Post-recording full E2E command: typecheck, six auth checks and ten helpers passed; the overall command failed at the retained missing-full-demo-recordings gate. No full E2E success is claimed.
+
+
+### #17 full English owned-data replay completed (2026-11-04)
+
+- [x] Preserve branch `fix/17-submission-readiness`, preceding commits and all 20 pre-existing recordings byte-for-byte; no production API, schema, dependency, auth, ownership or member recording protection changes.
+- [x] Separately approved bounded recording: 12 actual Meta exchanges (11 Spark, one SAM), estimated $0.03397650; zero failures/retries and no new Transcribe calls. BUDGET and the curated fixture index record the evidence.
+- [x] Controlled simultaneous rejection and post-commit stock-zero candidates each passed the full shared photo → condition → allocation/race/alternative → receiver confirmation → giver photo handover → HANDED_OVER/statistics assertions. Natural scheduling also passed key-free replay, with no new recording.
+- [x] Cleared ENGLISH_RECORDINGS_READY only after full candidate replay success. The default `npm --prefix e2e test` then passed TypeScript, six auth checks, the complete ordinary-product-jar demo and ten helpers. No capture scheduler or paid recorder is used by that default run.
+- [x] Backend format/compile/bootJar plus 28 related tests passed, zero failures/errors/skips: real new-fixture round trips, budget/privacy/hash/architecture and original condition/intake replay regressions. Initial test-configuration scanning collision was fixed and the affected command passed serially.
+
+The requested automated replay scope is complete. Human screen review, video, forms and external submission are separate issues and were not performed. English speech, live performance and actual billing reconciliation remain unverified. See [ENGLISH_REPLAY](ENGLISH_REPLAY.md) and the latest [SUBMISSION_READINESS](SUBMISSION_READINESS.md) section; earlier blocked entries are historical snapshots. No push, PR, merge, deployment or external submission.
+
+
+Additional domain regressions passed: 71 tests across AllocationIntegrationTest, HandoverIntegrationTest, DomainAuthorizationIntegrationTest and CatalogAuthorizationIntegrationTest. Total affected backend evidence is 28 + 71 passing checks across separate runs, not a full-suite claim. The independent reviewer inspected privacy/scheduling/budget logic but hit its usage limit before a completed verdict; this is not recorded as approval. Final secret/canonical checks passed and the product jar excludes test-only recording tools.

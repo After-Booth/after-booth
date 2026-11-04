@@ -21,23 +21,27 @@ npm run test:auth
 The authentication suite uses independent browser contexts and synthetic members. Its checks cover signup and verification, login/session restoration/logout, member-owned events, cross-member access denial, an inventory/request/HOLD/confirmation path and withdrawal eligibility. A cancellation after confirmation is not handover completion. The exact newly executed scope and failures must be recorded separately; an older run is not current evidence.
 
 ```bash
-npm run test:demo  # Full-demo readiness gate: currently fails explicitly.
+npm run test:demo  # Complete owned-data demo, verified in replay.
 npm test          # Authentication checks, followed by the full-demo gate.
 ```
 
-The default command cannot report success while silently skipping the full demo. `demo.spec.ts` now defines an authenticated HTTPS scenario with three synthetic verified members in separate contexts: a giver creates its own event and photo inventory; two receivers request and race for the owned rack; the winner confirms; the giver completes photo handover; event-filtered statistics are compared with API results. It raises an explicit prerequisite failure until approved recordings exist for this exact scenario. This rewritten scenario has passed strict TypeScript checking and test discovery, but has not been successfully executed. On a future completed replay run, its latency attachment will contain only photo-result, concurrent-race, giver-handover and total scenario durations; these are replay timings, not live Meta measurements. Do not remove the gate merely because authentication checks pass.
+The default command runs the complete authenticated HTTPS owned-data scenario; no demo is skipped. `demo.spec.ts` and the separate candidate suite share every assertion in `demoScenario.ts`: giver-owned event and photo inventory, two authenticated receivers racing for the last rack, exactly one HOLD, a visible enabled loser alternative, receiver confirmation, giver photo handover, HANDED_OVER and event-filtered statistics matching the API. ENGLISH_RECORDINGS_READY was cleared after actual replay candidate success, then `npm test` passed against the normal product jar.
+
+The default completed run includes TypeScript, six auth browser checks, the full demo and ten overlap/helpers. Candidate runs also completed both controlled losing branches (simultaneous finalization rejection and stock zero after the winner commits), plus a natural replay race. The test-only scheduler controls timing without altering responses, stock or ownership; the default product run uses no scheduler. Replay latency attachments contain only timing numbers, never auth payloads. These are replay timings, not live-model measurements.
 
 ## TypeScript and IDE checks
 
 Run `npm ci` in `e2e/`, then `npm run typecheck`. This package declares its own TypeScript and Node type dependencies. Its `tsconfig.json` covers the tests, stack, reporter and Playwright configuration with modern ECMAScript modules, Node types and DOM iteration types. IDEs can use this committed project configuration instead of inferred defaults or unrelated frontend options. The default `npm test` runs this type check before browser tests. No frontend installation or command-line type-root override is required for E2E type checking.
 
-TypeScript configuration fixes are separate from the missing English replay recordings described below. A successful type check does not establish full-demo runtime success.
+TypeScript configuration is separate from actual replay fixture matching. A successful type check does not establish full-demo runtime success.
 
 ## Recording prerequisite
 
 The existing recorded allocation requests contain a seeded display rack (`itemId: 1`, Korean label), its stock and Korean tool feedback. Member-owned inventory has different item identifiers. English system prompts, descriptions and tool feedback also change the exact request hash. `FixtureStore` hashes method, path and canonical request JSON, including tool results. These are concrete request mismatches; changing a lookup key or deleting request fields would invalidate replay evidence.
 
-Original recordings remain unchanged. Preparing English fixtures requires a separately approved Meta recording with the exact synthetic inputs and owned inventory used by the new demo, including the additional rack intake. The proposed English race input is `We need one display rack. We will collect it in a van.` The original Korean WAV remains correctly identified as Korean input, while generated purpose and allocation explanations must be English. Remove `ENGLISH_RECORDINGS_READY = false` only after the recording prerequisites and request hashes have been reviewed. Synthetic unit/integration responses must be identified as synthetic and cannot stand in for that recording. The original voice sample is Korean; it does not validate an English voice demo.
+Original recordings remain unchanged. Separately approved real Meta recordings now cover the owned-data requests; fixture responses were not translated or fabricated. The exact race input is `We need one display rack. We will collect it in a van.` Generated purpose and allocation explanations are checked for English. The original WAV remains Korean, so this does not validate English speech.
+
+For future fixture preparation, `npm run test:demo:candidate` requires a private `AFTERBOOTH_REPLAY_CAPTURE_DIR` and backend `prepareReplayTools`. Select `AFTERBOOTH_REPLAY_RACE_BRANCH=simultaneous-reject|stock-0-after-commit` for deterministic branches, or `natural` for a key-free unscheduled check. The test-only application always runs REPLAY and captures missing requests, never provider responses. See [ENGLISH_REPLAY](../docs/ENGLISH_REPLAY.md) for the exact safe recording procedure and budget gates. The two-branch paid runner does not authorize paid natural-branch extensions.
 
 ## Historical evidence
 
@@ -47,4 +51,4 @@ Do not run the old HTTP Compose recipe as an authenticated demo: Secure cookies 
 
 The current suite also checks wrong-current-password rejection, successful password change and email reset with fresh login, unverified login → resend → verification, and a simulated HTTP refresh outage followed by **real server logout** and recovery. The outage is injected by Playwright; it does not establish real database outage recovery. Desktop/mobile login overflow checks use blank forms. Screenshots are not saved by default. To opt into visual review, set `E2E_VISUAL_DIR` to a temporary directory outside the repository. Only the blank login and credential-free refresh notice views are saved there; no auth traces are retained. Inspect those images before sharing.
 
-Still separate: expired/used reset-code and time-controlled 24-hour/30-day cases belong to the backend integration checks; the browser suite does not claim those. Full AI allocation, photo handover and statistics with current member-owned English recordings remain unverified.
+Still separate: expired/used reset-code and time-controlled 24-hour/30-day cases belong to the backend integration checks; the browser suite does not claim those. Full AI allocation, photo handover and statistics with exact member-owned English-output recordings are now verified in replay; live performance and English speech remain unverified.

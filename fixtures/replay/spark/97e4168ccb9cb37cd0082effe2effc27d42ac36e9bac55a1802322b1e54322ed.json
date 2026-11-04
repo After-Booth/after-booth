@@ -1,0 +1,190 @@
+{
+  "request" : {
+    "method" : "POST",
+    "path" : "/v1/chat/completions",
+    "body" : {
+      "model" : "muse-spark-1.3",
+      "messages" : [
+        {
+          "role" : "system",
+          "content" : "Identify reusable booth equipment: display racks, storage bins and folding tables.\nReturn one line per category, counting visible units with one normalized x/y/width/height\nbox per unit (origin top-left). Ignore unrelated objects. Use UNKNOWN for equipment whose\ncategory is uncertain. Estimate per-unit size in centimeters (null if indeterminate),\ncondition and confidence. Return only the JSON required by the response schema.\n"
+        },
+        {
+          "role" : "user",
+          "content" : [
+            {
+              "type" : "text",
+              "text" : "Create an inventory draft from this photo."
+            },
+            {
+              "type" : "image_url",
+              "image_url" : {
+                "url" : {
+                  "sha256" : "1ef80c842d03dbebb326b13fe0d4242af5334ffe3dceb862cee19179fdcabc16",
+                  "bytes" : 23809,
+                  "redactedDataUrl" : "data:image/jpeg;base64"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "response_format" : {
+        "type" : "json_schema",
+        "json_schema" : {
+          "name" : "intake_estimate",
+          "schema" : {
+            "type" : "object",
+            "additionalProperties" : false,
+            "required" : [
+              "lines"
+            ],
+            "properties" : {
+              "lines" : {
+                "type" : "array",
+                "items" : {
+                  "type" : "object",
+                  "additionalProperties" : false,
+                  "required" : [
+                    "category",
+                    "count",
+                    "boxes",
+                    "sizeCm",
+                    "condition",
+                    "confidence"
+                  ],
+                  "properties" : {
+                    "category" : {
+                      "type" : "string",
+                      "enum" : [
+                        "DISPLAY_RACK",
+                        "STORAGE_BIN",
+                        "FOLDING_TABLE",
+                        "UNKNOWN"
+                      ]
+                    },
+                    "count" : {
+                      "type" : "integer",
+                      "minimum" : 0,
+                      "maximum" : 2147483647
+                    },
+                    "boxes" : {
+                      "type" : "array",
+                      "items" : {
+                        "type" : "object",
+                        "additionalProperties" : false,
+                        "required" : [
+                          "x",
+                          "y",
+                          "width",
+                          "height"
+                        ],
+                        "properties" : {
+                          "x" : {
+                            "type" : "number",
+                            "minimum" : 0,
+                            "maximum" : 1
+                          },
+                          "y" : {
+                            "type" : "number",
+                            "minimum" : 0,
+                            "maximum" : 1
+                          },
+                          "width" : {
+                            "type" : "number",
+                            "minimum" : 0,
+                            "maximum" : 1
+                          },
+                          "height" : {
+                            "type" : "number",
+                            "minimum" : 0,
+                            "maximum" : 1
+                          }
+                        }
+                      }
+                    },
+                    "sizeCm" : {
+                      "type" : [
+                        "object",
+                        "null"
+                      ],
+                      "additionalProperties" : false,
+                      "required" : [
+                        "width",
+                        "depth",
+                        "height"
+                      ],
+                      "properties" : {
+                        "width" : {
+                          "type" : "integer",
+                          "minimum" : 1,
+                          "maximum" : 2147483647
+                        },
+                        "depth" : {
+                          "type" : "integer",
+                          "minimum" : 1,
+                          "maximum" : 2147483647
+                        },
+                        "height" : {
+                          "type" : "integer",
+                          "minimum" : 1,
+                          "maximum" : 2147483647
+                        }
+                      }
+                    },
+                    "condition" : {
+                      "type" : "string",
+                      "enum" : [
+                        "GOOD",
+                        "FAIR",
+                        "POOR"
+                      ]
+                    },
+                    "confidence" : {
+                      "type" : "number",
+                      "minimum" : 0,
+                      "maximum" : 1
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "reasoning_effort" : "minimal"
+    }
+  },
+  "response" : {
+    "status" : 200,
+    "body" : {
+      "id" : "chatcmpl-01a1a5be-7065-74c2-b082-8033c1ce67ac",
+      "choices" : [
+        {
+          "finish_reason" : "stop",
+          "index" : 0,
+          "message" : {
+            "content" : "{\"lines\": [{\"boxes\": [{\"height\": 0.9, \"width\": 0.72, \"x\": 0.21, \"y\": 0.07}], \"category\": \"DISPLAY_RACK\", \"condition\": \"GOOD\", \"confidence\": 0.92, \"count\": 1, \"sizeCm\": {\"depth\": 60, \"height\": 150, \"width\": 90}}]}",
+            "refusal" : null,
+            "role" : "assistant"
+          },
+          "logprobs" : null
+        }
+      ],
+      "created" : 1793782083,
+      "model" : "muse-spark-1.3",
+      "object" : "chat.completion",
+      "usage" : {
+        "completion_tokens" : 404,
+        "prompt_tokens" : 795,
+        "total_tokens" : 1199,
+        "completion_tokens_details" : {
+          "reasoning_tokens" : 305
+        },
+        "prompt_tokens_details" : {
+          "cached_tokens" : 0
+        }
+      }
+    }
+  }
+}

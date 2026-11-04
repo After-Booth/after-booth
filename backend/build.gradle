@@ -64,3 +64,21 @@ tasks.named('test') {
 		systemProperty 'afterbooth.english-condition-recording-approved', 'true'
 	}
 }
+
+// Test-classpath tools stay outside the product artifact and default to key-free replay/dry run.
+tasks.register('prepareReplayTools') {
+	dependsOn testClasses
+	doLast {
+		layout.buildDirectory.file('replay-preparation.classpath').get().asFile.text = sourceSets.test.runtimeClasspath.asPath
+	}
+}
+tasks.register('reviewEnglishReplay', JavaExec) {
+	dependsOn testClasses
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = 'com.afterbooth.ai.EnglishReplayRecorder'
+	workingDir = projectDir
+	args providers.gradleProperty('manifest').getOrElse('MISSING-MANIFEST')
+	if (providers.gradleProperty('recordEnglishReplay').isPresent()) {
+		args '--record'
+	}
+}
