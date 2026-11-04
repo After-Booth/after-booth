@@ -490,3 +490,13 @@ The stopped session's single failure was a test-side hardcoded CSRF count (login
 Review: fresh read-only review found blocking R1 (`trackChild` drain-count leak on thread-start failure) plus R2–R5; all fixed with regression tests. Fresh re-review approved with no blocking findings; follow-up R6 (intake log-pinning test) and R7 (`Error` compensation) also implemented and green. Declined as cosmetic: `@VisibleForTesting` on the test seam and empty `errorType` for anonymous classes; CONVENTIONS scope-list `member` entry left as a follow-up note. Codex CLI review was unavailable (provider usage limit until 2026-11-04 03:18); independent read-only reviews replaced it, and no Codex execution is claimed.
 
 Not verified: full backend suite, frontend/browser/E2E (no frontend files changed), real Resend/Meta provider retention and delivery, multi-server withdrawal (excluded by D-083), deployment, production data. No push, PR, issue/comment/status change or merge was performed.
+
+## Issue #70 — Frontend authentication and design (2026-11-04)
+
+- [x] Authentication screens, in-memory session with coordinated refresh, event picker, login gate and visual refresh (PR #76).
+- [x] Real local server run (`cd e2e && npm run test:auth`, Fake mail, replay): signup → verification → login → account → own event → photo intake, cross-member denial, giver/receiver request → hold → confirmation, withdrawal blocked then allowed.
+- [ ] Authenticated demo E2E: `e2e/tests/demo.spec.ts` is skipped. New members cannot own the seeded organizations, and the recorded allocation and handover replay fixtures depend on the seeded database, so the demo needs a login step and new recordings. Owner: demo-qa. Recording needs human approval (credit gate); schedule it before G3, because main has no automated demo run until it lands.
+- [ ] Time-controlled pending-registration expiry, re-registration isolation and expired transaction-history messaging in the browser.
+- [ ] Password change and reset against the real server (component tests only so far).
+- [ ] Decide how the live demo signs in before G3 (signup needs the private Fake code, so a pre-created demo account is needed).
+

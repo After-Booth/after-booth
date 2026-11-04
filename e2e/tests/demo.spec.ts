@@ -176,6 +176,10 @@ async function prepareRaceRequest(page: Page, orgName: string): Promise<number> 
   return readSavedRequestId(page);
 }
 
+// The demo predates member authentication: it expects an anonymous home page and seeded
+// organizations. It stays skipped until it is rewritten for authenticated members (docs/TASKS.md #70).
+test.skip(true, 'Pending the authenticated demo rewrite');
+
 test('demo scenario from photo intake to reuse stats', async ({ browser, request }) => {
   for (const file of [PHOTO_BINS, AUDIO_SEDAN, PHOTO_RACK]) {
     if (!fs.existsSync(file)) throw new Error(`Missing sample file: ${file}`);

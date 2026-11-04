@@ -21,8 +21,8 @@ const inputClass =
 const buttonClass =
   'min-h-12 rounded-xl bg-emerald-800 px-5 py-3 font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700 disabled:opacity-40'
 
-export function RequestScreen() {
-  const request = useRequest()
+export function RequestScreen({ organizationId }: { organizationId?: number }) {
+  const request = useRequest(organizationId)
   const [text, setText] = useState('')
   const { status, fields, interpretation, saved } = request
   const busy = ['starting', 'recording', 'interpreting', 'saving'].includes(status)
@@ -43,10 +43,8 @@ export function RequestScreen() {
   return (
     <main className="min-h-dvh bg-stone-50 px-4 py-8 text-slate-900 sm:py-12">
       <div className="mx-auto max-w-xl space-y-7">
-        <header>
-          <p className="text-sm font-semibold tracking-widest text-emerald-800">
-            애프터부스 · 물품 이어받기
-          </p>
+        <header className="page-intro">
+          <p className="section-kicker">물품 이어받기</p>
           <h1 className="mt-3 text-3xl font-bold tracking-tight">다음 행사에 필요한 물품</h1>
           <p className="mt-3 leading-relaxed text-slate-600">
             필요한 물품과 가져갈 차량을 알려 주세요.
@@ -63,7 +61,9 @@ export function RequestScreen() {
             id="organization"
             className={inputClass}
             value={request.organizationId}
-            disabled={busy || status === 'saved' || request.catalogStatus !== 'ready'}
+            disabled={
+              !!organizationId || busy || status === 'saved' || request.catalogStatus !== 'ready'
+            }
             onChange={(event) => request.setOrganizationId(event.target.value)}
           >
             <option value="">단체를 직접 선택해 주세요</option>
@@ -74,7 +74,9 @@ export function RequestScreen() {
             ))}
           </select>
           <p className="mt-2 text-sm text-slate-500">
-            로그인 없이 선택해요. 음성으로는 단체가 바뀌지 않아요.
+            {organizationId
+              ? '로그인한 계정의 단체로 요청해요.'
+              : '음성으로는 단체가 바뀌지 않아요.'}
           </p>
           {request.catalogStatus === 'loading' && (
             <p role="status">단체 목록을 불러오는 중이에요…</p>

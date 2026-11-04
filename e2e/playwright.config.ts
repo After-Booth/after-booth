@@ -4,6 +4,7 @@ const baseURL = process.env.E2E_BASE_URL ?? 'http://localhost:18080';
 
 export default defineConfig({
   testDir: './tests',
+  testIgnore: 'auth.spec.ts',
   fullyParallel: false,
   workers: 1,
   timeout: 600_000,

@@ -172,7 +172,7 @@ export function useIntake() {
   }, [photoUrl])
 
   const upload = useCallback(
-    async (photo: File) => {
+    async (photo: File, selectedEventId?: number) => {
       writeController.current?.abort()
       const controller = new AbortController()
       writeController.current = controller
@@ -185,7 +185,9 @@ export function useIntake() {
       setError(undefined)
       setUploading(true)
       try {
-        const event = (await listEvents({ signal: controller.signal })).data[0]
+        const event = (await listEvents({ signal: controller.signal })).data.find(
+          (entry) => selectedEventId === undefined || entry.id === selectedEventId,
+        )
         if (controller.signal.aborted) return
         if (!event) {
           setError('등록할 행사를 찾지 못했어요.')
