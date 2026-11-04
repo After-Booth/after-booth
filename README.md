@@ -2,7 +2,7 @@
 
 When a festival, exhibition or pop-up ends, the booth equipment (display racks, storage bins, folding tables) has to be cleared before the teardown deadline, often within hours. Whatever has no new owner by then gets thrown away. AfterBooth hands that equipment to the next event or group before the deadline.
 
-Built for the Meta Global AI Developer Hackathon (Indie track) by a team of two. The UI is Korean and mobile first; this README and the rest of the repository are in English. The product spec is [`docs/SPEC.md`](docs/SPEC.md).
+Built for the Meta Global AI Developer Hackathon (Indie track) by a team of two. The current UI and user-facing messages are English and mobile first. Times are shown in Asia/Seoul (KST). The product spec is [`docs/SPEC.md`](docs/SPEC.md).
 
 ## How it works
 
@@ -37,7 +37,7 @@ Every AI call in the product goes to the Meta Model API through one gateway (`Ai
 
 ```mermaid
 flowchart TD
-    U["Browser<br/>React 19, Korean UI"] -->|REST /api| API["Spring Boot 4.1 API"]
+    U["Browser<br/>React 19, English UI"] -->|REST /api| API["Spring Boot 4.1 API"]
     API --> D["Domain services<br/>intake, request, allocation, handover, stats"]
     D --> DB[("PostgreSQL 17")]
     D --> GW["AiGateway<br/>live / record / replay"]
@@ -79,68 +79,51 @@ Idempotency crash recovery is covered by `IdempotencyRecoveryIntegrationTest`, w
 
 Because the key covers the exact request bytes, replay only answers the recorded demo inputs in the recorded order. New photos or recordings need live mode.
 
-## Run it
+## Run and verify locally
 
-Requirements: Docker only. No JDK, Node or Meta API key is needed.
+Authentication is required. The root `docker-compose.yml` provides PostgreSQL and the app image in replay mode, but its app service exposes HTTP and supplies no authentication HMAC/JWT settings or mail activation. **The old “Docker only” command is not a supported signup/login or complete-demo recipe after authentication.** Starting a container or getting `/api/health` is separate from proving authentication and the transaction flow. Do not disable authentication to revive the old demo.
 
-```bash
-docker compose up --build
-```
-
-The first build takes several minutes. When the log shows `Started AfterboothApplication`, open http://localhost:8080. The health endpoint confirms replay mode:
+For the automated local HTTPS environment, install Docker, Java 21, Node.js and Chromium. From the repository root:
 
 ```bash
-curl http://localhost:8080/api/health
-```
-
-It answers with `"status":"UP"` and `"aiMode":"replay"`. This compose file pins replay mode and does not load any key file, so it never calls the Meta Model API and spends nothing.
-
-### Try the recorded demo
-
-Replay answers only these inputs, in this order, from an empty database ([`fixtures/README.md`](fixtures/README.md) §Demo scenario has every detail):
-
-1. **Photo intake** (home page): upload `spike/samples/bins-orange-stack.jpg`. Wait for "수납함 4개" (4 storage bins) and press "재고로 등록" (register) once, without edits.
-2. **Voice request** (`#/request`): choose "Community Makers", upload `spike/samples/audio-receiver-racks-sedan.wav` with "녹음 파일 올리기 (WAV)", press "픽업 요청 저장" (save), then "배정 제안 받기" (get a proposal). The 180 cm rack does not fit a sedan, so the screen offers alternatives. Do not pick one.
-3. **Two-window race** (`#/request` in two windows): choose "Seoul Event Collective" in one and "Campus Festival Crew" in the other, type exactly `진열대 한 개가 필요해요. 밴으로 가져갈게요.` in both, press "입력한 내용 해석하기" (interpret) and "픽업 요청 저장" (save), then press "배정 제안 받기" in both. One window wins the last rack; the other gets an alternative.
-4. In the winning window, press "진열대 예약 확정하기" (confirm the rack).
-5. **Handover** (`#/handover`): select the confirmed reservation and upload `spike/samples/rack-gondola-single.jpg`. The recount matches one rack and completes the handover.
-6. The statistics on the same screen show one reused display rack and its volume, 648 L.
-
-To start again, delete the database and restart:
-
-```bash
-docker compose down -v
-```
-
-```bash
-docker compose up --build
-```
-
-### Run the whole demo automatically
-
-A Playwright test drives the same scenario through the real UI against a separate compose project on port 18080, including two browser contexts racing for the last rack ([`e2e/README.md`](e2e/README.md)). Requirements: Docker and Node 20 or later.
-
-```bash
-docker compose -p afterbooth-e2e-12 -f docker-compose.yml -f e2e/docker-compose.e2e.yml up --build -d
-cd e2e
+npm --prefix frontend ci
+npm --prefix frontend run build
+cd backend
+./gradlew bootJar
+cd ../e2e
 npm ci
 npm run install-browsers
-npx playwright test
-cd ..
-docker compose -p afterbooth-e2e-12 -f docker-compose.yml -f e2e/docker-compose.e2e.yml down -v
+npm run test:auth
 ```
 
-### Live mode
+The authentication harness starts a disposable PostgreSQL 17 database on a random loopback port and the real jar at `https://localhost:5443`. It generates signing/HMAC keys in memory and a short-lived TLS keystore in a temporary directory, uses the `local` profile with explicitly enabled local-only Fake mail, and pins Chromium to that certificate. It removes its database and TLS files on shutdown. Do not put generated keys, certificates, codes or accounts in Git. Fake mail proves local behavior, not real mailbox ownership or delivery. AI replay makes no paid provider calls. See [`e2e/README.md`](e2e/README.md) for the exact test scope and prerequisites.
 
-Live mode makes real, paid calls to the Meta Model API. A person opts in explicitly, by copying `.env.example` to `.env` and filling in the key, after the credit check in [`AGENTS.md`](AGENTS.md) (hard rule 6):
+A manual local installation needs the same configuration: a private PostgreSQL database, HTTPS and a locally trusted certificate, exact `afterbooth.auth.allowed-origin`, HMAC current-version/key map, JWT issuer/audience/current-kid/private-key/public-key map, and explicitly selected local Fake mail. Generate keys locally and keep their values outside the checkout. The automated harness in [`e2e/tests/authStack.ts`](e2e/tests/authStack.ts) is the executable reference for the property structure. Default mail is disabled; Fake is rejected outside `local` or alongside production profiles. Actual delivery requires deployment-only Resend configuration and separate verification. The automated harness consumes Fake codes privately in memory; it adds no public code lookup, auto-fill or verification bypass.
+
+### Current demo status
+
+The authenticated English full AI demo is **not ready or verified**. The existing recordings were captured for Korean prompts and seeded inventory. English prompts and newly owned inventory change exact replay requests. Original recordings are preserved; no English model recording or English voice success is claimed. [`fixtures/README.md`](fixtures/README.md) explains the matching boundary.
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.live.yml up --build
+npm --prefix e2e run test:demo  # Explicit full-demo readiness gate; currently fails.
+npm --prefix e2e test          # Auth checks followed by that gate; cannot hide a skipped demo.
 ```
 
-Developer commands (backend, frontend, tests) are in [`AGENTS.md`](AGENTS.md) §Commands.
+Authentication checks alone do not certify allocation-agent → completed photo handover → statistics. Confirmation followed by cancellation is not completed handover. The current evidence, blockers and required human actions are in [`docs/SUBMISSION_READINESS.md`](docs/SUBMISSION_READINESS.md).
 
-## Measured so far
+For a manual judging session, prepare verified synthetic members in separate HTTPS browser sessions: one giver owns a newly created event and its inventory; one receiver owns the request, HOLD and confirmation. A last-item race needs a second receiver in a third session. Never select or take over seeded organizations. The giver handles photo recount and quantity settlement; a receiver cancels their own reservation. Before filming, approve and prepare exact English replay inputs, validate all steps through HANDED_OVER and statistics, then follow [`docs/DEMO_SCRIPT.md`](docs/DEMO_SCRIPT.md). No completed current manual run is claimed.
+
+### Historical replay inputs
+
+The former unauthenticated Korean demo used `spike/samples/bins-orange-stack.jpg`, the **Korean** WAV `spike/samples/audio-receiver-racks-sedan.wav`, the original text `진열대 한 개가 필요해요. 밴으로 가져갈게요.`, and `spike/samples/rack-gondola-single.jpg`. These are historical inputs, not a working authenticated English demo recipe. Preserve their bytes and do not rename the WAV as English. Existing samples and original recordings do not need a real API key; missing exact requests fail rather than inventing responses.
+
+### Paid provider modes
+
+Live/record modes need separate human approval before any call. This change performs none. The historical live/record Compose overrides do not supply the new HTTPS/authentication setup, so they are not a current full-demo run recipe. Configure and verify authentication first; then approve a bounded recording plan and record its actual cost in [`docs/BUDGET.md`](docs/BUDGET.md). Keep key files human-managed and outside committed data.
+
+## Historical measurements (before authentication and English conversion)
+
+The following are historical project records, not runs performed for the current authenticated English build.
 
 - Three human-approved live runs of the full scenario, each from a clean database, each with 19 AI calls answered live and no fallback:
   - one through the UI with Playwright: photo to result in 6.4 s, the whole scenario in 38.2 s ([`docs/TASKS.md`](docs/TASKS.md) #12);
@@ -153,12 +136,13 @@ Developer commands (backend, frontend, tests) are in [`AGENTS.md`](AGENTS.md) §
 
 The product's AI is Meta-only. The development work used three coding agents, all disclosed here:
 
-- **Claude Code** and **Codex** wrote and reviewed most of the code under one rulebook, [`AGENTS.md`](AGENTS.md), with agent definitions in [`.claude/`](.claude) and [`.codex/`](.codex). Pull requests are reviewed by a Claude reviewer agent and Codex before a person merges them ([`docs/REVIEW_GUIDE.md`](docs/REVIEW_GUIDE.md)).
+- **Claude Code** and **Codex** wrote and reviewed most of the code under one rulebook, [`AGENTS.md`](AGENTS.md), with agent definitions in [`.claude/`](.claude) and [`.codex/`](.codex). The repository review workflow calls for a Claude reviewer agent and Codex before human merge; individual historical substitutions and gaps are recorded ([`docs/REVIEW_GUIDE.md`](docs/REVIEW_GUIDE.md)).
 - **Muse Code** (Meta) reviewed and implemented parts of the core paths. Each use is logged with a `[Muse Code]` tag in [`docs/DECISIONS.md`](docs/DECISIONS.md):
   - D-024: review of the API contract.
   - D-052: review of the allocation agent ([screenshot](docs/evidence/muse-allocation-review.png)).
   - D-061 and D-062: implementation and review of strict quantity parsing for handover and holds.
   - D-066: review of the photo intake path ([output rendering](docs/evidence/muse-intake-review.png)).
+  - D-084: withdrawal implementation completion record.
 
 ## Repository map
 

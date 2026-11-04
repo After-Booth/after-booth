@@ -493,6 +493,8 @@ Not verified: full backend suite, frontend/browser/E2E (no frontend files change
 
 ## Issue #70 — Frontend authentication and design (2026-11-04)
 
+Historical PR #76 delivery at `d02c982`; the checklist below preserves that delivery record. Current follow-up results and remaining gaps are recorded under #17 below.
+
 - [x] Authentication screens, in-memory session with coordinated refresh, event picker, login gate and visual refresh (PR #76).
 - [x] Real local server run (`cd e2e && npm run test:auth`, Fake mail, replay): signup → verification → login → account → own event → photo intake, cross-member denial, giver/receiver request → hold → confirmation, withdrawal blocked then allowed.
 - [ ] Authenticated demo E2E: `e2e/tests/demo.spec.ts` is skipped. New members cannot own the seeded organizations, and the recorded allocation and handover replay fixtures depend on the seeded database, so the demo needs a login step and new recordings. Owner: demo-qa. Recording needs human approval (credit gate); schedule it before G3, because main has no automated demo run until it lands.
@@ -500,3 +502,20 @@ Not verified: full backend suite, frontend/browser/E2E (no frontend files change
 - [ ] Password change and reset against the real server (component tests only so far).
 - [ ] Decide how the live demo signs in before G3 (signup needs the private Fake code, so a pre-created demo account is needed).
 
+
+## Issue #17 — current authenticated English submission readiness (2026-11-04)
+
+Baseline: fetched `origin/main` `d02c98232cad21ae65d5c94a6bb45fee77bc23f0`; branch `codex/17-submission-readiness`, isolated `/private/tmp/afterbooth-17-submission-readiness`. The original checkout remains on main. The user's latest correction requires all new repository records in English; existing historical content remains unchanged.
+
+- [x] Reconciled historical #9/#15 completion against current GitHub issues/PR evidence; documented the actual authentication migration without changing SQL.
+- [x] Fixed refresh-notice sign-out and giver/receiver cancellation controls, with regression tests and unchanged server permissions.
+- [x] Converted current UI, user messages, labels, AI instructions, contract descriptions and current run guides to English; retained Korean user input, recordings, Unicode passwords and Asia/Seoul semantics.
+- [x] Added actual HTTPS two-member transaction verification through HANDED_OVER and statistics with an explicitly synthetic AiGateway and local Fake mail. This is separate from real Meta replay evidence.
+- [x] Added pending-registration boundary/non-enumeration and re-registration ownership isolation checks. Actual HTTPS verifies expired-history API denial; browser-level time-controlled messaging remains unverified.
+- [x] Real HTTPS browser authentication suite: six tests passed, including password change/reset, resend verification and refresh-trouble logout. The refresh 503 is Playwright-injected; logout/cookies/reload use the real server.
+- [x] Reviewed blank login and credential-free refresh screens at mobile/desktop widths; no human teammate review is inferred.
+- [x] Rewrote the full-demo test for owned events/inventory and three isolated authenticated contexts; strict TypeScript checking and discovery passed. Runtime success is not implied.
+- [ ] Authenticated English full Meta demo and new English replay: separate paid recording approval required. Existing ConditionInterpretationReplayTest fails on the missing English Spark request rather than skipping or modifying the original recording.
+- [ ] Actual teammate reviews, current video, submission form access/fields and final external submission.
+
+See [SUBMISSION_READINESS](SUBMISSION_READINESS.md) for commands, evidence boundaries, current failures, G3 report and human actions. #17 and Phase 3 remain incomplete; no push, PR, merge, GitHub write, deployment, upload or external submission was performed. The earlier #70 checklist above is its historical delivery record; this section describes newly verified scope and remaining gaps.

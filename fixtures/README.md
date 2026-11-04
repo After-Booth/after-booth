@@ -1,5 +1,17 @@
 # fixtures
 
+## Current English/authenticated status (#17)
+
+The original recordings below are historical provider evidence and remain unchanged. They do **not** currently certify the authenticated English demo. English condition/allocation prompts, English category labels and tool feedback change the canonical request hash. Allocation recordings also contain seeded `itemId: 1`; fresh member-owned inventory has different IDs. Authentication never grants access to those seeded owners. Do not remove inputs from the hash or manually translate recorded request/response files to force a match.
+
+`npm --prefix e2e run test:auth` verifies its documented subset with local Fake mail and replay; it is separate from `npm --prefix e2e run test:demo`, which fails explicitly until the authenticated English full-demo prerequisites are met. `npm --prefix e2e test` includes that readiness gate. Synthetic AI unit/integration test responses are test doubles, not Meta recordings or real-model end-to-end evidence.
+
+A new English recording needs separate human approval and a bounded cost plan. Prepare verified synthetic giver/receiver accounts in separate HTTPS sessions, create an owned event and inventory, and record exact approved inputs through allocation, completed handover and statistics. A concurrent last-item race requires another receiver session. Validate both race outcomes without weakening the server rules. Never commit credentials, codes or temporary test keys. No new paid recording was made for #17.
+
+The original audio samples contain Korean speech and the Transcribe configuration keeps its Korean language bias. English voice recognition/structuring/allocation has not been verified. Original user transcripts stay original; English system-generated explanations are a separate requirement.
+
+The historical HTTP Compose and seeded-organization instructions below describe the pre-authentication build only. Use the current [root README](../README.md) and [E2E guide](../e2e/README.md) for current HTTPS authentication prerequisites.
+
 AI responses that `AiGateway` reads when `AI_MODE=replay`, plus input files for E2E and tests. `record` mode writes here.
 
 - No photos or audio with real faces or personal data
@@ -54,7 +66,7 @@ The windows are `afterbooth.ai.fallback-after.spark=8s`, `afterbooth.ai.fallback
 
 The fallback covers a network loss before a step starts. Inside a step, later calls carry the live answer of the first call (allocation tool-call IDs, Spark boxes sent to SAM), so they have no fixture. Allocation restarts its conversation once from the first turn when a model call fails before any HOLD, which replays the recorded run, and logs one INFO line with the request ID. Intake and handover fail that attempt (`AI_UNAVAILABLE` or a failed draft) and succeed on the retry, because their first call falls back. A stalled (not refused) connection inside a step waits the normal Spark timeout first. For the stage, prefer replay (the compose default) or keep network drops between steps. Every exchange also writes one INFO with capability, mode, outcome (`live`, `recorded`, `reused`, `replay`, `fallback`, or `failed`) and elapsed milliseconds.
 
-## Demo scenario
+## Historical demo scenario (2026-11-01, before authentication)
 
 The recorded demo replays only when every AI input is byte-identical and every step runs in this order from an empty database, because item IDs and stock are part of the allocation prompts (PR #40 R1, R9). Use these inputs; do not edit the intake draft or the interpreted conditions.
 
@@ -74,6 +86,6 @@ docker compose -f docker-compose.yml -f docker-compose.record.yml up --build -d
 
 Network-loss check without spending credits: start live mode with a placeholder key and an unroutable base URL (`AI_MODE: live`, `META_API_KEY: not-a-real-key`, `META_BASE_URL: http://10.255.255.1` in an override file) and run steps 1–7. The first Spark call after a quiet minute waits the 8 s window, then every step completes from fixtures.
 
-No automated test replays these demo fixtures yet; #12's replay E2E is the check that a prompt, schema or model-data change has not orphaned them.
+Historical note: #12 later added the Korean seeded demo replay E2E. Authentication introduced in PR #76 skipped it. #17 makes that gap an explicit failing readiness gate; there is no current authenticated English full-demo pass.
 
 Measured on 2026-11-01 (#13): live text structuring 1.4 s, allocation 7–10 s over 3–4 tool turns, handover recount 3.3 s. The loading screens use these values (`frontend/src/features/aiLatency.ts`).
