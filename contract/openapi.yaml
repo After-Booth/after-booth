@@ -1800,7 +1800,7 @@ components:
         message:
           type: string
           description: English message shown to the user
-          example: Not enough quantity is available.
+          example: Not enough items remain.
     ErrorCode:
       type: string
       enum:
