@@ -14,5 +14,5 @@ export default defineConfig({
     trace: 'off',
     screenshot: 'off',
   },
-  reporter: [['list']],
+  reporter: [['./privacyReporter.ts']],
 });

@@ -1,4 +1,5 @@
 import { chromium, expect, test, type Browser, type Page } from '@playwright/test';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { AUTH_ORIGIN, startAuthStack, uniqueEmail, type AuthStack } from './authStack';
@@ -58,14 +59,14 @@ async function call<T = any>(page: Page, method: string, url: string, body?: unk
 
 async function signUp(page: Page, email: string) {
   await page.goto('/');
-  await page.getByRole('button', { name: '회원가입' }).click();
-  await page.getByLabel('이메일', { exact: true }).fill(email);
-  await page.getByLabel('비밀번호').fill(PASSWORD);
+  await page.getByRole('button', { name: 'Create account' }).click();
+  await page.getByLabel('Email', { exact: true }).fill(email);
+  await page.getByLabel('Password').fill(PASSWORD);
   const code = stack.nextCode('SIGNUP_VERIFY');
-  await page.getByRole('button', { name: '인증 메일 요청' }).click();
-  await page.getByLabel('이메일 인증번호').fill(await code);
-  await page.getByRole('button', { name: '가입 완료' }).click();
-  await expect(page.getByText('이메일 인증이 완료되었어요. 로그인해 주세요.')).toBeVisible();
+  await page.getByRole('button', { name: 'Request verification email' }).click();
+  await page.getByLabel('Email verification code').fill(await code);
+  await page.getByRole('button', { name: 'Complete signup' }).click();
+  await expect(page.getByText('Email verified. Please sign in.')).toBeVisible();
 }
 
 const tokens = new WeakMap<Page, string>();
@@ -75,19 +76,19 @@ async function logIn(page: Page, email: string) {
     const header = request.headers()['authorization'];
     if (header && request.url().includes('/api/')) tokens.set(page, header);
   });
-  await page.getByLabel('이메일', { exact: true }).fill(email);
-  await page.getByLabel('비밀번호').fill(PASSWORD);
-  await page.getByRole('button', { name: '로그인', exact: true }).click();
-  await expect(page.getByRole('navigation', { name: '주요 메뉴' })).toBeVisible();
+  await page.getByLabel('Email', { exact: true }).fill(email);
+  await page.getByLabel('Password').fill(PASSWORD);
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await expect(page.getByRole('navigation', { name: 'Main navigation' })).toBeVisible();
 }
 
 async function createEvent(page: Page, name: string) {
-  await page.getByText('새 행사 만들기').click();
-  await page.getByLabel('행사 이름').fill(name);
-  await page.getByLabel('장소').fill('Synthetic Hall');
-  await page.getByLabel('철수 마감 시간').fill('2030-01-01T18:00');
-  await page.getByRole('button', { name: '행사 만들기' }).click();
-  await expect(page.getByText('행사를 만들었어요. 이제 사진을 등록해 주세요.')).toBeVisible();
+  await page.getByText('Create a new event').click();
+  await page.getByLabel('Event name').fill(name);
+  await page.getByLabel('Venue').fill('Synthetic Hall');
+  await page.getByLabel('Teardown deadline (Asia/Seoul, KST)').fill('2030-01-01T18:00');
+  await page.getByRole('button', { name: 'Create event' }).click();
+  await expect(page.getByText('Event created. Add your photo now.')).toBeVisible();
 }
 
 test('signup, verification, login, account lookup, own event and photo intake on the real server', async () => {
@@ -97,13 +98,13 @@ test('signup, verification, login, account lookup, own event and photo intake on
 
   await signUp(page, email);
   // A fresh login is required after verification: no automatic login.
-  await expect(page.getByRole('navigation', { name: '주요 메뉴' })).toHaveCount(0);
+  await expect(page.getByRole('navigation', { name: 'Main navigation' })).toHaveCount(0);
   await logIn(page, email);
 
   await page.goto('/#/account');
-  await expect(page.getByText(`이메일: ${email}`)).toBeVisible();
-  await expect(page.getByText('상태: ACTIVE')).toBeVisible();
-  await expect(page.getByText(/^단체 번호: \d+$/)).toBeVisible();
+  await expect(page.getByText(`Email: ${email}`)).toBeVisible();
+  await expect(page.getByText('Status: ACTIVE')).toBeVisible();
+  await expect(page.getByText(/^Organization ID: \d+$/)).toBeVisible();
 
   // Tokens stay out of browser storage; the refresh token is an HttpOnly, Secure cookie.
   const stored = await page.evaluate(() => [
@@ -118,19 +119,19 @@ test('signup, verification, login, account lookup, own event and photo intake on
   await page.goto('/#/');
   await createEvent(page, 'Synthetic Expo');
   await page.locator('input[type="file"][accept="image/jpeg,image/png"]').setInputFiles(PHOTO_BINS);
-  await expect(page.getByLabel('분류별 수량').getByText('수납함 4개')).toBeVisible({
+  await expect(page.getByLabel('Quantity by category').getByText('Storage bin 4 items')).toBeVisible({
     timeout: AI_TIMEOUT_MS,
   });
-  await page.getByRole('button', { name: '재고로 등록' }).click();
-  await expect(page.getByText('재고로 등록했어요.')).toBeVisible();
+  await page.getByRole('button', { name: 'Register inventory' }).click();
+  await expect(page.getByText('Inventory registered.')).toBeVisible();
 
   // A reload restores the session through the refresh cookie without a new login.
   await page.reload();
-  await expect(page.getByRole('navigation', { name: '주요 메뉴' })).toBeVisible();
+  await expect(page.getByRole('navigation', { name: 'Main navigation' })).toBeVisible();
 
   await page.goto('/#/account');
-  await page.getByRole('button', { name: '로그아웃' }).click();
-  await expect(page.getByRole('heading', { name: '다시 만나요' })).toBeVisible();
+  await page.getByRole('button', { name: 'Sign out' }).click();
+  await expect(page.getByRole('heading', { name: 'Welcome back' })).toBeVisible();
   await context.close();
 });
 
@@ -166,7 +167,7 @@ test('a second member cannot see or read the first member’s event', async () =
     if (header && request.url().includes('/api/')) secondToken = header;
   });
   await secondPage.reload();
-  await expect(secondPage.getByRole('navigation', { name: '주요 메뉴' })).toBeVisible();
+  await expect(secondPage.getByRole('navigation', { name: 'Main navigation' })).toBeVisible();
   await expect.poll(() => secondToken).not.toBe('');
   const denied = await apiGet(secondPage, `/api/events/${own.id}`, secondToken);
   expect([403, 404]).toContain(denied.status);
@@ -176,7 +177,6 @@ test('a second member cannot see or read the first member’s event', async () =
   await first.close();
   await second.close();
 });
-
 
 test('giver inventory, receiver request, hold, confirmation and withdrawal eligibility', async () => {
   const giverContext = await browser.newContext({ baseURL: AUTH_ORIGIN });
@@ -190,11 +190,11 @@ test('giver inventory, receiver request, hold, confirmation and withdrawal eligi
   await logIn(giver, giverEmail);
   await createEvent(giver, 'Giver Expo');
   await giver.locator('input[type="file"][accept="image/jpeg,image/png"]').setInputFiles(PHOTO_BINS);
-  await expect(giver.getByLabel('분류별 수량').getByText('수납함 4개')).toBeVisible({
+  await expect(giver.getByLabel('Quantity by category').getByText('Storage bin 4 items')).toBeVisible({
     timeout: AI_TIMEOUT_MS,
   });
-  await giver.getByRole('button', { name: '재고로 등록' }).click();
-  await expect(giver.getByText('재고로 등록했어요.')).toBeVisible();
+  await giver.getByRole('button', { name: 'Register inventory' }).click();
+  await expect(giver.getByText('Inventory registered.')).toBeVisible();
   const giverOrg = (await call(giver, 'GET', '/api/members/me')).body.organizationId as number;
 
   await signUp(receiver, receiverEmail);
@@ -241,14 +241,16 @@ test('giver inventory, receiver request, hold, confirmation and withdrawal eligi
   expect([403, 404]).toContain(foreignConfirm.status);
 
   await receiver.goto(`/#/allocation?requestId=${requestId}`);
-  await receiver.getByRole('button', { name: /예약 확정하기$/ }).click();
+  await receiver.getByRole('button', { name: /Confirm reservation$/ }).click();
   await expect
     .poll(async () => (await call(receiver, 'GET', `/api/reservations/${reservationId}`)).body.status)
     .toBe('CONFIRMED');
 
   await giver.goto('/#/handover');
   await expect(
-    giver.getByRole('option', { name: new RegExp(`예약 #${reservationId} `) }),
+    giver.getByRole('option', {
+      name: new RegExp(`Reservation #${reservationId} `),
+    }),
   ).toHaveCount(1);
 
   // Withdrawal is rejected while a CONFIRMED reservation exists, for either side.
@@ -258,16 +260,16 @@ test('giver inventory, receiver request, hold, confirmation and withdrawal eligi
   ] as const) {
     await page.goto('/#/account');
     page.once('dialog', (dialog) => void dialog.accept());
-    await page.getByLabel('현재 비밀번호').fill(PASSWORD);
+    await page.getByLabel('Current password').fill(PASSWORD);
     const answer = page.waitForResponse(
       (r) => r.url().endsWith('/api/members/me') && r.request().method() === 'DELETE',
     );
-    await page.getByRole('button', { name: '회원 탈퇴' }).click();
+    await page.getByRole('button', { name: 'Withdraw account' }).click();
     const response = await answer;
     expect(response.status()).toBe(409);
     expect((await response.json()).code).toBe('WITHDRAWAL_BLOCKED');
     await expect(page.getByRole('alert')).toBeVisible();
-    await expect(page.getByText(`이메일: ${email}`)).toBeVisible();
+    await expect(page.getByText(`Email: ${email}`)).toBeVisible();
   }
 
   // After the receiver cancels, both members can withdraw and cannot log in again.
@@ -280,16 +282,206 @@ test('giver inventory, receiver request, hold, confirmation and withdrawal eligi
   ] as const) {
     await page.goto('/#/account');
     page.once('dialog', (dialog) => void dialog.accept());
-    await page.getByLabel('현재 비밀번호').fill(PASSWORD);
-    await page.getByRole('button', { name: '회원 탈퇴' }).click();
-    await expect(page.getByRole('heading', { name: '다시 만나요' })).toBeVisible();
-    await page.getByLabel('이메일', { exact: true }).fill(email);
-    await page.getByLabel('비밀번호').fill(PASSWORD);
-    await page.getByRole('button', { name: '로그인', exact: true }).click();
-    await expect(page.getByRole('heading', { name: '다시 만나요' })).toBeVisible();
-    await expect(page.getByRole('navigation', { name: '주요 메뉴' })).toHaveCount(0);
+    await page.getByLabel('Current password').fill(PASSWORD);
+    await page.getByRole('button', { name: 'Withdraw account' }).click();
+    await expect(page.getByRole('heading', { name: 'Welcome back' })).toBeVisible();
+    await page.getByLabel('Email', { exact: true }).fill(email);
+    await page.getByLabel('Password').fill(PASSWORD);
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Welcome back' })).toBeVisible();
+    await expect(page.getByRole('navigation', { name: 'Main navigation' })).toHaveCount(0);
   }
 
   await giverContext.close();
   await receiverContext.close();
+});
+
+// Real HTTPS server; Fake delivery only. No credential/code is used in a test title or output.
+test('password change and email reset revoke sessions and require fresh login', async () => {
+  const context = await browser.newContext({ baseURL: AUTH_ORIGIN });
+  const page = await context.newPage();
+  const email = uniqueEmail();
+  const changed = 'synthetic-changed-pass-1234';
+  const reset = 'synthetic-reset-pass-1234';
+  await signUp(page, email);
+  await logIn(page, email);
+  await page.goto('/#/account');
+  await page.getByLabel('Current password', { exact: true }).fill('synthetic-incorrect-pass');
+  await page.getByLabel('New password', { exact: true }).fill(changed);
+  const rejected = page.waitForResponse((response) =>
+    response.url().endsWith('/api/members/me/password'),
+  );
+  await page.getByRole('button', { name: 'Change password', exact: true }).click();
+  expect((await rejected).status()).toBe(403);
+  await expect(page.getByRole('alert')).toBeVisible();
+  await page.getByLabel('Current password', { exact: true }).fill(PASSWORD);
+  const changedResponse = page.waitForResponse((response) =>
+    response.url().endsWith('/api/members/me/password'),
+  );
+  await page.getByRole('button', { name: 'Change password', exact: true }).click();
+  expect((await changedResponse).status()).toBe(204);
+  await expect(page.getByRole('navigation', { name: 'Main navigation' })).toHaveCount(0);
+  await page.getByLabel('Email', { exact: true }).fill(email);
+  await page.getByLabel('Password', { exact: true }).fill(changed);
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await expect(page.getByRole('navigation', { name: 'Main navigation' })).toBeVisible();
+  await page.goto('/#/account');
+  await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+  await page.getByRole('button', { name: 'Forgot password?' }).click();
+  await page.getByLabel('Email', { exact: true }).fill(email);
+  const nextCode = stack.nextCode('PASSWORD_RESET');
+  await page.getByRole('button', { name: 'Request reset email', exact: true }).click();
+  await page.getByLabel('Email verification code', { exact: true }).fill(await nextCode);
+  await page.getByLabel('New password', { exact: true }).fill(reset);
+  const resetResponse = page.waitForResponse((response) =>
+    response.url().endsWith('/api/auth/password-resets/confirm'),
+  );
+  await page.getByRole('button', { name: 'Change password', exact: true }).click();
+  expect((await resetResponse).status()).toBe(204);
+  await expect(page.getByRole('navigation', { name: 'Main navigation' })).toHaveCount(0);
+  await page.getByLabel('Email', { exact: true }).fill(email);
+  await page.getByLabel('Password', { exact: true }).fill(reset);
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await expect(page.getByRole('navigation', { name: 'Main navigation' })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole('navigation', { name: 'Main navigation' })).toBeVisible();
+  await context.close();
+});
+
+test('temporary refresh failure banner logs out the real server session', async () => {
+  const context = await browser.newContext({ baseURL: AUTH_ORIGIN });
+  const page = await context.newPage();
+  await signUp(page, uniqueEmail());
+  await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await expect(page.getByRole('navigation', { name: 'Main navigation' })).toBeVisible();
+  // Synthetic HTTP outage; the logout request still reaches the real HTTPS server.
+  await page.route('**/api/auth/refresh', (route) =>
+    route.fulfill({
+      status: 503,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        code: 'AUTH_UNAVAILABLE',
+        message: 'Authentication is temporarily unavailable.',
+      }),
+    }),
+  );
+  await page.route('**/api/events', (route) =>
+    route.fulfill({
+      status: 401,
+      contentType: 'application/json',
+      body: JSON.stringify({ code: 'UNAUTHENTICATED' }),
+    }),
+  );
+  await page.goto('/#/account');
+  await page.goto('/#/');
+  await expect(
+    page.getByRole('alert')
+      .filter({ hasText: 'Unable to refresh your session' }),
+  ).toBeVisible();
+  for (const width of [360, 390, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    const navigationFits = await page.getByRole('navigation', { name: 'Main navigation' })
+      .evaluateAll((nodes) => {
+        if (!nodes.length) return true;
+        const links = [...nodes[0].querySelectorAll('a')].map((link) =>
+          link.getBoundingClientRect(),
+        );
+        return links.every(
+          (rect, index) =>
+            index === 0 || rect.left >= links[index - 1].right - 1,
+        );
+      });
+    expect(navigationFits).toBe(true);
+    if (process.env.E2E_VISUAL_DIR) {
+      fs.mkdirSync(process.env.E2E_VISUAL_DIR, { recursive: true });
+      await page.screenshot({
+        path: path.join(process.env.E2E_VISUAL_DIR, `refresh-${width}.png`),
+      });
+    }
+  }
+  await page.unroute('**/api/events');
+  const logout = page.waitForResponse((response) =>
+    response.url().endsWith('/api/auth/logout'),
+  );
+  await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+  expect((await logout).status()).toBe(204);
+  await page.unroute('**/api/auth/refresh');
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Welcome back' })).toBeVisible();
+  await expect(page.getByRole('navigation', { name: 'Main navigation' })).toHaveCount(0);
+  expect(
+    (await context.cookies()).some((cookie) => cookie.name.includes('refresh')),
+  ).toBe(false);
+  await context.close();
+});
+
+test('unverified login can request a verification code and complete signup', async () => {
+  const context = await browser.newContext({ baseURL: AUTH_ORIGIN });
+  const page = await context.newPage();
+  const email = uniqueEmail();
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'Welcome back' })).toBeVisible();
+  // Register without requesting delivery, so resend is the first purpose-scoped issuance.
+  const status = await page.evaluate(
+    async ({ email, password }) => {
+      const csrf = await (await fetch('/api/auth/csrf')).json();
+      return (
+        await fetch('/api/auth/registrations', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': csrf.csrfToken,
+          },
+          body: JSON.stringify({ email, password }),
+        })
+      ).status;
+    },
+    { email, password: PASSWORD },
+  );
+  if (status !== 202) throw new Error(`Registration status ${status}`);
+  expect(status).toBe(202);
+  await page.getByLabel('Email', { exact: true }).fill(email);
+  await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
+  const denied = page.waitForResponse((response) =>
+    response.url().endsWith('/api/auth/login'),
+  );
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  expect((await denied).status()).toBe(403);
+  const code = stack.nextCode('SIGNUP_VERIFY');
+  await page.getByRole('button', { name: 'Resend verification code', exact: true }).click();
+  await page.getByLabel('Email verification code', { exact: true }).fill(await code);
+  await page.getByRole('button', { name: 'Complete signup', exact: true }).click();
+  await expect(page.getByText('Email verified. Please sign in.')).toBeVisible();
+  await expect(page.getByRole('navigation', { name: 'Main navigation' })).toHaveCount(0);
+  // Empty login form layout: credentials and member identity are not in this image buffer.
+  await page.getByLabel('Email', { exact: true }).fill('');
+  for (const width of [360, 390, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    const navigationFits = await page.getByRole('navigation', { name: 'Main navigation' })
+      .evaluateAll((nodes) => {
+        if (!nodes.length) return true;
+        const links = [...nodes[0].querySelectorAll('a')].map((link) =>
+          link.getBoundingClientRect(),
+        );
+        return links.every(
+          (rect, index) =>
+            index === 0 || rect.left >= links[index - 1].right - 1,
+        );
+      });
+    expect(navigationFits).toBe(true);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    // Only blank, credential-free login is retained outside the repository for visual review.
+    if (process.env.E2E_VISUAL_DIR) {
+      fs.mkdirSync(process.env.E2E_VISUAL_DIR, { recursive: true });
+      await page.screenshot({
+        path: path.join(process.env.E2E_VISUAL_DIR, `login-${width}.png`),
+      });
+    }
+  }
+  await context.close();
 });

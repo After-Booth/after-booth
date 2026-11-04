@@ -3,13 +3,17 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "description": "Playwright E2E for the AfterBooth demo scenario (issue #12), replay mode only",
+  "description": "Local HTTPS authentication checks and explicit full-demo readiness gate",
   "scripts": {
-    "test": "playwright test",
+    "test": "npm run typecheck && npm run test:auth && npm run test:demo",
     "test:auth": "playwright test -c playwright.auth.config.ts",
-    "install-browsers": "playwright install --only-shell chromium"
+    "install-browsers": "playwright install --only-shell chromium",
+    "test:demo": "playwright test -c playwright.config.ts",
+    "typecheck": "tsc -p tsconfig.json"
   },
   "devDependencies": {
-    "@playwright/test": "1.64.1"
+    "@playwright/test": "1.64.1",
+    "@types/node": "24.19.2",
+    "typescript": "7.0.2"
   }
 }
