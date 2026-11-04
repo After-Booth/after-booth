@@ -16,7 +16,7 @@ type Action = (
 ) & { reconcile?: boolean }
 
 const messageOf = (error: unknown) =>
-  error instanceof ApiError ? error.message : '요청을 처리하지 못했어요. 다시 시도해 주세요.'
+  error instanceof ApiError ? error.message : 'Unable to process the request. Please try again.'
 
 function startsNewAction(error: unknown): boolean {
   if (!(error instanceof ApiError)) return false
@@ -151,7 +151,9 @@ export function useHandover() {
           return
         }
         if (current?.status !== 'CONFIRMED') {
-          setMessage('현재 예약 상태에서는 인계할 수 없어요. 예약 상태를 확인해 주세요.')
+          setMessage(
+            'This reservation cannot be handed over in its current state. Check its status.',
+          )
           return
         }
       }

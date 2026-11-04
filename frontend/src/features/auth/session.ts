@@ -50,7 +50,7 @@ export async function authOperation<T>(
   const startedToken = getAccessToken()
   const run = async () => {
     const response = await getCsrfToken()
-    if (response.status !== 200) throw new Error('보안 정보를 가져오지 못했어요.')
+    if (response.status !== 200) throw new Error('Unable to load security information.')
     return action({ 'X-CSRF-Token': response.data.csrfToken })
   }
   const result = queue.then(run, run)
@@ -80,12 +80,12 @@ export async function signIn(email: string, password: string): Promise<MemberVie
   setTrouble(false)
   const result = await authOperation((csrf) => loginMember({ email, password }, csrf))
   if (result.status !== 200 || epoch !== currentEpoch)
-    throw new Error('로그인을 다시 시도해 주세요.')
+    throw new Error('Please try signing in again.')
   setAccessToken(result.data.accessToken, true)
   try {
     const member = await getCurrentMember()
     if (member.status !== 200 || epoch !== currentEpoch)
-      throw new Error('계정 정보를 불러오지 못했어요.')
+      throw new Error('Unable to load account details.')
     return member.data
   } catch (error) {
     if (epoch === currentEpoch) clearSession()

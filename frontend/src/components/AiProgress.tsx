@@ -16,7 +16,7 @@ export function AiProgress({ label, expectedSeconds }: { label: string; expected
     <div role="status" aria-live="polite" className="rounded-xl bg-emerald-50 p-4 text-emerald-900">
       <p className="font-semibold">{label}</p>
       <p className="mt-2 text-sm">
-        {elapsed}초 경과 · 보통 약 {expectedSeconds}초 걸려요
+        {elapsed}s elapsed · Usually about {expectedSeconds}s
       </p>
       <div
         role="progressbar"
@@ -24,7 +24,7 @@ export function AiProgress({ label, expectedSeconds }: { label: string; expected
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={progress}
-        aria-valuetext={overdue ? '평소보다 조금 더 걸리고 있어요…' : undefined}
+        aria-valuetext={overdue ? 'Taking longer than usual…' : undefined}
         className="mt-3 h-2 overflow-hidden rounded-full bg-emerald-100"
       >
         <div
@@ -32,7 +32,7 @@ export function AiProgress({ label, expectedSeconds }: { label: string; expected
           style={{ width: `${progress}%` }}
         />
       </div>
-      {overdue && <p className="mt-2 text-sm">평소보다 조금 더 걸리고 있어요…</p>}
+      {overdue && <p className="mt-2 text-sm">Taking longer than usual…</p>}
     </div>
   )
 }

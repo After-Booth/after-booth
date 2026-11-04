@@ -21,7 +21,7 @@ const item: Item = {
   eventId: 1,
   organizationId: 1,
   category: 'FOLDING_TABLE',
-  label: '접이식 테이블',
+  label: 'Folding table',
   sizeCm: { width: 60, depth: 40, height: 10 },
   condition: 'GOOD',
   totalQty: 3,
@@ -43,17 +43,23 @@ const reservation: Reservation = {
 const result: AllocationResult = {
   requestId: 1,
   status: 'NO_MATCH',
-  explanation: '진열대는 승용차에 실을 수 없어요.',
+  explanation: 'Display racks do not fit in a sedan.',
   reservations: [],
-  rejections: [{ itemId: 3, code: 'VEHICLE_TOO_SMALL', message: '진열대는 차량 높이가 부족해요.' }],
-  alternatives: [{ item, quantity: 3, reason: '접으면 승용차에 실을 수 있어요.' }],
+  rejections: [
+    {
+      itemId: 3,
+      code: 'VEHICLE_TOO_SMALL',
+      message: 'Insufficient vehicle height for display racks.',
+    },
+  ],
+  alternatives: [{ item, quantity: 3, reason: 'Fits in a sedan when folded.' }],
   toolCalls: [
     {
       name: 'checkVehicleFit',
       arguments: { itemId: 3 },
       outcome: 'REJECTED',
       code: 'VEHICLE_TOO_SMALL',
-      summary: '차량 크기를 확인했어요.',
+      summary: 'Checked vehicle dimensions.',
     },
   ],
 }
@@ -83,13 +89,15 @@ test('shows measured AI progress and prevents duplicate allocation while pending
     }),
   )
   render(<AllocationProposal request={request} />)
-  await waitFor(() => expect(screen.getByRole('button', { name: '배정 제안 받기' })).toBeEnabled())
-  await userEvent.dblClick(screen.getByRole('button', { name: '배정 제안 받기' }))
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Get allocation proposal' })).toBeEnabled(),
+  )
+  await userEvent.dblClick(screen.getByRole('button', { name: 'Get allocation proposal' }))
   expect(
-    await screen.findByText('Muse Spark 배정 에이전트가 재고와 차량 조건을 확인하고 있어요…'),
+    await screen.findByText('Muse Spark is checking inventory and vehicle constraints…'),
   ).toBeInTheDocument()
-  expect(screen.getByRole('status')).toHaveTextContent('보통 약 10초 걸려요')
-  expect(screen.getByRole('button', { name: '배정 확인 중…' })).toBeDisabled()
+  expect(screen.getByRole('status')).toHaveTextContent('Usually about 10s')
+  expect(screen.getByRole('button', { name: 'Checking allocation…' })).toBeDisabled()
   await waitFor(() => expect(calls).toBe(1))
   complete?.()
   expect(await screen.findByText(result.explanation)).toBeInTheDocument()
@@ -110,16 +118,18 @@ test('shows no match reasons and holds a human-selected alternative with one key
   )
   render(<AllocationProposal request={request} />)
   const user = userEvent.setup()
-  await waitFor(() => expect(screen.getByRole('button', { name: '배정 제안 받기' })).toBeEnabled())
-  await user.click(screen.getByRole('button', { name: '배정 제안 받기' }))
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Get allocation proposal' })).toBeEnabled(),
+  )
+  await user.click(screen.getByRole('button', { name: 'Get allocation proposal' }))
   expect(await screen.findByText(result.explanation)).toBeInTheDocument()
-  expect(screen.getByText('진열대는 차량 높이가 부족해요.')).toBeInTheDocument()
-  expect(screen.queryByText(/물품 #3/)).not.toBeInTheDocument()
-  const failure = screen.getByText('조건에 맞는 물품을 확보하지 못했어요.')
-  const headline = screen.getByText('대신 접이식 테이블 3개 어떠세요?')
+  expect(screen.getByText('Insufficient vehicle height for display racks.')).toBeInTheDocument()
+  expect(screen.queryByText(/Item #3/)).not.toBeInTheDocument()
+  const failure = screen.getByText('No matching items could be held.')
+  const headline = screen.getByText('Alternative: Folding table 3 items available')
   expect(failure.compareDocumentPosition(headline) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-  await user.dblClick(screen.getByRole('button', { name: '접이식 테이블 대안 선택' }))
-  expect(await screen.findByText('3개 중 3개 확보 · 배정 성공')).toBeInTheDocument()
+  await user.dblClick(screen.getByRole('button', { name: 'Folding table Choose alternative' }))
+  expect(await screen.findByText('3 of 3 items held · Allocation successful')).toBeInTheDocument()
   expect(holds).toBe(1)
   expect(sent).toEqual({ requestId: 1, itemId: 7, quantity: 3 })
 })
@@ -134,7 +144,7 @@ test('opens the server tool trace by default with each tool name, Korean gloss a
             name: 'searchCandidates',
             arguments: {},
             outcome: 'OK',
-            summary: '남은 물품 2종을 찾았어요.',
+            summary: 'Found two available item categories.',
           },
           { ...result.toolCalls[0] },
         ],
@@ -142,19 +152,21 @@ test('opens the server tool trace by default with each tool name, Korean gloss a
     ),
   )
   render(<AllocationProposal request={request} />)
-  await waitFor(() => expect(screen.getByRole('button', { name: '배정 제안 받기' })).toBeEnabled())
-  await userEvent.click(screen.getByRole('button', { name: '배정 제안 받기' }))
-  const trace = (await screen.findByText('Muse Spark가 호출한 서버 도구')).closest('details')
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Get allocation proposal' })).toBeEnabled(),
+  )
+  await userEvent.click(screen.getByRole('button', { name: 'Get allocation proposal' }))
+  const trace = (await screen.findByText('Server tools called by Muse Spark')).closest('details')
   expect(trace).toHaveAttribute('open')
   const rows = within(trace!).getAllByRole('listitem')
   expect(rows).toHaveLength(2)
   expect(rows[0]).toHaveTextContent('searchCandidates')
-  expect(rows[0]).toHaveTextContent('재고 후보 찾기')
-  expect(rows[0]).toHaveTextContent('남은 물품 2종을 찾았어요.')
-  expect(rows[0]).toHaveTextContent('통과')
+  expect(rows[0]).toHaveTextContent('Search inventory candidates')
+  expect(rows[0]).toHaveTextContent('Found two available item categories.')
+  expect(rows[0]).toHaveTextContent('Passed')
   expect(rows[1]).toHaveTextContent('checkVehicleFit')
-  expect(rows[1]).toHaveTextContent('차량에 실을 수 있는지 확인')
-  expect(rows[1]).toHaveTextContent('거절')
+  expect(rows[1]).toHaveTextContent('Check vehicle fit')
+  expect(rows[1]).toHaveTextContent('Rejected')
 })
 
 test('shows partial holds and caps alternative quantity to the remaining request quantity', async () => {
@@ -164,20 +176,21 @@ test('shows partial holds and caps alternative quantity to the remaining request
     ),
   )
   render(<AllocationProposal request={request} />)
-  await waitFor(() => expect(screen.getByRole('button', { name: '배정 제안 받기' })).toBeEnabled())
-  await userEvent.click(screen.getByRole('button', { name: '배정 제안 받기' }))
-  expect(await screen.findByText('3개 중 1개 확보 · 부분 배정')).toBeInTheDocument()
-  expect(screen.getByRole('heading', { name: '접이식 테이블 2개' })).toBeInTheDocument()
-  expect(screen.queryByText(/어떠세요\?/)).not.toBeInTheDocument()
-  expect(screen.getByRole('button', { name: '배정 제안 받기' })).toBeDisabled()
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Get allocation proposal' })).toBeEnabled(),
+  )
+  await userEvent.click(screen.getByRole('button', { name: 'Get allocation proposal' }))
+  expect(await screen.findByText('1 of 3 items held · Partial allocation')).toBeInTheDocument()
+  expect(screen.getByRole('heading', { name: 'Folding table 2 items' })).toBeInTheDocument()
+  expect(screen.queryByText(/Alternative\?/)).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Get allocation proposal' })).toBeDisabled()
 })
 
 test('tops up the same item on the mounted page after the model fails following a partial hold', async () => {
   const pickupRequest = { ...request, quantity: 5, category: item.category }
   const originalItem = { ...item, totalQty: 10, availableQty: 10 }
   const partialHold = { ...reservation, quantity: 2 }
-  const explanation =
-    '요청한 5개 중 2개를 임시 확보했어요. 예약 현황을 확인하고 직접 확정해 주세요.'
+  const explanation = 'Held 2 of 5 requested items. Check your reservations and confirm them.'
   let allocations = 0
   const payloads: unknown[] = []
   let releaseHold: (() => void) | undefined
@@ -198,7 +211,7 @@ test('tops up the same item on the mounted page after the model fails following 
           {
             item: { ...originalItem, availableQty: 8 },
             quantity: 3,
-            reason: '선택하면 서버가 차량과 픽업 조건을 확인해요.',
+            reason: 'The server checks vehicle and pickup constraints when selected.',
           },
         ],
       } satisfies AllocationResult)
@@ -213,23 +226,27 @@ test('tops up the same item on the mounted page after the model fails following 
     }),
   )
   render(<AllocationProposal request={pickupRequest} />)
-  const proposal = screen.getByRole('region', { name: '배정 제안' })
+  const proposal = screen.getByRole('region', { name: 'Allocation proposal' })
   const user = userEvent.setup()
-  await waitFor(() => expect(screen.getByRole('button', { name: '배정 제안 받기' })).toBeEnabled())
-  await user.click(screen.getByRole('button', { name: '배정 제안 받기' }))
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Get allocation proposal' })).toBeEnabled(),
+  )
+  await user.click(screen.getByRole('button', { name: 'Get allocation proposal' }))
   expect(await screen.findByText(explanation)).toBeInTheDocument()
-  expect(screen.getByText('5개 중 2개 확보 · 부분 배정')).toBeInTheDocument()
-  expect(screen.getByRole('heading', { name: '접이식 테이블 3개' })).toBeInTheDocument()
-  const alternative = screen.getByRole('button', { name: '접이식 테이블 대안 선택' })
+  expect(screen.getByText('2 of 5 items held · Partial allocation')).toBeInTheDocument()
+  expect(screen.getByRole('heading', { name: 'Folding table 3 items' })).toBeInTheDocument()
+  const alternative = screen.getByRole('button', { name: 'Folding table Choose alternative' })
   await user.dblClick(alternative)
   expect(alternative).toBeDisabled()
   await waitFor(() => expect(payloads).toHaveLength(1))
   expect(payloads[0]).toEqual({ requestId: pickupRequest.id, itemId: originalItem.id, quantity: 3 })
   releaseHold?.()
-  expect(await screen.findByText('5개 중 5개 확보 · 배정 성공')).toBeInTheDocument()
-  expect(screen.getByRole('region', { name: '배정 제안' })).toBe(proposal)
-  expect(screen.getByRole('button', { name: '배정 제안 받기' })).toBeDisabled()
-  expect(screen.queryByRole('button', { name: '접이식 테이블 대안 선택' })).not.toBeInTheDocument()
+  expect(await screen.findByText('5 of 5 items held · Allocation successful')).toBeInTheDocument()
+  expect(screen.getByRole('region', { name: 'Allocation proposal' })).toBe(proposal)
+  expect(screen.getByRole('button', { name: 'Get allocation proposal' })).toBeDisabled()
+  expect(
+    screen.queryByRole('button', { name: 'Folding table Choose alternative' }),
+  ).not.toBeInTheDocument()
   expect(allocations).toBe(1)
   expect(payloads).toHaveLength(1)
   expect(window.location.href).toBe(locationBefore)
@@ -254,13 +271,15 @@ test('retains the key after an uncertain network failure and blocks duplicate al
   )
   render(<AllocationProposal request={request} />)
   const user = userEvent.setup()
-  await waitFor(() => expect(screen.getByRole('button', { name: '배정 제안 받기' })).toBeEnabled())
-  await user.dblClick(screen.getByRole('button', { name: '배정 제안 받기' }))
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Get allocation proposal' })).toBeEnabled(),
+  )
+  await user.dblClick(screen.getByRole('button', { name: 'Get allocation proposal' }))
   expect(keys).toHaveLength(1)
-  expect(screen.getByRole('button', { name: '배정 확인 중…' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Checking allocation…' })).toBeDisabled()
   release?.()
-  expect(await screen.findByRole('alert')).toHaveTextContent('같은 작업을 다시 시도')
-  await user.click(screen.getByRole('button', { name: '배정 제안 받기' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent('Retry the same action.')
+  await user.click(screen.getByRole('button', { name: 'Get allocation proposal' }))
   await screen.findByText(result.explanation)
   expect(keys).toHaveLength(2)
   expect(keys[1]).toBe(keys[0])
@@ -273,17 +292,21 @@ test('recovers an existing hold after an already-held response without another a
     http.get('*/api/items', () => HttpResponse.json([item])),
     http.post('*/api/pickup-requests/1/allocation', () =>
       HttpResponse.json(
-        { code: 'REQUEST_ALREADY_HELD', message: '이미 확보된 물품이 있어요.' },
+        { code: 'REQUEST_ALREADY_HELD', message: 'Items are already held.' },
         { status: 409 },
       ),
     ),
   )
   render(<AllocationProposal request={request} />)
-  await waitFor(() => expect(screen.getByRole('button', { name: '배정 제안 받기' })).toBeEnabled())
-  await userEvent.click(screen.getByRole('button', { name: '배정 제안 받기' }))
-  expect(await screen.findByText('3개 중 1개 확보 · 부분 배정')).toBeInTheDocument()
-  expect(screen.getByRole('alert')).toHaveTextContent('이미 확보된 물품')
-  expect(await screen.findByRole('button', { name: '접이식 테이블 추가 선택' })).toBeEnabled()
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Get allocation proposal' })).toBeEnabled(),
+  )
+  await userEvent.click(screen.getByRole('button', { name: 'Get allocation proposal' }))
+  expect(await screen.findByText('1 of 3 items held · Partial allocation')).toBeInTheDocument()
+  expect(screen.getByRole('alert')).toHaveTextContent('Items are already held')
+  expect(
+    await screen.findByRole('button', { name: 'Folding table Choose additional stock' }),
+  ).toBeEnabled()
 })
 
 test('uses a new key for a new action after a definitive AI unavailable response', async () => {
@@ -293,17 +316,21 @@ test('uses a new key for a new action after a definitive AI unavailable response
       keys.push(incoming.headers.get('Idempotency-Key')!)
       return keys.length === 1
         ? HttpResponse.json(
-            { code: 'AI_UNAVAILABLE', message: '배정을 잠시 사용할 수 없어요.' },
+            { code: 'AI_UNAVAILABLE', message: 'Allocation is temporarily unavailable.' },
             { status: 503 },
           )
         : HttpResponse.json(result)
     }),
   )
   render(<AllocationProposal request={request} />)
-  await waitFor(() => expect(screen.getByRole('button', { name: '배정 제안 받기' })).toBeEnabled())
-  await userEvent.click(screen.getByRole('button', { name: '배정 제안 받기' }))
-  expect(await screen.findByRole('alert')).toHaveTextContent('배정을 잠시 사용할 수 없어요.')
-  await userEvent.click(screen.getByRole('button', { name: '배정 제안 받기' }))
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Get allocation proposal' })).toBeEnabled(),
+  )
+  await userEvent.click(screen.getByRole('button', { name: 'Get allocation proposal' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'Allocation is temporarily unavailable.',
+  )
+  await userEvent.click(screen.getByRole('button', { name: 'Get allocation proposal' }))
   await screen.findByText(result.explanation)
   expect(keys[1]).not.toBe(keys[0])
 })
@@ -317,24 +344,26 @@ test('retries conflicts after one, two and four seconds with the same key then s
       timestamps.push(Date.now())
       return keys.length <= 4
         ? HttpResponse.json(
-            { code: 'IDEMPOTENCY_CONFLICT', message: '같은 요청을 처리 중이에요.' },
+            { code: 'IDEMPOTENCY_CONFLICT', message: 'The same request is being processed.' },
             { status: 409 },
           )
         : HttpResponse.json(result)
     }),
   )
   render(<AllocationProposal request={request} />)
-  await waitFor(() => expect(screen.getByRole('button', { name: '배정 제안 받기' })).toBeEnabled())
-  await userEvent.click(screen.getByRole('button', { name: '배정 제안 받기' }))
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Get allocation proposal' })).toBeEnabled(),
+  )
+  await userEvent.click(screen.getByRole('button', { name: 'Get allocation proposal' }))
   expect(await screen.findByRole('alert', {}, { timeout: 8500 })).toHaveTextContent(
-    '같은 요청을 처리 중이에요.',
+    'The same request is being processed.',
   )
   expect(keys).toHaveLength(4)
   expect(new Set(keys).size).toBe(1)
   expect(timestamps[1] - timestamps[0]).toBeGreaterThanOrEqual(950)
   expect(timestamps[2] - timestamps[1]).toBeGreaterThanOrEqual(1950)
   expect(timestamps[3] - timestamps[2]).toBeGreaterThanOrEqual(3950)
-  await userEvent.click(screen.getByRole('button', { name: '배정 제안 받기' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Get allocation proposal' }))
   await screen.findByText(result.explanation)
   expect(keys[4]).not.toBe(keys[0])
 }, 10000)
@@ -349,10 +378,12 @@ test('polls stock and concurrent reservation results, displays Seoul time and cl
     http.get('*/api/reservations', () => HttpResponse.json([{ ...reservation, requestId: 42 }])),
   )
   const view = render(<AllocationBoard />)
-  expect(await screen.findByText('남은 수량 1개')).toBeInTheDocument()
-  expect(screen.getByText(/요청 #42/)).toBeInTheDocument()
-  expect(screen.getByText(/픽업 마감 11월 2일 18:00/)).toBeInTheDocument()
-  expect(await screen.findByText('남은 수량 0개', {}, { timeout: 4500 })).toBeInTheDocument()
+  expect(await screen.findByText('Available quantity 1 items')).toBeInTheDocument()
+  expect(screen.getByText(/Request #42/)).toBeInTheDocument()
+  expect(screen.getByText(/Pickup deadline November 2 at 18:00/)).toBeInTheDocument()
+  expect(
+    await screen.findByText('Available quantity 0 items', {}, { timeout: 4500 }),
+  ).toBeInTheDocument()
   const clearsBeforeUnmount = clearIntervalSpy.mock.calls.length
   view.unmount()
   expect(clearIntervalSpy.mock.calls.length - clearsBeforeUnmount).toBe(2)
@@ -360,9 +391,11 @@ test('polls stock and concurrent reservation results, displays Seoul time and cl
 
 test('clamps expired countdowns and counts seconds before the pickup deadline', () => {
   expect(countdown(item.pickupDeadline, Date.parse(item.pickupDeadline) - 61000)).toBe(
-    '0시간 1분 1초 남음',
+    '0h 1m 1s remaining',
   )
-  expect(countdown(item.pickupDeadline, Date.parse(item.pickupDeadline) + 1000)).toBe('픽업 마감')
+  expect(countdown(item.pickupDeadline, Date.parse(item.pickupDeadline) + 1000)).toBe(
+    'Pickup deadline',
+  )
 })
 
 test('recovers a partial hold after reload and tops up from current stock with the remaining quantity', async () => {
@@ -379,14 +412,18 @@ test('recovers a partial hold after reload and tops up from current stock with t
     }),
   )
   render(<AllocationProposal request={request} />)
-  expect(await screen.findByText('3개 중 1개 확보 · 부분 배정')).toBeInTheDocument()
-  expect(screen.getByRole('button', { name: '배정 제안 받기' })).toBeDisabled()
-  expect(await screen.findByRole('heading', { name: '접이식 테이블 2개' })).toBeInTheDocument()
+  expect(await screen.findByText('1 of 3 items held · Partial allocation')).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Get allocation proposal' })).toBeDisabled()
+  expect(await screen.findByRole('heading', { name: 'Folding table 2 items' })).toBeInTheDocument()
   expect(
-    screen.getByText('선택하면 서버가 차량 크기와 픽업 마감, 남은 수량을 다시 확인해요.'),
+    screen.getByText(
+      'The server rechecks vehicle size, pickup deadline and available quantity when you choose.',
+    ),
   ).toBeInTheDocument()
-  await userEvent.click(screen.getByRole('button', { name: '접이식 테이블 추가 선택' }))
-  expect(await screen.findByText('3개 중 3개 확보 · 배정 성공')).toBeInTheDocument()
+  await userEvent.click(
+    screen.getByRole('button', { name: 'Folding table Choose additional stock' }),
+  )
+  expect(await screen.findByText('3 of 3 items held · Allocation successful')).toBeInTheDocument()
   expect(payload).toEqual({ requestId: 1, itemId: 7, quantity: 2 })
 })
 
@@ -398,8 +435,8 @@ test('clears a transient reservation polling error when the next refresh succeed
     ),
   )
   render(<AllocationProposal request={request} />)
-  expect(await screen.findByRole('alert')).toHaveTextContent('예약 현황을 불러오지 못했어요.')
-  await screen.findByText('3개 중 1개 확보 · 부분 배정', {}, { timeout: 4500 })
+  expect(await screen.findByRole('alert')).toHaveTextContent('Unable to load reservations.')
+  await screen.findByText('1 of 3 items held · Partial allocation', {}, { timeout: 4500 })
   expect(screen.queryByRole('alert')).not.toBeInTheDocument()
 })
 
@@ -412,17 +449,21 @@ test('keeps an actionable allocation error visible across successful reservation
     }),
     http.post('*/api/pickup-requests/1/allocation', () =>
       HttpResponse.json(
-        { code: 'AI_UNAVAILABLE', message: '배정을 잠시 사용할 수 없어요.' },
+        { code: 'AI_UNAVAILABLE', message: 'Allocation is temporarily unavailable.' },
         { status: 503 },
       ),
     ),
   )
   render(<AllocationProposal request={request} />)
-  await waitFor(() => expect(screen.getByRole('button', { name: '배정 제안 받기' })).toBeEnabled())
-  await userEvent.click(screen.getByRole('button', { name: '배정 제안 받기' }))
-  expect(await screen.findByRole('alert')).toHaveTextContent('배정을 잠시 사용할 수 없어요.')
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Get allocation proposal' })).toBeEnabled(),
+  )
+  await userEvent.click(screen.getByRole('button', { name: 'Get allocation proposal' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'Allocation is temporarily unavailable.',
+  )
   await waitFor(() => expect(reads).toBeGreaterThanOrEqual(2), { timeout: 4500 })
-  expect(screen.getByRole('alert')).toHaveTextContent('배정을 잠시 사용할 수 없어요.')
+  expect(screen.getByRole('alert')).toHaveTextContent('Allocation is temporarily unavailable.')
 })
 
 test('offers current stock after AI unavailable and manually holds the full request without duplicate writes', async () => {
@@ -434,7 +475,7 @@ test('offers current stock after AI unavailable and manually holds the full requ
   server.use(
     http.post('*/api/pickup-requests/1/allocation', () =>
       HttpResponse.json(
-        { code: 'AI_UNAVAILABLE', message: 'AI 배정을 잠시 사용할 수 없어요.' },
+        { code: 'AI_UNAVAILABLE', message: 'AI allocation is temporarily unavailable.' },
         { status: 503 },
       ),
     ),
@@ -459,22 +500,26 @@ test('offers current stock after AI unavailable and manually holds the full requ
   )
   const view = render(<AllocationProposal request={request} />)
   const user = userEvent.setup()
-  await waitFor(() => expect(screen.getByRole('button', { name: '배정 제안 받기' })).toBeEnabled())
-  await user.click(screen.getByRole('button', { name: '배정 제안 받기' }))
-  expect(await screen.findByText('현재 재고를 확인하는 중이에요…')).toBeInTheDocument()
-  expect(screen.queryByText('현재 추가로 선택할 재고가 없어요.')).not.toBeInTheDocument()
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Get allocation proposal' })).toBeEnabled(),
+  )
+  await user.click(screen.getByRole('button', { name: 'Get allocation proposal' }))
+  expect(await screen.findByText('Checking current stock…')).toBeInTheDocument()
+  expect(screen.queryByText('No additional stock available now.')).not.toBeInTheDocument()
   await waitFor(() => expect(resolveStock).toBeDefined())
   resolveStock?.()
-  const select = await screen.findByRole('button', { name: '접이식 테이블 추가 선택' })
-  expect(screen.getByRole('heading', { name: '접이식 테이블 3개' })).toBeInTheDocument()
-  expect(screen.getByRole('alert')).toHaveTextContent('AI 배정을 잠시 사용할 수 없어요.')
+  const select = await screen.findByRole('button', {
+    name: 'Folding table Choose additional stock',
+  })
+  expect(screen.getByRole('heading', { name: 'Folding table 3 items' })).toBeInTheDocument()
+  expect(screen.getByRole('alert')).toHaveTextContent('AI allocation is temporarily unavailable.')
   await user.dblClick(select)
   await waitFor(() => expect(payloads).toHaveLength(1))
   finishHold?.()
   await waitFor(() => expect(select).toBeEnabled())
-  expect(screen.getByRole('alert')).toHaveTextContent('같은 작업을 다시 시도')
+  expect(screen.getByRole('alert')).toHaveTextContent('Retry the same action.')
   await user.click(select)
-  expect(await screen.findByText('3개 중 3개 확보 · 배정 성공')).toBeInTheDocument()
+  expect(await screen.findByText('3 of 3 items held · Allocation successful')).toBeInTheDocument()
   expect(payloads).toEqual([
     { requestId: 1, itemId: 7, quantity: 3 },
     { requestId: 1, itemId: 7, quantity: 3 },
@@ -499,22 +544,28 @@ test('shows Korean server rejection for manual stock and resets recovery when th
     http.post('*/api/reservations', async ({ request: incoming }) => {
       expect(await incoming.json()).toEqual({ requestId: 1, itemId: 7, quantity: 2 })
       return HttpResponse.json(
-        { code: 'VEHICLE_TOO_SMALL', message: '접이식 테이블은 차량에 실을 수 없어요.' },
+        { code: 'VEHICLE_TOO_SMALL', message: 'Folding tables do not fit in this vehicle.' },
         { status: 422 },
       )
     }),
   )
   const view = render(<AllocationProposal request={request} />)
-  await userEvent.click(await screen.findByRole('button', { name: '접이식 테이블 추가 선택' }))
-  expect(await screen.findByRole('alert')).toHaveTextContent(
-    '접이식 테이블은 차량에 실을 수 없어요.',
+  await userEvent.click(
+    await screen.findByRole('button', { name: 'Folding table Choose additional stock' }),
   )
-  expect(screen.getByText('3개 중 1개 확보 · 부분 배정')).toBeInTheDocument()
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'Folding tables do not fit in this vehicle.',
+  )
+  expect(screen.getByText('1 of 3 items held · Partial allocation')).toBeInTheDocument()
   view.rerender(<AllocationProposal request={{ ...request, id: 2 }} />)
-  expect(screen.queryByText('3개 중 1개 확보 · 부분 배정')).not.toBeInTheDocument()
+  expect(screen.queryByText('1 of 3 items held · Partial allocation')).not.toBeInTheDocument()
   expect(screen.queryByRole('alert')).not.toBeInTheDocument()
-  await waitFor(() => expect(screen.getByRole('button', { name: '배정 제안 받기' })).toBeEnabled())
-  expect(screen.queryByRole('button', { name: '접이식 테이블 추가 선택' })).not.toBeInTheDocument()
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Get allocation proposal' })).toBeEnabled(),
+  )
+  expect(
+    screen.queryByRole('button', { name: 'Folding table Choose additional stock' }),
+  ).not.toBeInTheDocument()
 })
 
 test('confirms a held reservation with one key so it can be handed over', async () => {
@@ -531,13 +582,13 @@ test('confirms a held reservation with one key so it can be handed over', async 
     }),
   )
   render(<AllocationProposal request={request} />)
-  const confirm = await screen.findByRole('button', { name: '접이식 테이블 예약 확정하기' })
-  expect(screen.getByText(/확정하면 인계 화면에서/)).toBeInTheDocument()
+  const confirm = await screen.findByRole('button', { name: 'Folding table Confirm reservation' })
+  expect(screen.getByText(/Confirm your reservation/)).toBeInTheDocument()
   await userEvent.dblClick(confirm)
-  expect(await screen.findByText('접이식 테이블 1개 · 예약 확정')).toBeInTheDocument()
+  expect(await screen.findByText('Folding table 1 items · Confirmed')).toBeInTheDocument()
   expect(keys).toHaveLength(1)
   expect(keys[0]).toBeTruthy()
-  expect(screen.queryByRole('button', { name: '접이식 테이블 예약 확정하기' })).toBeNull()
+  expect(screen.queryByRole('button', { name: 'Folding table Confirm reservation' })).toBeNull()
 })
 
 test('keeps the confirm key after an unknown outcome and refreshes an expired hold', async () => {
@@ -552,22 +603,24 @@ test('keeps the confirm key after an unknown outcome and refreshes an expired ho
       if (keys.length === 1) return HttpResponse.error()
       expired = true
       return HttpResponse.json(
-        { code: 'HOLD_EXPIRED', message: '임시 확보 시간이 지나 재고로 돌아갔어요.' },
+        { code: 'HOLD_EXPIRED', message: 'The hold expired and items returned to stock.' },
         { status: 409 },
       )
     }),
   )
   render(<AllocationProposal request={request} />)
   const user = userEvent.setup()
-  await user.click(await screen.findByRole('button', { name: '접이식 테이블 예약 확정하기' }))
+  await user.click(await screen.findByRole('button', { name: 'Folding table Confirm reservation' }))
   expect(await screen.findByRole('alert')).toHaveTextContent(
-    '예약 확정 결과를 확인하지 못했어요. 다시 시도해 주세요.',
+    'Unable to check the reservation update. Please try again.',
   )
-  await user.click(screen.getByRole('button', { name: '접이식 테이블 예약 확정하기' }))
-  expect(await screen.findByText('임시 확보 시간이 지나 재고로 돌아갔어요.')).toBeInTheDocument()
+  await user.click(screen.getByRole('button', { name: 'Folding table Confirm reservation' }))
+  expect(
+    await screen.findByText('The hold expired and items returned to stock.'),
+  ).toBeInTheDocument()
   expect(keys).toEqual([keys[0], keys[0]])
   await waitFor(() =>
-    expect(screen.queryByRole('button', { name: '접이식 테이블 예약 확정하기' })).toBeNull(),
+    expect(screen.queryByRole('button', { name: 'Folding table Confirm reservation' })).toBeNull(),
   )
 })
 
@@ -585,13 +638,13 @@ test('lets the receiver cancel a confirmed reservation with a stable retry key',
     }),
   )
   render(<AllocationProposal request={request} />)
-  const cancel = await screen.findByRole('button', { name: '접이식 테이블 예약 취소' })
+  const cancel = await screen.findByRole('button', { name: 'Folding table Cancel reservation' })
   await userEvent.click(cancel)
   await screen.findByRole('alert')
   await userEvent.click(cancel)
   await waitFor(() =>
     expect(
-      screen.queryByRole('button', { name: '접이식 테이블 예약 취소' }),
+      screen.queryByRole('button', { name: 'Folding table Cancel reservation' }),
     ).not.toBeInTheDocument(),
   )
   expect(keys).toHaveLength(2)
@@ -605,7 +658,7 @@ test('offers the receiver a route from the board to their reservation management
     ),
   )
   render(<AllocationBoard organizationId={2} />)
-  const links = await screen.findAllByRole('link', { name: '내 예약 관리' })
+  const links = await screen.findAllByRole('link', { name: 'Manage my reservation' })
   expect(links).toHaveLength(1)
   expect(links[0]).toHaveAttribute('href', '#/allocation?requestId=1')
 })

@@ -58,7 +58,9 @@ public class IntakeProcessor {
     } catch (RuntimeException e) {
       log.error(
           "Cannot schedule intake {} errorType={}", event.draftId(), e.getClass().getSimpleName());
-      event.work().run(input -> fail(input, "사진 처리를 시작하지 못했어요. 다시 업로드해 주세요."));
+      event
+          .work()
+          .run(input -> fail(input, "Photo processing could not start. Please upload it again."));
     }
   }
 
@@ -87,7 +89,7 @@ public class IntakeProcessor {
           "Intake processing failed for {} errorType={}",
           event.draftId(),
           e.getClass().getSimpleName());
-      fail(event, "사진 속 물품을 처리하지 못했어요. 다시 업로드해 주세요.");
+      fail(event, "The items in the photo could not be processed. Please upload it again.");
     }
   }
 

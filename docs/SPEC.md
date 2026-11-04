@@ -13,6 +13,8 @@ A surplus equipment hand-off service for events. Equipment left over after festi
 - Development tools (Claude Code, Codex, Muse Code) are disclosed in the README
 - To stay clear of discouraged categories (basic RAG, simple image analyzers), AI output always leads to inventory registration, allocation or handover
 
+Current product language (#17): fixed UI, user-facing server messages, category labels and AI-generated explanations are English. Preserve original user input and historical recordings and verification records. Display dates and times explicitly in Asia/Seoul (KST), preserving input interpretation, permissions, quantity and time rules. New repository records, README and current judging/run guides are English under the user's latest correction.
+
 ## Core principle
 
 **AI proposes, the server decides.** The server validates quantity, time and vehicle constraints. The agent can create at most a HOLD; the user confirms.
@@ -33,7 +35,7 @@ A surplus equipment hand-off service for events. Equipment left over after festi
 
 ### 4. Allocation agent
 - Spark calls Spring domain tools through function calling: `searchCandidates`, `checkVehicleFit`, `holdQuantity`
-- The server validates. When conditions do not match, Spark explains why and offers an alternative in Korean
+- The server validates. When conditions do not match, Spark explains why and offers an alternative in English
   - e.g. "높이 180cm라 승용차 불가, 대신 접이식 테이블 3개 어떠세요?" ("180 cm tall, will not fit a sedan. How about 3 folding tables instead?")
 
 ### 5. Handover confirmation
@@ -62,7 +64,7 @@ A surplus equipment hand-off service for events. Equipment left over after festi
 6. Concurrent holds on different items for one request never exceed the request quantity
 7. Confirm racing hold expiry: exactly one wins, quantity restored once
 
-## Screens (Korean UI, mobile first)
+## Screens (English UI, mobile first)
 
 1. **Capture and register**: capture with `<input capture>`, box overlay for each detected item, count per category, edit then confirm
 2. **Pickup request**: record 16 kHz mono PCM with Web Audio (AudioWorklet) and encode the WAV in the browser (D-030), interpreted condition card, allocation proposal with "why it does not fit + alternative"

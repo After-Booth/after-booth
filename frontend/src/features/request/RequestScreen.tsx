@@ -6,15 +6,15 @@ import type { ItemCategory, VehicleType } from '../../api/generated/model'
 import { seoulInput, useRequest } from './useRequest'
 
 const categories: Record<ItemCategory, string> = {
-  DISPLAY_RACK: '진열대',
-  STORAGE_BIN: '수납함',
-  FOLDING_TABLE: '접이식 테이블',
+  DISPLAY_RACK: 'Display rack',
+  STORAGE_BIN: 'Storage bin',
+  FOLDING_TABLE: 'Folding table',
 }
 const vehicles: Record<VehicleType, string> = {
-  SEDAN: '승용차',
+  SEDAN: 'Sedan',
   SUV: 'SUV',
-  VAN: '밴',
-  TRUCK_1T: '1톤 트럭',
+  VAN: 'Van',
+  TRUCK_1T: '1-ton truck',
 }
 const inputClass =
   'mt-2 block min-h-12 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-900 focus:outline-2 focus:outline-emerald-700 disabled:opacity-50'
@@ -32,7 +32,7 @@ export function RequestScreen({ organizationId }: { organizationId?: number }) {
   const mark = (field: string) =>
     missing(field) ? (
       <span id={`${field}-hint`} className="ml-2 text-sm font-medium text-amber-800">
-        확인 필요 · 직접 입력해 주세요
+        Needs review · Enter manually
       </span>
     ) : null
   const attributes = (field: string) => ({
@@ -44,18 +44,18 @@ export function RequestScreen({ organizationId }: { organizationId?: number }) {
     <main className="min-h-dvh bg-stone-50 px-4 py-8 text-slate-900 sm:py-12">
       <div className="mx-auto max-w-xl space-y-7">
         <header className="page-intro">
-          <p className="section-kicker">물품 이어받기</p>
-          <h1 className="mt-3 text-3xl font-bold tracking-tight">다음 행사에 필요한 물품</h1>
+          <p className="section-kicker">Pick up equipment</p>
+          <h1 className="mt-3 text-3xl font-bold tracking-tight">Equipment for your next event</h1>
           <p className="mt-3 leading-relaxed text-slate-600">
-            필요한 물품과 가져갈 차량을 알려 주세요.
+            Tell us what you need and which vehicle you will bring.
             <br />
-            말씀하신 내용을 확인한 뒤 요청을 저장해요.
+            Review the details before saving your request.
           </p>
         </header>
 
         <section className="rounded-2xl border border-stone-200 bg-white p-5">
           <label htmlFor="organization" className="font-semibold">
-            1. 받는 단체
+            1. Receiving organization
           </label>
           <select
             id="organization"
@@ -66,7 +66,7 @@ export function RequestScreen({ organizationId }: { organizationId?: number }) {
             }
             onChange={(event) => request.setOrganizationId(event.target.value)}
           >
-            <option value="">단체를 직접 선택해 주세요</option>
+            <option value="">Choose an organization</option>
             {request.organizations.map((organization) => (
               <option key={organization.id} value={organization.id}>
                 {organization.name}
@@ -75,19 +75,17 @@ export function RequestScreen({ organizationId }: { organizationId?: number }) {
           </select>
           <p className="mt-2 text-sm text-slate-500">
             {organizationId
-              ? '로그인한 계정의 단체로 요청해요.'
-              : '음성으로는 단체가 바뀌지 않아요.'}
+              ? 'Requests use your account organization.'
+              : 'Voice input cannot change your organization.'}
           </p>
-          {request.catalogStatus === 'loading' && (
-            <p role="status">단체 목록을 불러오는 중이에요…</p>
-          )}
+          {request.catalogStatus === 'loading' && <p role="status">Loading organizations…</p>}
           {request.catalogStatus === 'error' && (
             <p role="alert" className="mt-2 text-red-700">
-              단체 목록을 불러오지 못했어요. 페이지를 새로고침해 주세요.
+              Unable to load organizations. Please reload the page.
             </p>
           )}
           {request.catalogStatus === 'ready' && !request.organizations.length && (
-            <p className="mt-2 text-amber-800">선택할 단체가 아직 없어요.</p>
+            <p className="mt-2 text-amber-800">No organizations available yet.</p>
           )}
         </section>
 
@@ -96,10 +94,10 @@ export function RequestScreen({ organizationId }: { organizationId?: number }) {
           className="rounded-2xl border border-stone-200 bg-white p-5"
         >
           <h2 id="describe-heading" className="font-semibold">
-            2. 어떤 물품이 필요한가요?
+            2. What equipment do you need?
           </h2>
           <p className="mt-2 text-sm leading-relaxed text-slate-600">
-            예: 주말 행사에 쓸 진열대 세 개가 필요해요. 승용차로 가져갈게요.
+            Example: I need three display racks for a weekend event. I will bring a sedan.
           </p>
           <button
             type="button"
@@ -109,16 +107,16 @@ export function RequestScreen({ organizationId }: { organizationId?: number }) {
             onClick={() => void request.toggleRecording()}
           >
             {status === 'recording'
-              ? '녹음 끝내고 해석하기'
+              ? 'Stop and interpret'
               : status === 'starting'
-                ? '마이크 연결 중…'
-                : '마이크로 말하기'}
+                ? 'Connecting microphone…'
+                : 'Speak your request'}
           </button>
           <p className="mt-2 text-center text-sm text-slate-500">
-            한 번 눌러 시작하고 다시 눌러 끝내요 · 최대 60초
+            Press once to start and again to stop · Up to 60 seconds
           </p>
           <label className="mt-4 block rounded-xl border border-emerald-800 p-3 text-center font-semibold text-emerald-900 has-disabled:opacity-40">
-            녹음 파일 올리기 (WAV)
+            Upload recording (WAV)
             <input
               type="file"
               accept="audio/wav,.wav"
@@ -133,11 +131,11 @@ export function RequestScreen({ organizationId }: { organizationId?: number }) {
             />
           </label>
           <p id="audio-file-hint" className="mt-2 text-center text-sm text-slate-500">
-            16 kHz 모노 WAV 파일을 올려 주세요 · 최대 60초
+            Upload a 16 kHz mono WAV file · Up to 60 seconds
           </p>
           {status === 'recording' && (
             <p role="status" className="mt-3 text-center font-semibold text-red-700">
-              녹음 중 {request.elapsed} / 60초
+              Recording {request.elapsed} / 60s
             </p>
           )}
           <form
@@ -148,7 +146,7 @@ export function RequestScreen({ organizationId }: { organizationId?: number }) {
             }}
           >
             <label htmlFor="request-text" className="text-sm font-semibold">
-              글로 입력하기
+              Type your request
             </label>
             <textarea
               id="request-text"
@@ -158,14 +156,14 @@ export function RequestScreen({ organizationId }: { organizationId?: number }) {
               value={text}
               disabled={busy || status === 'saved'}
               onChange={(event) => setText(event.target.value)}
-              placeholder="물품, 수량, 차량, 픽업 시간, 사용 목적을 알려 주세요"
+              placeholder="Describe items, quantity, vehicle, pickup time and purpose"
             />
-            <p className="mt-1 text-right text-xs text-slate-500">{text.length} / 500자</p>
+            <p className="mt-1 text-right text-xs text-slate-500">{text.length} / 500 characters</p>
             <button
               className={`${buttonClass} mt-3 w-full`}
               disabled={busy || !text.trim() || status === 'saved'}
             >
-              입력한 내용 해석하기
+              Interpret request
             </button>
           </form>
         </section>
@@ -175,8 +173,8 @@ export function RequestScreen({ organizationId }: { organizationId?: number }) {
             <AiProgress
               label={
                 request.interpretationSource === 'voice'
-                  ? '음성은 Muse Voice Transcribe로 받아쓰고, Muse Spark가 조건을 정리하고 있어요…'
-                  : 'Muse Spark가 말씀하신 조건을 정리하고 있어요…'
+                  ? 'Muse Voice Transcribe is transcribing audio and Muse Spark is structuring your requirements…'
+                  : 'Muse Spark is structuring your requirements…'
               }
               expectedSeconds={
                 request.interpretationSource === 'voice'
@@ -185,15 +183,15 @@ export function RequestScreen({ organizationId }: { organizationId?: number }) {
               }
             />
           )}
-          {status === 'saving' && <p role="status">요청을 저장하고 있어요…</p>}
+          {status === 'saving' && <p role="status">Saving request…</p>}
           {status === 'idle' && (
             <p className="text-center text-sm text-slate-500">
-              아직 요청 내용이 없어요. 음성이나 글로 시작해 주세요.
+              No request yet. Start with voice or text.
             </p>
           )}
           {status === 'empty' && (
             <p className="rounded-xl bg-amber-50 p-5 text-amber-900">
-              들을 수 있는 내용이 없었어요. 다시 말하거나 글로 입력해 주세요.
+              No speech detected. Speak again or type your request.
             </p>
           )}
         </div>
@@ -209,15 +207,15 @@ export function RequestScreen({ organizationId }: { organizationId?: number }) {
             aria-labelledby="review-heading"
           >
             <h2 id="review-heading" className="text-xl font-bold">
-              3. 조건을 확인해 주세요
+              3. Review your requirements
             </h2>
             <p className="mt-2 text-sm text-slate-600">
-              모든 조건을 수정할 수 있어요. 확인 후 저장해 주세요.
+              You can edit every field. Review before saving.
             </p>
             <div className="my-5 rounded-xl bg-stone-50 p-4">
-              <h3 className="text-xs font-semibold text-slate-500">입력 원문</h3>
+              <h3 className="text-xs font-semibold text-slate-500">Original input</h3>
               <p className="mt-2 whitespace-pre-wrap">
-                {interpretation.transcript || '인식된 말이 없어요.'}
+                {interpretation.transcript || 'No speech recognized.'}
               </p>
             </div>
             <form
@@ -229,7 +227,7 @@ export function RequestScreen({ organizationId }: { organizationId?: number }) {
             >
               <fieldset disabled={busy} className="space-y-5">
                 <div>
-                  <label htmlFor="category">물품 종류{mark('category')}</label>
+                  <label htmlFor="category">Item category{mark('category')}</label>
                   <select
                     id="category"
                     required
@@ -239,7 +237,7 @@ export function RequestScreen({ organizationId }: { organizationId?: number }) {
                       request.setFields({ ...fields, category: event.target.value as ItemCategory })
                     }
                   >
-                    <option value="">선택해 주세요</option>
+                    <option value="">Choose an option</option>
                     {Object.entries(categories).map(([value, label]) => (
                       <option key={value} value={value}>
                         {label}
@@ -248,7 +246,7 @@ export function RequestScreen({ organizationId }: { organizationId?: number }) {
                   </select>
                 </div>
                 <div>
-                  <label htmlFor="quantity">수량{mark('quantity')}</label>
+                  <label htmlFor="quantity">Quantity{mark('quantity')}</label>
                   <input
                     id="quantity"
                     type="number"
@@ -263,7 +261,7 @@ export function RequestScreen({ organizationId }: { organizationId?: number }) {
                   />
                 </div>
                 <div>
-                  <label htmlFor="vehicleType">가져갈 차량{mark('vehicleType')}</label>
+                  <label htmlFor="vehicleType">Pickup vehicle{mark('vehicleType')}</label>
                   <select
                     id="vehicleType"
                     required
@@ -276,7 +274,7 @@ export function RequestScreen({ organizationId }: { organizationId?: number }) {
                       })
                     }
                   >
-                    <option value="">선택해 주세요</option>
+                    <option value="">Choose an option</option>
                     {Object.entries(vehicles).map(([value, label]) => (
                       <option key={value} value={value}>
                         {label}
@@ -286,7 +284,7 @@ export function RequestScreen({ organizationId }: { organizationId?: number }) {
                 </div>
                 <div>
                   <label htmlFor="pickupDeadline">
-                    픽업 가능 시각 (한국 시간, Asia/Seoul){mark('pickupDeadline')}
+                    Pickup time (Asia/Seoul, KST){mark('pickupDeadline')}
                   </label>
                   <input
                     id="pickupDeadline"
@@ -299,7 +297,7 @@ export function RequestScreen({ organizationId }: { organizationId?: number }) {
                   />
                 </div>
                 <div>
-                  <label htmlFor="purpose">사용 목적{mark('purpose')}</label>
+                  <label htmlFor="purpose">Purpose{mark('purpose')}</label>
                   <input
                     id="purpose"
                     {...attributes('purpose')}
@@ -319,7 +317,7 @@ export function RequestScreen({ organizationId }: { organizationId?: number }) {
                     fields.quantity < 1
                   }
                 >
-                  픽업 요청 저장
+                  Save pickup request
                 </button>
               </fieldset>
             </form>
@@ -331,9 +329,9 @@ export function RequestScreen({ organizationId }: { organizationId?: number }) {
             role="status"
             className="rounded-2xl border border-emerald-300 bg-emerald-50 p-6"
           >
-            <h2 className="text-xl font-bold text-emerald-900">픽업 요청을 저장했어요</h2>
+            <h2 className="text-xl font-bold text-emerald-900">Pickup request saved</h2>
             <p className="mt-2 text-sm">
-              요청 번호 #{saved.id} ·{' '}
+              Request ID #{saved.id} ·{' '}
               {
                 request.organizations.find(
                   (organization) => organization.id === saved.organizationId,
@@ -341,24 +339,24 @@ export function RequestScreen({ organizationId }: { organizationId?: number }) {
               }
             </p>
             <dl className="mt-4 grid grid-cols-[auto_1fr] gap-x-5 gap-y-3">
-              <dt>물품</dt>
+              <dt>Item</dt>
               <dd>
-                {categories[saved.category]} {saved.quantity}개
+                {categories[saved.category]} {saved.quantity} items
               </dd>
-              <dt>차량</dt>
+              <dt>Vehicle</dt>
               <dd>{vehicles[saved.vehicleType]}</dd>
-              <dt>픽업 시각</dt>
+              <dt>Pickup time</dt>
               <dd>
                 {saved.pickupDeadline
-                  ? `${seoulInput(saved.pickupDeadline).replace('T', ' ')} (한국 시간)`
-                  : '미정'}
+                  ? `${seoulInput(saved.pickupDeadline).replace('T', ' ')} (Asia/Seoul, KST)`
+                  : 'Not specified'}
               </dd>
-              <dt>사용 목적</dt>
-              <dd>{saved.purpose || '미입력'}</dd>
+              <dt>Purpose</dt>
+              <dd>{saved.purpose || 'Not provided'}</dd>
             </dl>
             {saved.transcript && (
               <p className="mt-4 whitespace-pre-wrap text-sm text-slate-600">
-                입력 원문: {saved.transcript}
+                Original input: {saved.transcript}
               </p>
             )}
           </section>

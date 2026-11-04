@@ -24,10 +24,7 @@ const server = setupServer(
   mockHttp.get('*/api/private', ({ request }) =>
     request.headers.get('Authorization') === 'Bearer new-token'
       ? HttpResponse.json({ ok: true })
-      : HttpResponse.json(
-          { code: 'UNAUTHENTICATED', message: '로그인해 주세요.' },
-          { status: 401 },
-        ),
+      : HttpResponse.json({ code: 'UNAUTHENTICATED', message: 'Please sign in.' }, { status: 401 }),
   ),
 )
 beforeAll(() => server.listen())
@@ -59,7 +56,7 @@ test('a request from an old session is not retried after account change', async 
       calls += 1
       await wait
       return HttpResponse.json(
-        { code: 'UNAUTHENTICATED', message: '로그인해 주세요.' },
+        { code: 'UNAUTHENTICATED', message: 'Please sign in.' },
         { status: 401 },
       )
     }),
@@ -80,7 +77,7 @@ test('an expired refresh session clears the access token and is not retried', as
     mockHttp.post('*/api/auth/refresh', () => {
       refreshes += 1
       return HttpResponse.json(
-        { code: 'UNAUTHENTICATED', message: '로그인해 주세요.' },
+        { code: 'UNAUTHENTICATED', message: 'Please sign in.' },
         { status: 401 },
       )
     }),
@@ -103,7 +100,7 @@ test('a temporary refresh failure reports the error without clearing the current
   server.use(
     mockHttp.post('*/api/auth/refresh', () =>
       HttpResponse.json(
-        { code: 'AUTH_UNAVAILABLE', message: '잠시 후 다시 시도해 주세요.' },
+        { code: 'AUTH_UNAVAILABLE', message: 'Please try again shortly.' },
         { status: 503 },
       ),
     ),
@@ -125,7 +122,7 @@ test('logout clears the access token locally even when the server call fails', a
   server.use(
     mockHttp.post('*/api/auth/logout', () =>
       HttpResponse.json(
-        { code: 'AUTH_UNAVAILABLE', message: '잠시 후 다시 시도해 주세요.' },
+        { code: 'AUTH_UNAVAILABLE', message: 'Please try again shortly.' },
         { status: 503 },
       ),
     ),
@@ -153,7 +150,7 @@ test('a 401 that persists after a successful refresh ends the session without mo
     mockHttp.get('*/api/private', () => {
       protectedCalls += 1
       return HttpResponse.json(
-        { code: 'UNAUTHENTICATED', message: '로그인이 필요해요.' },
+        { code: 'UNAUTHENTICATED', message: 'Sign in required.' },
         { status: 401 },
       )
     }),
@@ -174,7 +171,7 @@ test('an authentication retry does not refresh again when the token was already 
     mockHttp.post('*/api/members/me/password', () =>
       ++attempts === 1
         ? HttpResponse.json(
-            { code: 'UNAUTHENTICATED', message: '로그인이 필요해요.' },
+            { code: 'UNAUTHENTICATED', message: 'Sign in required.' },
             { status: 401 },
           )
         : new HttpResponse(null, { status: 204 }),
@@ -209,7 +206,7 @@ test('a protected authentication mutation refreshes once and obtains a fresh CSR
       })
       return requests.length === 1
         ? HttpResponse.json(
-            { code: 'UNAUTHENTICATED', message: '로그인해 주세요.' },
+            { code: 'UNAUTHENTICATED', message: 'Please sign in.' },
             { status: 401 },
           )
         : new HttpResponse(null, { status: 204 })
@@ -237,7 +234,7 @@ test('a temporary refresh failure is reported as session trouble until a refresh
     mockHttp.post('*/api/auth/refresh', () =>
       failing
         ? HttpResponse.json(
-            { code: 'AUTH_UNAVAILABLE', message: '잠시 후 다시 시도해 주세요.' },
+            { code: 'AUTH_UNAVAILABLE', message: 'Please try again shortly.' },
             { status: 503 },
           )
         : HttpResponse.json({ accessToken: 'new-token', tokenType: 'Bearer', expiresIn: 600 }),

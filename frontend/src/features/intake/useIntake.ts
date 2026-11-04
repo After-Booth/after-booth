@@ -77,10 +77,10 @@ const toEditable = (line: IntakeDraft['lines'][number]): EditableLine => ({
 const isPositiveInt = (value: string) => /^\d+$/.test(value) && Number(value) >= 1
 
 export function problemOf(line: EditableLine): string | undefined {
-  if (line.category === 'UNKNOWN') return '분류를 골라 주세요'
-  if (!isPositiveInt(line.quantity)) return '수량은 1개 이상이어야 해요'
+  if (line.category === 'UNKNOWN') return 'Choose a category'
+  if (!isPositiveInt(line.quantity)) return 'Quantity must be at least 1'
   if (![line.width, line.depth, line.height].every(isPositiveInt)) {
-    return '크기를 1cm 이상으로 입력해 주세요'
+    return 'Enter dimensions of at least 1 cm'
   }
   return undefined
 }
@@ -134,7 +134,7 @@ export function useIntake() {
       setError(message)
     }
     const deadline = setTimeout(
-      () => stop('분석이 오래 걸리고 있어요. 사진을 다시 찍어 주세요.'),
+      () => stop('Analysis is taking too long. Please retake the photo.'),
       POLL_TIMEOUT_MS,
     )
     const poll = async () => {
@@ -151,7 +151,7 @@ export function useIntake() {
         const transient =
           !(e instanceof ApiError) || e.status >= 500 || [408, 429].includes(e.status)
         if (!transient || errors >= MAX_POLL_ERRORS) {
-          stop('분석 상태를 확인하지 못했어요. 사진을 다시 찍어 주세요.')
+          stop('Unable to check analysis status. Please retake the photo.')
           return
         }
       }
@@ -190,7 +190,7 @@ export function useIntake() {
         )
         if (controller.signal.aborted) return
         if (!event) {
-          setError('등록할 행사를 찾지 못했어요.')
+          setError('Event for registration not found.')
           return
         }
         const res = await retryConflict(
@@ -205,7 +205,7 @@ export function useIntake() {
         if (!controller.signal.aborted) receive(bodyOf<IntakeDraft>(res))
       } catch (e) {
         if (!controller.signal.aborted)
-          setError(messageOf(e, '사진을 올리지 못했어요. 다시 찍어 주세요.'))
+          setError(messageOf(e, 'Unable to upload the photo. Please retake it.'))
       } finally {
         if (!controller.signal.aborted) setUploading(false)
       }
@@ -247,7 +247,7 @@ export function useIntake() {
     } catch (e) {
       if (controller.signal.aborted) return
       if (e instanceof ApiError) confirmAttempt.current = undefined
-      setError(messageOf(e, '재고로 등록하지 못했어요. 다시 시도해 주세요.'))
+      setError(messageOf(e, 'Unable to register inventory. Please try again.'))
     } finally {
       if (!controller.signal.aborted) setConfirming(false)
     }

@@ -10,7 +10,7 @@ const reservation = {
   requestId: 2,
   organizationId: 1,
   itemId: 3,
-  itemLabel: '진열대',
+  itemLabel: 'Display rack',
   quantity: 3,
   status: 'CONFIRMED',
   holdExpiresAt: '2099-11-01T10:00:00+09:00',
@@ -63,8 +63,8 @@ afterAll(() => {
 async function selectReservation() {
   const user = userEvent.setup()
   render(<HandoverScreen />)
-  await screen.findByRole('option', { name: '예약 #7 · 진열대 3개' })
-  await user.selectOptions(screen.getByLabelText('확정된 예약'), '7')
+  await screen.findByRole('option', { name: 'Reservation #7 · Display rack 3 items' })
+  await user.selectOptions(screen.getByLabelText('Confirmed reservations'), '7')
   return user
 }
 const photo = () => new File(['photo'], 'handover.jpg', { type: 'image/jpeg' })
@@ -78,18 +78,18 @@ test('limits handover photos to JPEG and PNG and shows the recount duration whil
     }),
   )
   await selectReservation()
-  const input = screen.getByLabelText('인계 사진 촬영 또는 업로드')
+  const input = screen.getByLabelText('Take or upload handover photo')
   expect(input).toHaveAttribute('accept', 'image/jpeg,image/png')
   // Checked synchronously after the change, before the upload can answer
   fireEvent.change(input, {
     target: { files: [new File(['photo'], 'handover.png', { type: 'image/png' })] },
   })
   expect(screen.getByRole('status')).toHaveTextContent(
-    'Muse Spark가 물품 수량을 세고, SAM 3.1이 분할 결과를 확인하고 있어요. 잠시 기다려 주세요…',
+    'Muse Spark is counting items and SAM 3.1 is checking segmentation. Please wait…',
   )
-  expect(screen.getByRole('status')).toHaveTextContent('보통 약 4초 걸려요')
+  expect(screen.getByRole('status')).toHaveTextContent('Usually about 4s')
   expect(input).toBeDisabled()
-  expect(await screen.findByText('인계를 완료했어요')).toBeInTheDocument()
+  expect(await screen.findByText('Handover complete')).toBeInTheDocument()
   expect(calls).toBe(1)
 })
 
@@ -108,7 +108,7 @@ test('uploads a matching photo and refreshes category and event reuse totals', a
           ? {
               totalReused: 3,
               reusedVolumeLiters: 1859,
-              byCategory: [{ category: 'DISPLAY_RACK', label: '진열대', quantity: 3 }],
+              byCategory: [{ category: 'DISPLAY_RACK', label: 'Display rack', quantity: 3 }],
               byEvent: [{ eventId: 1, eventName: '가을 행사', quantity: 3 }],
             }
           : emptyStats,
@@ -116,12 +116,14 @@ test('uploads a matching photo and refreshes category and event reuse totals', a
     ),
   )
   const user = await selectReservation()
-  await user.upload(screen.getByLabelText('인계 사진 촬영 또는 업로드'), photo())
-  expect(await screen.findByText('인계를 완료했어요')).toBeInTheDocument()
-  expect(await screen.findByText('총 3개 재사용')).toBeInTheDocument()
-  expect(screen.getByText('부피 약 1.85㎥ 장비를 버리지 않고 다시 썼어요')).toBeInTheDocument()
-  expect(screen.getByText('(등록된 크기 기준 추정)')).toBeInTheDocument()
-  expect(screen.getByText('가을 행사 · 3개')).toBeInTheDocument()
+  await user.upload(screen.getByLabelText('Take or upload handover photo'), photo())
+  expect(await screen.findByText('Handover complete')).toBeInTheDocument()
+  expect(await screen.findByText('3 items reused in total')).toBeInTheDocument()
+  expect(
+    screen.getByText('Approximately 1.85㎥ of equipment reused instead of discarded'),
+  ).toBeInTheDocument()
+  expect(screen.getByText('(Estimated from registered dimensions)')).toBeInTheDocument()
+  expect(screen.getByText('가을 행사 · 3 items')).toBeInTheDocument()
 })
 
 test.each([0, 3])(
@@ -137,18 +139,24 @@ test.each([0, 3])(
       }),
     )
     const user = await selectReservation()
-    await user.upload(screen.getByLabelText('인계 사진 촬영 또는 업로드'), photo())
-    expect(await screen.findByText(`예약 3개 · 사진에서 센 수량 ${count}개`)).toBeInTheDocument()
-    const input = screen.getByLabelText('실제 받은 수량')
+    await user.upload(screen.getByLabelText('Take or upload handover photo'), photo())
+    expect(
+      await screen.findByText(`Reserved 3 items · Counted in photo ${count} items`),
+    ).toBeInTheDocument()
+    const input = screen.getByLabelText('Actual handed-over quantity')
     for (const value of ['0', '-1', '4']) {
       await user.clear(input)
       await user.type(input, value)
-      expect(screen.getByRole('button', { name: '이 수량으로 인계 완료' })).toBeDisabled()
+      expect(
+        screen.getByRole('button', { name: 'Complete handover with this quantity' }),
+      ).toBeDisabled()
     }
     await user.clear(input)
     await user.type(input, '2')
-    await user.dblClick(screen.getByRole('button', { name: '이 수량으로 인계 완료' }))
-    expect(await screen.findByText('진열대 2개가 다시 사용돼요.')).toBeInTheDocument()
+    await user.dblClick(
+      screen.getByRole('button', { name: 'Complete handover with this quantity' }),
+    )
+    expect(await screen.findByText('Display rack 2 items will be reused.')).toBeInTheDocument()
     expect(resolutions).toBe(1)
   },
 )
@@ -164,12 +172,12 @@ test('retakes the same file as a new action and retries an uncertain network fai
   )
   const user = await selectReservation()
   const file = photo()
-  await user.upload(screen.getByLabelText('인계 사진 촬영 또는 업로드'), file)
-  expect(await screen.findByRole('alert')).toHaveTextContent('다시 시도해 주세요.')
-  expect(screen.queryByLabelText('실제 받은 수량')).not.toBeInTheDocument()
-  await user.click(screen.getByRole('button', { name: '다시 시도' }))
-  await screen.findByText('수량 확인이 필요해요')
-  await user.upload(screen.getByLabelText('인계 사진 다시 촬영'), file)
+  await user.upload(screen.getByLabelText('Take or upload handover photo'), file)
+  expect(await screen.findByRole('alert')).toHaveTextContent('Please try again.')
+  expect(screen.queryByLabelText('Actual handed-over quantity')).not.toBeInTheDocument()
+  await user.click(screen.getByRole('button', { name: 'Try again' }))
+  await screen.findByText('Check the quantity')
+  await user.upload(screen.getByLabelText('Retake handover photo'), file)
   await waitFor(() => expect(keys).toHaveLength(3))
   expect(keys[0]).toBe(keys[1])
   expect(keys[2]).not.toBe(keys[0])
@@ -182,17 +190,17 @@ test('uses a new action key after a completed AI failure', async () => {
       keys.push(request.headers.get('Idempotency-Key')!)
       return keys.length === 1
         ? HttpResponse.json(
-            { code: 'AI_UNAVAILABLE', message: '사진을 확인하지 못했어요.' },
+            { code: 'AI_UNAVAILABLE', message: 'Unable to check the photo.' },
             { status: 503 },
           )
         : HttpResponse.json(result(0))
     }),
   )
   const user = await selectReservation()
-  await user.upload(screen.getByLabelText('인계 사진 촬영 또는 업로드'), photo())
-  expect(await screen.findByRole('alert')).toHaveTextContent('사진을 확인하지 못했어요.')
-  await user.click(screen.getByRole('button', { name: '다시 시도' }))
-  await screen.findByText('수량 확인이 필요해요')
+  await user.upload(screen.getByLabelText('Take or upload handover photo'), photo())
+  expect(await screen.findByRole('alert')).toHaveTextContent('Unable to check the photo.')
+  await user.click(screen.getByRole('button', { name: 'Try again' }))
+  await screen.findByText('Check the quantity')
   expect(keys[1]).not.toBe(keys[0])
 })
 
@@ -212,7 +220,7 @@ test.each([502, 504, 500])(
         storedResponses.set(key, result(3, 'COMPLETED'))
         return status === 500
           ? HttpResponse.json(
-              { code: 'INTERNAL_ERROR', message: '요청을 확인하지 못했어요.' },
+              { code: 'INTERNAL_ERROR', message: 'Unable to check the request.' },
               { status },
             )
           : new HttpResponse('Gateway error', { status })
@@ -222,11 +230,11 @@ test.each([502, 504, 500])(
       ),
     )
     const user = await selectReservation()
-    await user.upload(screen.getByLabelText('인계 사진 촬영 또는 업로드'), photo())
+    await user.upload(screen.getByLabelText('Take or upload handover photo'), photo())
     await screen.findByRole('alert')
-    await user.click(screen.getByRole('button', { name: '다시 시도' }))
-    expect(await screen.findByText('인계를 완료했어요')).toBeInTheDocument()
-    expect(await screen.findByText('총 3개 재사용')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Try again' }))
+    expect(await screen.findByText('Handover complete')).toBeInTheDocument()
+    expect(await screen.findByText('3 items reused in total')).toBeInTheDocument()
     expect(keys).toHaveLength(2)
     expect(keys[1]).toBe(keys[0])
     expect(commits).toBe(1)
@@ -240,16 +248,16 @@ test('retries an in-flight idempotency conflict with the same key', async () => 
       keys.push(request.headers.get('Idempotency-Key')!)
       return keys.length === 1
         ? HttpResponse.json(
-            { code: 'IDEMPOTENCY_CONFLICT', message: '처리 중이에요.' },
+            { code: 'IDEMPOTENCY_CONFLICT', message: 'Processing.' },
             { status: 409 },
           )
         : HttpResponse.json(result(0))
     }),
   )
   const user = await selectReservation()
-  await user.upload(screen.getByLabelText('인계 사진 촬영 또는 업로드'), photo())
-  expect(screen.getByLabelText('확정된 예약')).toBeDisabled()
-  await screen.findByText('수량 확인이 필요해요', {}, { timeout: 2500 })
+  await user.upload(screen.getByLabelText('Take or upload handover photo'), photo())
+  expect(screen.getByLabelText('Confirmed reservations')).toBeDisabled()
+  await screen.findByText('Check the quantity', {}, { timeout: 2500 })
   expect(keys).toHaveLength(2)
   expect(keys[1]).toBe(keys[0])
 })
@@ -264,9 +272,9 @@ test('directs a provider to receiver cancellation without a forbidden mutation',
     }),
   )
   const user = await selectReservation()
-  await user.upload(screen.getByLabelText('인계 사진 촬영 또는 업로드'), photo())
-  expect(await screen.findByText(/수령자에게 본인의 배정 제안/)).toBeInTheDocument()
-  expect(screen.queryByRole('button', { name: /예약 취소/ })).not.toBeInTheDocument()
+  await user.upload(screen.getByLabelText('Take or upload handover photo'), photo())
+  expect(await screen.findByText(/ask the receiver to cancel/)).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: /Cancel reservation/ })).not.toBeInTheDocument()
   expect(cancelled).toBe(0)
 })
 
@@ -279,9 +287,9 @@ test('filters statistics by event and displays an empty result', async () => {
     }),
   )
   const user = await selectReservation()
-  await user.selectOptions(screen.getByLabelText('행사 필터'), '1')
+  await user.selectOptions(screen.getByLabelText('Filter by event'), '1')
   await waitFor(() => expect(filters).toContain('1'))
-  expect(await screen.findByText('총 0개 재사용')).toBeInTheDocument()
-  expect(screen.getByText('아직 완료된 인계가 없어요.')).toBeInTheDocument()
-  expect(screen.queryByText(/부피 약/)).not.toBeInTheDocument()
+  expect(await screen.findByText('0 items reused in total')).toBeInTheDocument()
+  expect(screen.getByText('No completed handovers yet.')).toBeInTheDocument()
+  expect(screen.queryByText(/Approximately/)).not.toBeInTheDocument()
 })

@@ -135,3 +135,7 @@ Logout always clears the in-memory token and signed-in UI, even when the server 
 ## D-086 — #17 historical completion reconciliation (2026-11-04)
 
 Reconcile #15 as historically complete using its CLOSED state, PR #60 merge `02ab1d9`, and the author's clean-clone and diagram reports. Reconcile #9 against PR #46 R6–R8, the author's main5/main6 reports at `d89f4e5`, visible-alternative assertions and PR #60's full-demo report. These are historical evidence comparisons, not newly executed checks or proof of the post-authentication demo. Add the actual authentication migration filename to ERD without modifying SQL.
+
+## D-087 — #17 English product and replay evidence (2026-11-04)
+
+Current UI, user-facing server messages, AI-generated explanations, README and judging/run guides switch to English. The user's subsequent correction also requires new repository records to be English; final chat reporting remains Korean. Preserve historical TASKS, DECISIONS, BUDGET, reviews and original recordings. Contract-only commit `6216e80` changes display-language descriptions and examples, preserving API identifiers, permissions and shapes. Keep Asia/Seoul time semantics and Korean input support. English prompts change replay keys: do not translate or overwrite original recordings, or present synthetic responses as Meta recordings. New paid recording remains gated on separate approval.

@@ -32,6 +32,9 @@ class AllocationOutcomeTest {
             null,
             null);
     ReflectionTestUtils.setField(item, "id", 7L);
+    ReflectionTestUtils.setField(item, "label", "진열대");
+    assertThat(item.label()).isEqualTo("Display rack");
+    assertThat(ReflectionTestUtils.getField(item, "label")).isEqualTo("진열대");
     for (int held : List.of(0, 2, 5)) {
       List<ReservationResponse> reservations =
           held == 0
@@ -75,6 +78,22 @@ class AllocationOutcomeTest {
       }
       assertThat(rejected).hasSize(1);
     }
+  }
+
+  @Test
+  void explanationsUseEnglishAndFallBackForHistoricalKoreanResponses() {
+    assertThat(AllocationCandidate.explanation(3, 2, "Two items are on hold."))
+        .isEqualTo("Two items are on hold.");
+    for (String unsupported :
+        Arrays.asList(null, "", "임시 확보했어요.", "Held items: 임시 확보", "x".repeat(2001))) {
+      assertThat(AllocationCandidate.explanation(3, 2, unsupported))
+          .isEqualTo("Held 2 of 3 requested items. Review and confirm your reservations.");
+    }
+    assertThat(AllocationCandidate.explanation(3, 0, null))
+        .isEqualTo(
+            "No items could be allocated automatically. Review the reasons and select an alternative.");
+    for (var code : com.afterbooth.global.error.ErrorCode.values())
+      assertThat(code.message()).doesNotContainPattern("[가-힣]");
   }
 
   @Test

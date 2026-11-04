@@ -16,11 +16,11 @@ import {
 import type { MemberView } from './api/generated/model'
 
 const links = [
-  { href: '#/', label: '물품 등록', short: '등록' },
-  { href: '#/request', label: '물품 픽업 요청하기', short: '픽업 요청' },
-  { href: '#/allocation', label: '배정 보드', short: '배정 보드' },
-  { href: '#/handover', label: '물품 인계 및 재사용 통계', short: '인계' },
-  { href: '#/account', label: '계정 관리', short: '계정' },
+  { href: '#/', label: 'Register items', short: 'Register' },
+  { href: '#/request', label: 'Request item pickup', short: 'Pickup' },
+  { href: '#/allocation', label: 'Allocation board', short: 'Board' },
+  { href: '#/handover', label: 'Item handover and reuse stats', short: 'Handover' },
+  { href: '#/account', label: 'Account settings', short: 'Account' },
 ] as const
 
 function SiteHeader({ hash }: { hash: string }) {
@@ -28,16 +28,16 @@ function SiteHeader({ hash }: { hash: string }) {
   return (
     <header className="site-header">
       <div className="site-header-inner">
-        <a className="brand" href="#/" aria-label="애프터부스 홈">
+        <a className="brand" href="#/" aria-label="AfterBooth home">
           <span className="brand-mark" aria-hidden="true">
             <span />
           </span>
           <span>
-            <strong>애프터부스</strong>
-            <small>물품의 다음 쓰임을 잇다</small>
+            <strong>AfterBooth</strong>
+            <small>Give equipment its next purpose</small>
           </span>
         </a>
-        <nav className="site-nav" aria-label="주요 메뉴">
+        <nav className="site-nav" aria-label="Main navigation">
           {links.map((link) => (
             <a
               key={link.href}
@@ -70,10 +70,10 @@ function HomeScreen() {
       <footer className="mx-auto max-w-2xl px-5 pb-8">
         <p className="text-xs text-slate-400" data-testid="health">
           {error
-            ? '서버 연결 실패'
+            ? 'Server connection failed'
             : health
-              ? `서버 ${health.status} · AI ${health.aiMode}`
-              : '서버 확인 중…'}
+              ? `Server ${health.status} · AI ${health.aiMode}`
+              : 'Checking server…'}
         </p>
       </footer>
     </>
@@ -122,18 +122,18 @@ export default function App() {
   if (checking)
     screen = (
       <main className="mx-auto max-w-xl px-5 py-10" role="status">
-        계정을 확인하고 있어요…
+        Checking your account…
       </main>
     )
   else if (startupError)
     screen = (
       <main className="mx-auto max-w-xl px-5 py-10">
-        <p role="alert">계정 정보를 확인하지 못했어요. 연결을 확인한 뒤 다시 시도해 주세요.</p>
+        <p role="alert">Unable to check your account. Check your connection and try again.</p>
         <button
           className="mt-4 min-h-12 text-emerald-800 underline"
           onClick={() => window.location.reload()}
         >
-          다시 시도
+          Try again
         </button>
       </main>
     )
@@ -161,7 +161,7 @@ export default function App() {
       {member && <SiteHeader hash={hash} />}
       {member && trouble && (
         <div role="alert" className="session-notice">
-          <p>로그인 상태를 확인하지 못했어요. 연결을 확인한 뒤 다시 시도해 주세요.</p>
+          <p>Unable to refresh your session. Check your connection and try again.</p>
           <button
             disabled={retrying}
             onClick={() => {
@@ -171,7 +171,7 @@ export default function App() {
                 .finally(() => setRetrying(false))
             }}
           >
-            다시 시도
+            Try again
           </button>
           <button
             disabled={retrying}
@@ -182,7 +182,7 @@ export default function App() {
                 .finally(() => setRetrying(false))
             }}
           >
-            로그아웃
+            Sign out
           </button>
         </div>
       )}

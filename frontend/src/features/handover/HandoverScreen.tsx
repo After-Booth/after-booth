@@ -22,14 +22,16 @@ export function HandoverScreen() {
     <main className="min-h-dvh bg-stone-50 px-4 py-8 text-slate-900">
       <div className="mx-auto max-w-2xl space-y-8">
         <header className="page-intro">
-          <p className="section-kicker">물품의 새로운 시작</p>
+          <p className="section-kicker">A new beginning for equipment</p>
           <a href="#/allocation" className="text-emerald-800 underline">
-            배정 보드
+            Allocation board
           </a>
-          <h1 className="mt-4 text-3xl font-bold">물품 인계</h1>
-          <p className="mt-2 text-slate-600">현장에서 받은 물품을 촬영하고 인계 수량을 확인해요.</p>
+          <h1 className="mt-4 text-3xl font-bold">Item handover</h1>
+          <p className="mt-2 text-slate-600">
+            Providers: photograph the items at pickup and confirm the handed-over quantity.
+          </p>
         </header>
-        {handover.loading && <p role="status">최신 예약과 통계를 불러오는 중이에요…</p>}
+        {handover.loading && <p role="status">Loading current reservations and stats…</p>}
         {handover.readError && (
           <div role="alert">
             <p>{handover.readError}</p>
@@ -38,7 +40,7 @@ export function HandoverScreen() {
               disabled={handover.loading || handover.busy}
               onClick={() => void handover.refresh()}
             >
-              조회 다시 시도
+              Retry loading
             </button>
           </div>
         )}
@@ -47,10 +49,10 @@ export function HandoverScreen() {
           aria-labelledby="handover-heading"
         >
           <h2 id="handover-heading" className="text-xl font-bold">
-            인계할 예약 선택
+            Choose a reservation to hand over
           </h2>
           <label className="block">
-            확정된 예약
+            Confirmed reservations
             <select
               className="mt-2 block min-h-12 w-full rounded-xl border border-stone-300 bg-white px-3"
               value={handover.selectedId ?? ''}
@@ -60,7 +62,7 @@ export function HandoverScreen() {
                 setQuantity('')
               }}
             >
-              <option value="">예약을 선택해 주세요</option>
+              <option value="">Choose a reservation</option>
               {handover.reservations
                 .filter(
                   (entry) =>
@@ -70,7 +72,7 @@ export function HandoverScreen() {
                 )
                 .map((entry) => (
                   <option key={entry.id} value={entry.id}>
-                    예약 #{entry.id} · {entry.itemLabel} {entry.quantity}개
+                    Reservation #{entry.id} · {entry.itemLabel} {entry.quantity} items
                   </option>
                 ))}
             </select>
@@ -78,12 +80,12 @@ export function HandoverScreen() {
           {!handover.loading &&
             !handover.readError &&
             !handover.reservations.some((entry) => entry.status === 'CONFIRMED') && (
-              <p>인계할 확정 예약이 없어요.</p>
+              <p>No confirmed reservations to hand over.</p>
             )}
           {reservation && (
             <p>
-              예약 수량 {reservation.quantity}개 · 픽업 마감{' '}
-              {new Intl.DateTimeFormat('ko-KR', {
+              Reserved quantity {reservation.quantity} items · Pickup deadline (Asia/Seoul, KST){' '}
+              {new Intl.DateTimeFormat('en-US', {
                 timeZone: 'Asia/Seoul',
                 dateStyle: 'short',
                 timeStyle: 'short',
@@ -92,7 +94,7 @@ export function HandoverScreen() {
           )}
           {confirmed && !completed && (
             <label className={`block text-center ${button}`}>
-              {handover.result ? '인계 사진 다시 촬영' : '인계 사진 촬영 또는 업로드'}
+              {handover.result ? 'Retake handover photo' : 'Take or upload handover photo'}
               <input
                 className="sr-only"
                 type="file"
@@ -113,7 +115,7 @@ export function HandoverScreen() {
           {handover.photoUrl && (
             <figure>
               <div className="relative overflow-hidden rounded-xl bg-slate-100">
-                <img src={handover.photoUrl} alt="인계 사진" className="block w-full" />
+                <img src={handover.photoUrl} alt="Handover photo" className="block w-full" />
                 {handover.photoResult?.boxes.map((box, index) => (
                   <div
                     key={index}
@@ -130,14 +132,14 @@ export function HandoverScreen() {
               </div>
               {handover.photoResult && handover.photoResult.boxes.length === 0 && (
                 <figcaption className="mt-2 text-sm text-slate-600">
-                  사진에 표시할 수량 박스가 없어요.
+                  No quantity boxes to display on this photo.
                 </figcaption>
               )}
             </figure>
           )}
           {handover.busy && (
             <AiProgress
-              label="Muse Spark가 물품 수량을 세고, SAM 3.1이 분할 결과를 확인하고 있어요. 잠시 기다려 주세요…"
+              label="Muse Spark is counting items and SAM 3.1 is checking segmentation. Please wait…"
               expectedSeconds={AI_EXPECTED_SECONDS.handover}
             />
           )}
@@ -150,22 +152,22 @@ export function HandoverScreen() {
                   disabled={handover.busy}
                   onClick={() => void handover.retry()}
                 >
-                  다시 시도
+                  Try again
                 </button>
               )}
             </div>
           )}
           {handover.result?.status === 'MISMATCH' && (
             <div className="space-y-4 rounded-xl border border-amber-300 bg-amber-50 p-5">
-              <h3 className="text-lg font-bold">수량 확인이 필요해요</h3>
-              <p className="text-sm">마지막으로 완료된 사진 확인 결과예요.</p>
+              <h3 className="text-lg font-bold">Check the quantity</h3>
+              <p className="text-sm">The result of the last completed photo check.</p>
               <p>
-                예약 {handover.result.expectedQty}개 · 사진에서 센 수량 {handover.result.countedQty}
-                개
+                Reserved {handover.result.expectedQty} items · Counted in photo{' '}
+                {handover.result.countedQty} items
               </p>
               <p>
-                수량이 같아도 일부 물품을 분할하지 못하면 확인이 필요해요. 사진을 다시 찍거나 실제
-                받은 수량을 확정해 주세요.
+                Even if quantities match, incomplete segmentation needs a check. Retake the photo or
+                confirm the actual handed-over quantity.
               </p>
               <form
                 onSubmit={(event) => {
@@ -174,7 +176,7 @@ export function HandoverScreen() {
                 }}
               >
                 <label className="block">
-                  실제 받은 수량
+                  Actual handed-over quantity
                   <input
                     type="number"
                     min="1"
@@ -188,27 +190,27 @@ export function HandoverScreen() {
                   />
                 </label>
                 <p className="mt-2 text-sm">
-                  1개부터 예약 수량까지 입력해 주세요. 받지 않은 수량은 재고로 돌아가요.
+                  Enter 1 up to the reserved quantity. Uncollected items return to stock.
                 </p>
                 <button
                   type="submit"
                   className={`mt-4 w-full ${button}`}
                   disabled={handover.busy || !validQuantity}
                 >
-                  이 수량으로 인계 완료
+                  Complete handover with this quantity
                 </button>
               </form>
               <p>
-                아무것도 인계하지 않았다면 수령자에게 본인의 배정 제안에서 예약을 취소하도록 요청해
-                주세요.
+                If nothing was handed over, ask the receiver to cancel their reservation from their
+                allocation proposal.
               </p>
             </div>
           )}
           {completed && (
             <div role="status" className="rounded-xl bg-emerald-100 p-5">
-              <h3 className="text-lg font-bold">인계를 완료했어요</h3>
+              <h3 className="text-lg font-bold">Handover complete</h3>
               <p className="mt-2">
-                {completion.itemLabel} {completion.handedOverQty}개가 다시 사용돼요.
+                {completion.itemLabel} {completion.handedOverQty} items will be reused.
               </p>
             </div>
           )}
@@ -218,17 +220,17 @@ export function HandoverScreen() {
           aria-labelledby="stats-heading"
         >
           <h2 id="stats-heading" className="text-2xl font-bold">
-            재사용 통계
+            Reuse stats
           </h2>
           <label className="block">
-            행사 필터
+            Filter by event
             <select
               className="mt-2 block min-h-12 w-full rounded-xl border border-stone-300 bg-white px-3"
               value={handover.eventId ?? ''}
               disabled={handover.busy}
               onChange={(event) => handover.setEventId(Number(event.target.value) || undefined)}
             >
-              <option value="">전체 행사</option>
+              <option value="">All events</option>
               {handover.events.map((event) => (
                 <option key={event.id} value={event.id}>
                   {event.name}
@@ -239,31 +241,31 @@ export function HandoverScreen() {
           {handover.stats && (
             <>
               <p className="text-2xl font-bold text-emerald-900">
-                총 {handover.stats.totalReused}개 재사용
+                {handover.stats.totalReused} items reused in total
               </p>
               {handover.stats.totalReused > 0 && (
                 <div>
                   <p className="font-semibold text-emerald-900">
-                    부피 약 {volumeText(handover.stats.reusedVolumeLiters)} 장비를 버리지 않고 다시
-                    썼어요
+                    Approximately {volumeText(handover.stats.reusedVolumeLiters)} of equipment
+                    reused instead of discarded
                   </p>
-                  <p className="text-sm text-slate-600">(등록된 크기 기준 추정)</p>
+                  <p className="text-sm text-slate-600">(Estimated from registered dimensions)</p>
                 </div>
               )}
-              {handover.stats.totalReused === 0 && <p>아직 완료된 인계가 없어요.</p>}
-              <h3 className="font-bold">카테고리별</h3>
+              {handover.stats.totalReused === 0 && <p>No completed handovers yet.</p>}
+              <h3 className="font-bold">By category</h3>
               <ul>
                 {handover.stats.byCategory.map((entry) => (
                   <li key={entry.category}>
-                    {entry.label} · {entry.quantity}개
+                    {entry.label} · {entry.quantity} items
                   </li>
                 ))}
               </ul>
-              <h3 className="font-bold">행사별</h3>
+              <h3 className="font-bold">By event</h3>
               <ul>
                 {handover.stats.byEvent.map((entry) => (
                   <li key={entry.eventId}>
-                    {entry.eventName} · {entry.quantity}개
+                    {entry.eventName} · {entry.quantity} items
                   </li>
                 ))}
               </ul>

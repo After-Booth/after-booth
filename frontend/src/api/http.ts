@@ -63,7 +63,7 @@ export async function http<T>(url: string, options?: RequestInit): Promise<T> {
     throw new ApiError(
       res.status,
       body?.code ?? 'UNKNOWN',
-      body?.message ?? '요청을 처리하지 못했어요. 잠시 후 다시 시도해 주세요.',
+      body?.message ?? 'Unable to process the request. Please try again shortly.',
     )
   }
   return { data: body, status: res.status, headers: res.headers } as T

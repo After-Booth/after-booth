@@ -33,7 +33,7 @@ export function useAllocationBoard(requestId?: number) {
           setMessage(
             error instanceof ApiError
               ? error.message
-              : '최신 수량을 불러오지 못했어요. 잠시 후 자동으로 다시 확인해요.',
+              : 'Unable to load current quantities. Retrying automatically shortly.',
           )
       } finally {
         if (!controller.signal.aborted) setLoading(false)

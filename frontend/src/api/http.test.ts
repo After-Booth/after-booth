@@ -7,7 +7,7 @@ const server = setupServer(
   mswHttp.get('http://test/ok', () => HttpResponse.json({ value: 1 })),
   mswHttp.get('http://test/conflict', () =>
     HttpResponse.json(
-      { code: 'QTY_UNAVAILABLE', message: '남은 수량이 부족해요.' },
+      { code: 'QTY_UNAVAILABLE', message: 'Insufficient available quantity.' },
       { status: 409 },
     ),
   ),
@@ -27,7 +27,7 @@ test('throws ApiError with the server code and message on failure', async () => 
   await expect(http('http://test/conflict')).rejects.toMatchObject({
     status: 409,
     code: 'QTY_UNAVAILABLE',
-    message: '남은 수량이 부족해요.',
+    message: 'Insufficient available quantity.',
   })
 })
 

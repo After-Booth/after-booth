@@ -29,7 +29,7 @@ const reservation: Reservation = {
   requestId: 2,
   organizationId: 1,
   itemId: 3,
-  itemLabel: '진열대',
+  itemLabel: 'Display rack',
   quantity: 3,
   status: 'CONFIRMED',
   holdExpiresAt: '2099-11-01T10:00:00+09:00',
@@ -49,9 +49,8 @@ const mismatch: HandoverResult = {
   boxes,
 }
 const ok = <T,>(data: T) => ({ data, status: 200 as const, headers: new Headers() })
-const conflict = () => new ApiError(409, 'IDEMPOTENCY_CONFLICT', '처리 중이에요.')
-const invalidTransition = () =>
-  new ApiError(409, 'INVALID_TRANSITION', '예약 상태를 확인해 주세요.')
+const conflict = () => new ApiError(409, 'IDEMPOTENCY_CONFLICT', 'Processing.')
+const invalidTransition = () => new ApiError(409, 'INVALID_TRANSITION', 'Check reservation status.')
 const createUrl = vi.fn<(photo: Blob) => string>()
 const revokeUrl = vi.fn<(url: string) => void>()
 
@@ -88,13 +87,13 @@ async function mount() {
     </StrictMode>,
   )
   await act(() => vi.advanceTimersByTimeAsync(0))
-  fireEvent.change(screen.getByLabelText('확정된 예약'), { target: { value: '7' } })
+  fireEvent.change(screen.getByLabelText('Confirmed reservations'), { target: { value: '7' } })
   return view
 }
 
 async function upload(name = 'handover.jpg') {
   await act(async () => {
-    fireEvent.change(screen.getByLabelText(/인계 사진 .*촬영|인계 사진 촬영 또는 업로드/), {
+    fireEvent.change(screen.getByLabelText(/Retake handover photo|Take or upload handover photo/), {
       target: { files: [new File(['photo'], name, { type: 'image/jpeg' })] },
     })
   })
@@ -114,14 +113,14 @@ test('recovers an earlier completion before the next new-key photo request', asy
   vi.mocked(submitHandoverPhoto).mockRejectedValue(conflict())
   await mount()
   await exhaustConflicts()
-  expect(screen.queryByText('인계를 완료했어요')).not.toBeInTheDocument()
+  expect(screen.queryByText('Handover complete')).not.toBeInTheDocument()
   const keys = vi.mocked(submitHandoverPhoto).mock.calls.map((call) => call[2]['Idempotency-Key'])
   expect(new Set(keys).size).toBe(1)
   vi.mocked(getReservation).mockResolvedValue(ok(completed))
   await act(async () => {
-    fireEvent.click(screen.getByRole('button', { name: '다시 시도' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
   })
-  expect(screen.getByText('진열대 2개가 다시 사용돼요.')).toBeInTheDocument()
+  expect(screen.getByText('Display rack 2 items will be reused.')).toBeInTheDocument()
   expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   expect(submitHandoverPhoto).toHaveBeenCalledTimes(4)
   expect(resolveHandover).not.toHaveBeenCalled()
@@ -133,7 +132,7 @@ test('recovers completion directly when the final conflict retry ends', async ()
   vi.mocked(getReservation).mockResolvedValue(ok(completed))
   await mount()
   await exhaustConflicts()
-  expect(screen.getByText('진열대 2개가 다시 사용돼요.')).toBeInTheDocument()
+  expect(screen.getByText('Display rack 2 items will be reused.')).toBeInTheDocument()
   expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   expect(getReservation).toHaveBeenCalledTimes(1)
 })
@@ -146,11 +145,11 @@ test.each(['RELEASED', 'EXPIRED'] as const)(
     await exhaustConflicts()
     vi.mocked(getReservation).mockResolvedValue(ok({ ...reservation, status }))
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: '다시 시도' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
     })
     expect(submitHandoverPhoto).toHaveBeenCalledTimes(4)
-    expect(screen.queryByText('인계를 완료했어요')).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: '다시 시도' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Handover complete')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument()
   },
 )
 
@@ -160,15 +159,15 @@ test('keeps recovery retryable after a failed read without sending another mutat
   await mount()
   await exhaustConflicts()
   await act(async () => {
-    fireEvent.click(screen.getByRole('button', { name: '다시 시도' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
   })
   expect(submitHandoverPhoto).toHaveBeenCalledTimes(4)
-  expect(screen.getByRole('button', { name: '다시 시도' })).toBeEnabled()
+  expect(screen.getByRole('button', { name: 'Try again' })).toBeEnabled()
   vi.mocked(getReservation).mockResolvedValue(ok(completed))
   await act(async () => {
-    fireEvent.click(screen.getByRole('button', { name: '다시 시도' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
   })
-  expect(screen.getByText('진열대 2개가 다시 사용돼요.')).toBeInTheDocument()
+  expect(screen.getByText('Display rack 2 items will be reused.')).toBeInTheDocument()
   expect(submitHandoverPhoto).toHaveBeenCalledTimes(4)
 })
 
@@ -179,9 +178,9 @@ test('recovers a completion racing the preflight and a new-key INVALID_TRANSITIO
   vi.mocked(getReservation).mockResolvedValueOnce(ok(reservation)).mockResolvedValue(ok(completed))
   vi.mocked(submitHandoverPhoto).mockRejectedValue(invalidTransition())
   await act(async () => {
-    fireEvent.click(screen.getByRole('button', { name: '다시 시도' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
   })
-  expect(screen.getByText('진열대 2개가 다시 사용돼요.')).toBeInTheDocument()
+  expect(screen.getByText('Display rack 2 items will be reused.')).toBeInTheDocument()
   const calls = vi.mocked(submitHandoverPhoto).mock.calls
   expect(calls).toHaveLength(5)
   expect(calls[4][2]['Idempotency-Key']).not.toBe(calls[0][2]['Idempotency-Key'])
@@ -202,24 +201,24 @@ test.each(['network', 500, 502, 504] as const)(
       .mockRejectedValueOnce(
         failure === 'network'
           ? new TypeError('Connection lost')
-          : new ApiError(failure, 'INTERNAL_ERROR', '요청 결과를 확인하지 못했어요.'),
+          : new ApiError(failure, 'INTERNAL_ERROR', 'Unable to check the request result.'),
       )
       .mockResolvedValue(ok(storedResult))
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: '다시 시도' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
     })
     expect(submitHandoverPhoto).toHaveBeenCalledTimes(5)
     expect(getReservation).toHaveBeenCalledTimes(2)
     vi.mocked(getReservation).mockResolvedValue(ok(completed))
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: '다시 시도' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
     })
     expect(submitHandoverPhoto).toHaveBeenCalledTimes(6)
     const calls = vi.mocked(submitHandoverPhoto).mock.calls
     expect(calls[5][2]['Idempotency-Key']).toBe(calls[4][2]['Idempotency-Key'])
     expect(calls[4][2]['Idempotency-Key']).not.toBe(calls[0][2]['Idempotency-Key'])
     expect(getReservation).toHaveBeenCalledTimes(2)
-    expect(screen.getByText('진열대 2개가 다시 사용돼요.')).toBeInTheDocument()
+    expect(screen.getByText('Display rack 2 items will be reused.')).toBeInTheDocument()
     expect(screen.getAllByTestId('handover-box')).toHaveLength(2)
   },
 )
@@ -237,9 +236,9 @@ test.each<Reservation>([
     await mount()
     await upload()
     expect(getReservation).toHaveBeenCalledWith(7)
-    expect(screen.queryByText('인계를 완료했어요')).not.toBeInTheDocument()
-    expect(screen.getByRole('alert')).toHaveTextContent('예약 상태를 확인해 주세요.')
-    expect(screen.getByText('총 0개 재사용')).toBeInTheDocument()
+    expect(screen.queryByText('Handover complete')).not.toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent('Check reservation status.')
+    expect(screen.getByText('0 items reused in total')).toBeInTheDocument()
     expect(submitHandoverPhoto).toHaveBeenCalledTimes(1)
   },
 )
@@ -249,10 +248,10 @@ test('keeps an uncompleted reservation uncompleted after exhausted conflict retr
   await mount()
   await exhaustConflicts()
   expect(getReservation).toHaveBeenCalledWith(7)
-  expect(screen.queryByText('인계를 완료했어요')).not.toBeInTheDocument()
-  expect(screen.getByRole('alert')).toHaveTextContent('처리 중이에요.')
-  expect(screen.getByText('예약 수량 3개', { exact: false })).toBeInTheDocument()
-  expect(screen.getByText('총 0개 재사용')).toBeInTheDocument()
+  expect(screen.queryByText('Handover complete')).not.toBeInTheDocument()
+  expect(screen.getByRole('alert')).toHaveTextContent('Processing.')
+  expect(screen.getByText('Reserved quantity 3 items', { exact: false })).toBeInTheDocument()
+  expect(screen.getByText('0 items reused in total')).toBeInTheDocument()
 })
 
 test('stops scheduled conflict retries when unmounted during backoff', async () => {
@@ -280,16 +279,16 @@ test('ignores an old mutation response after leaving and reentering the screen',
   await mount()
   const reads = vi.mocked(listReservations).mock.calls.length
   await act(async () => answer(ok({ ...mismatch, reservation: completed, status: 'COMPLETED' })))
-  expect(screen.queryByText('인계를 완료했어요')).not.toBeInTheDocument()
-  expect(screen.queryByAltText('인계 사진')).not.toBeInTheDocument()
+  expect(screen.queryByText('Handover complete')).not.toBeInTheDocument()
+  expect(screen.queryByAltText('Handover photo')).not.toBeInTheDocument()
   expect(listReservations).toHaveBeenCalledTimes(reads)
 })
 
 test('shows a handed-over reservation from the server when reentering', async () => {
   vi.mocked(listReservations).mockResolvedValue(ok([completed]))
   await mount()
-  expect(screen.getByText('진열대 2개가 다시 사용돼요.')).toBeInTheDocument()
-  expect(screen.queryByLabelText('인계 사진 촬영 또는 업로드')).not.toBeInTheDocument()
+  expect(screen.getByText('Display rack 2 items will be reused.')).toBeInTheDocument()
+  expect(screen.queryByLabelText('Take or upload handover photo')).not.toBeInTheDocument()
   expect(submitHandoverPhoto).not.toHaveBeenCalled()
 })
 
@@ -305,7 +304,7 @@ test.each(['MISMATCH', 'COMPLETED'] as const)(
     )
     await mount()
     await upload()
-    expect(screen.getByAltText('인계 사진')).toHaveAttribute('src', 'blob:handover-1')
+    expect(screen.getByAltText('Handover photo')).toHaveAttribute('src', 'blob:handover-1')
     const overlays = screen.getAllByTestId('handover-box')
     expect(overlays).toHaveLength(2)
     expect(overlays[0]).toHaveStyle({ left: '10%', top: '20%', width: '30%', height: '40%' })
@@ -317,11 +316,11 @@ test('shows a zero-box photo while preserving manual resolution and retake', asy
   vi.mocked(submitHandoverPhoto).mockResolvedValue(ok({ ...mismatch, boxes: [], countedQty: 0 }))
   await mount()
   await upload()
-  expect(screen.getByAltText('인계 사진')).toBeInTheDocument()
+  expect(screen.getByAltText('Handover photo')).toBeInTheDocument()
   expect(screen.queryByTestId('handover-box')).not.toBeInTheDocument()
-  expect(screen.getByText('사진에 표시할 수량 박스가 없어요.')).toBeInTheDocument()
-  expect(screen.getByLabelText('실제 받은 수량')).toBeInTheDocument()
-  expect(screen.getByLabelText('인계 사진 다시 촬영')).toBeInTheDocument()
+  expect(screen.getByText('No quantity boxes to display on this photo.')).toBeInTheDocument()
+  expect(screen.getByLabelText('Actual handed-over quantity')).toBeInTheDocument()
+  expect(screen.getByLabelText('Retake handover photo')).toBeInTheDocument()
 })
 
 test.each([{ localBoxes: boxes }, { localBoxes: [] }])(
@@ -338,12 +337,14 @@ test.each([{ localBoxes: boxes }, { localBoxes: [] }])(
     )
     await mount()
     await upload()
-    fireEvent.change(screen.getByLabelText('실제 받은 수량'), { target: { value: '2' } })
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: '이 수량으로 인계 완료' }))
+    fireEvent.change(screen.getByLabelText('Actual handed-over quantity'), {
+      target: { value: '2' },
     })
-    expect(screen.getByText('진열대 2개가 다시 사용돼요.')).toBeInTheDocument()
-    expect(screen.getByAltText('인계 사진')).toHaveAttribute('src', 'blob:handover-1')
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Complete handover with this quantity' }))
+    })
+    expect(screen.getByText('Display rack 2 items will be reused.')).toBeInTheDocument()
+    expect(screen.getByAltText('Handover photo')).toHaveAttribute('src', 'blob:handover-1')
     expect(screen.queryAllByTestId('handover-box')).toHaveLength(localBoxes.length)
     if (localBoxes.length) {
       expect(screen.getAllByTestId('handover-box')[0]).toHaveStyle({
@@ -353,7 +354,7 @@ test.each([{ localBoxes: boxes }, { localBoxes: [] }])(
         height: '40%',
       })
     } else {
-      expect(screen.getByText('사진에 표시할 수량 박스가 없어요.')).toBeInTheDocument()
+      expect(screen.getByText('No quantity boxes to display on this photo.')).toBeInTheDocument()
     }
   },
 )
@@ -370,9 +371,9 @@ test('revokes replaced and unmounted photos and clears old results immediately o
   )
   await upload('retake.jpg')
   expect(revokeUrl).toHaveBeenCalledWith('blob:handover-1')
-  expect(screen.getByAltText('인계 사진')).toHaveAttribute('src', 'blob:handover-2')
+  expect(screen.getByAltText('Handover photo')).toHaveAttribute('src', 'blob:handover-2')
   expect(screen.queryByTestId('handover-box')).not.toBeInTheDocument()
-  expect(screen.queryByLabelText('실제 받은 수량')).not.toBeInTheDocument()
+  expect(screen.queryByLabelText('Actual handed-over quantity')).not.toBeInTheDocument()
   await act(async () => answer(ok({ ...mismatch, boxes: [], countedQty: 0 })))
   view.unmount()
   expect(revokeUrl).toHaveBeenCalledWith('blob:handover-2')
@@ -382,9 +383,9 @@ test('clears the photo and old result when choosing a different reservation', as
   vi.mocked(listReservations).mockResolvedValue(ok([reservation, { ...reservation, id: 8 }]))
   await mount()
   await upload()
-  fireEvent.change(screen.getByLabelText('확정된 예약'), { target: { value: '8' } })
+  fireEvent.change(screen.getByLabelText('Confirmed reservations'), { target: { value: '8' } })
   expect(revokeUrl).toHaveBeenCalledWith('blob:handover-1')
-  expect(screen.queryByAltText('인계 사진')).not.toBeInTheDocument()
+  expect(screen.queryByAltText('Handover photo')).not.toBeInTheDocument()
   expect(screen.queryByTestId('handover-box')).not.toBeInTheDocument()
-  expect(screen.queryByLabelText('실제 받은 수량')).not.toBeInTheDocument()
+  expect(screen.queryByLabelText('Actual handed-over quantity')).not.toBeInTheDocument()
 })

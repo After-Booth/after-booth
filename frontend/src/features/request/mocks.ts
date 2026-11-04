@@ -9,8 +9,8 @@ export const mockPickupRequests = new Map<number, PickupRequest>()
 
 export const requestHandlers = [
   getListOrganizationsMockHandler([
-    { id: 1, name: '주말 행사 운영팀' },
-    { id: 2, name: '이웃 문화모임' },
+    { id: 1, name: 'Weekend event team' },
+    { id: 2, name: 'Neighborhood culture group' },
   ]),
   getInterpretConditionsMockHandler({
     context: 'RECEIVER',
@@ -19,14 +19,14 @@ export const requestHandlers = [
       category: 'DISPLAY_RACK',
       quantity: 3,
       vehicleType: 'SEDAN',
-      purpose: '주말 행사 진열용',
+      purpose: 'Weekend event display',
     },
     missingFields: [],
   }),
   http.post('*/api/pickup-requests', async ({ request }) => {
     if (!request.headers.get('Idempotency-Key'))
       return HttpResponse.json(
-        { code: 'INVALID_INPUT', message: '다시 저장해 주세요.' },
+        { code: 'INVALID_INPUT', message: 'Please save again.' },
         { status: 400 },
       )
     const body = (await request.json()) as CreatePickupRequest

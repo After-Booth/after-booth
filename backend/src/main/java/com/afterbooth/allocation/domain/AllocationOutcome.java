@@ -39,7 +39,7 @@ public final class AllocationOutcome {
             new Alternative(
                 ItemResponse.from(item, false),
                 Math.min(remaining, item.availableQty()),
-                "차량과 픽업 조건에 맞아요. 직접 선택해 임시 확보할 수 있어요."));
+                "Meets your vehicle and pickup requirements. Select it to place a hold."));
         rejected.remove(item.id());
       } else if (item.category() == request.category() && !rejected.containsKey(item.id())) {
         rejected.put(

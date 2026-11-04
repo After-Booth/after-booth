@@ -7,9 +7,9 @@ const button =
   'min-h-12 rounded-xl bg-emerald-800 px-5 py-3 font-semibold text-white disabled:opacity-40'
 
 const TOOL_GLOSS: Record<ToolCallName, string> = {
-  searchCandidates: '재고 후보 찾기',
-  checkVehicleFit: '차량에 실을 수 있는지 확인',
-  holdQuantity: '수량 임시 확보',
+  searchCandidates: 'Search inventory candidates',
+  checkVehicleFit: 'Check vehicle fit',
+  holdQuantity: 'Hold quantity',
 }
 
 export function AllocationProposal({ request }: { request: PickupRequest }) {
@@ -30,20 +30,22 @@ function RequestAllocationProposal({ request }: { request: PickupRequest }) {
       className="space-y-4 rounded-2xl border border-emerald-300 bg-white p-5"
     >
       <h2 id="allocation-heading" className="text-xl font-bold">
-        배정 제안
+        Allocation proposal
       </h2>
-      <p className="text-sm text-slate-600">차량과 픽업 시간을 확인하고 물품을 임시 확보해요.</p>
-      {allocation.loading && <p role="status">기존 예약을 확인하는 중이에요…</p>}
+      <p className="text-sm text-slate-600">
+        Check vehicle fit and pickup time, then hold your items.
+      </p>
+      {allocation.loading && <p role="status">Checking existing reservations…</p>}
       <button
         className={button}
         disabled={allocation.pending || allocation.loading || quantity > 0}
         onClick={() => void allocation.execute()}
       >
-        {allocation.pending ? '배정 확인 중…' : '배정 제안 받기'}
+        {allocation.pending ? 'Checking allocation…' : 'Get allocation proposal'}
       </button>
       {allocation.pending && (
         <AiProgress
-          label="Muse Spark 배정 에이전트가 재고와 차량 조건을 확인하고 있어요…"
+          label="Muse Spark is checking inventory and vehicle constraints…"
           expectedSeconds={AI_EXPECTED_SECONDS.allocation}
         />
       )}
@@ -54,19 +56,19 @@ function RequestAllocationProposal({ request }: { request: PickupRequest }) {
       )}
       {quantity > 0 && (
         <p role="status" className="font-bold text-emerald-900">
-          {request.quantity}개 중 {quantity}개 확보
-          {quantity < request.quantity ? ' · 부분 배정' : ' · 배정 성공'}
+          {quantity} of {request.quantity} items held
+          {quantity < request.quantity ? ' · Partial allocation' : ' · Allocation successful'}
         </p>
       )}
       {allocation.result && (
         <>
           {allocation.result.status === 'NO_MATCH' && quantity === 0 && (
-            <p className="font-semibold text-amber-800">조건에 맞는 물품을 확보하지 못했어요.</p>
+            <p className="font-semibold text-amber-800">No matching items could be held.</p>
           )}
           {leadAlternative && (
             <p className="text-lg font-bold text-emerald-900">
-              대신 {leadAlternative.item.label}{' '}
-              {Math.min(leadAlternative.quantity, request.quantity - quantity)}개 어떠세요?
+              Alternative: {leadAlternative.item.label}{' '}
+              {Math.min(leadAlternative.quantity, request.quantity - quantity)} items available
             </p>
           )}
           <p>{allocation.result.explanation}</p>
@@ -80,7 +82,7 @@ function RequestAllocationProposal({ request }: { request: PickupRequest }) {
           {allocation.result.toolCalls.length > 0 && (
             <details open>
               <summary className="cursor-pointer text-sm font-semibold">
-                Muse Spark가 호출한 서버 도구
+                Server tools called by Muse Spark
               </summary>
               <ol className="mt-2 space-y-3 text-sm">
                 {allocation.result.toolCalls.map((call, index) => (
@@ -96,10 +98,10 @@ function RequestAllocationProposal({ request }: { request: PickupRequest }) {
                           : 'bg-emerald-100 text-emerald-900'
                       }`}
                     >
-                      {call.outcome === 'REJECTED' ? '거절' : '통과'}
+                      {call.outcome === 'REJECTED' ? 'Rejected' : 'Passed'}
                     </span>
                     <span className="w-full text-slate-700">
-                      {call.summary ?? '조건을 확인했어요.'}
+                      {call.summary ?? 'Constraints checked.'}
                     </span>
                   </li>
                 ))}
@@ -108,17 +110,17 @@ function RequestAllocationProposal({ request }: { request: PickupRequest }) {
           )}
           {quantity < request.quantity && (
             <div className="space-y-3">
-              <h3 className="font-semibold">직접 선택할 수 있는 대안</h3>
+              <h3 className="font-semibold">Choose an alternative</h3>
               {allocation.result.alternatives.length === 0 ? (
                 <p className="text-sm text-slate-600">
-                  현재 선택할 수 있는 대안이 없어요. 배정 보드에서 남은 수량을 확인해 주세요.
+                  No alternatives available now. Check remaining stock on the allocation board.
                 </p>
               ) : (
                 allocation.result.alternatives.map((alternative) => (
                   <article key={alternative.item.id} className="border-t border-stone-200 pt-3">
                     <h4 className="font-semibold">
                       {alternative.item.label}{' '}
-                      {Math.min(alternative.quantity, request.quantity - quantity)}개
+                      {Math.min(alternative.quantity, request.quantity - quantity)} items
                     </h4>
                     <p className="my-2 text-sm">{alternative.reason}</p>
                     <button
@@ -131,7 +133,7 @@ function RequestAllocationProposal({ request }: { request: PickupRequest }) {
                         })
                       }
                     >
-                      {alternative.item.label} 대안 선택
+                      {alternative.item.label} Choose alternative
                     </button>
                   </article>
                 ))
@@ -145,15 +147,15 @@ function RequestAllocationProposal({ request }: { request: PickupRequest }) {
           {held.map((reservation) => (
             <li key={reservation.id} className="flex flex-wrap items-center gap-3">
               <span>
-                {reservation.itemLabel} {reservation.quantity}개 ·{' '}
-                {reservation.status === 'HELD' ? '임시 확보' : '예약 확정'}
+                {reservation.itemLabel} {reservation.quantity} items ·{' '}
+                {reservation.status === 'HELD' ? 'Held' : 'Confirmed'}
               </span>
               <button
                 className="min-h-12 underline"
                 disabled={allocation.pending}
                 onClick={() => void allocation.cancel(reservation)}
               >
-                {reservation.itemLabel} 예약 취소
+                {reservation.itemLabel} Cancel reservation
               </button>
               {reservation.status === 'HELD' && (
                 <button
@@ -161,7 +163,7 @@ function RequestAllocationProposal({ request }: { request: PickupRequest }) {
                   disabled={allocation.pending}
                   onClick={() => void allocation.confirm(reservation)}
                 >
-                  {reservation.itemLabel} 예약 확정하기
+                  {reservation.itemLabel} Confirm reservation
                 </button>
               )}
             </li>
@@ -170,23 +172,25 @@ function RequestAllocationProposal({ request }: { request: PickupRequest }) {
       )}
       {held.some((reservation) => reservation.status === 'HELD') && (
         <p className="text-sm text-slate-600">
-          임시 확보는 시간이 지나면 풀려요. 확정하면 인계 화면에서 사진으로 넘겨받을 수 있어요.
+          Holds expire automatically. Confirm your reservation so the provider can complete the
+          handover.
         </p>
       )}
       {allocation.manualSelection && (
         <section className="space-y-3" aria-labelledby="current-stock-heading">
           <h3 id="current-stock-heading" className="font-semibold">
-            추가로 선택할 수 있는 현재 재고
+            Additional available stock
           </h3>
           <p className="text-sm text-slate-600">
-            선택하면 서버가 차량 크기와 픽업 마감, 남은 수량을 다시 확인해요.
+            The server rechecks vehicle size, pickup deadline and available quantity when you
+            choose.
           </p>
-          {allocation.stockLoading && <p role="status">현재 재고를 확인하는 중이에요…</p>}
+          {allocation.stockLoading && <p role="status">Checking current stock…</p>}
           {allocation.stockMessage && <p role="alert">{allocation.stockMessage}</p>}
           {!allocation.stockLoading &&
             !allocation.stockMessage &&
             allocation.currentStock.length === 0 && (
-              <p className="text-sm">현재 추가로 선택할 재고가 없어요.</p>
+              <p className="text-sm">No additional stock available now.</p>
             )}
           {allocation.currentStock
             .filter((item) => item.availableQty > 0)
@@ -195,7 +199,7 @@ function RequestAllocationProposal({ request }: { request: PickupRequest }) {
               return (
                 <article key={item.id} className="border-t border-stone-200 pt-3">
                   <h4 className="font-semibold">
-                    {item.label} {remaining}개
+                    {item.label} {remaining} items
                   </h4>
                   <button
                     className={`${button} mt-2`}
@@ -204,11 +208,11 @@ function RequestAllocationProposal({ request }: { request: PickupRequest }) {
                       void allocation.execute({
                         item,
                         quantity: remaining,
-                        reason: '선택하면 서버가 차량과 픽업 조건을 확인해요.',
+                        reason: 'The server checks vehicle and pickup constraints when selected.',
                       })
                     }
                   >
-                    {item.label} 추가 선택
+                    {item.label} Choose additional stock
                   </button>
                 </article>
               )
@@ -219,7 +223,7 @@ function RequestAllocationProposal({ request }: { request: PickupRequest }) {
         href={`#/allocation?requestId=${request.id}`}
         className="inline-block py-3 font-semibold text-emerald-800 underline"
       >
-        배정 보드에서 남은 수량 확인
+        Check remaining stock on the allocation board
       </a>
     </section>
   )

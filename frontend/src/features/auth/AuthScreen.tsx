@@ -19,13 +19,13 @@ type Mode = 'login' | 'register' | 'verify' | 'forgot' | 'reset'
 
 function errorMessage(error: unknown, loginAttempt = false) {
   if (error instanceof ApiError) {
-    if (loginAttempt && error.status === 401) return '이메일 또는 비밀번호를 확인해 주세요.'
-    if (error.code === 'CSRF_REJECTED') return '보안 확인이 만료되었어요. 다시 시도해 주세요.'
-    if (error.status === 429) return '요청이 너무 많아요. 잠시 후 다시 시도해 주세요.'
-    if (error.status === 503) return '서비스를 잠시 이용할 수 없어요. 잠시 후 다시 시도해 주세요.'
+    if (loginAttempt && error.status === 401) return 'Check your email or password.'
+    if (error.code === 'CSRF_REJECTED') return 'Security check expired. Please try again.'
+    if (error.status === 429) return 'Too many requests. Please try again shortly.'
+    if (error.status === 503) return 'Service temporarily unavailable. Please try again shortly.'
     return error.message
   }
-  return '요청을 처리하지 못했어요. 연결을 확인하고 다시 시도해 주세요.'
+  return 'Unable to process the request. Check your connection and try again.'
 }
 
 export function AuthScreen({ onLogin }: { onLogin: (member: MemberView) => void }) {
@@ -74,7 +74,7 @@ export function AuthScreen({ onLogin }: { onLogin: (member: MemberView) => void 
         setCode('')
         setChallenge('')
         setMode('login')
-        setMessage('이메일 인증이 완료되었어요. 로그인해 주세요.')
+        setMessage('Email verified. Please sign in.')
       }
       if (mode === 'forgot') {
         const response = await authOperation((csrf) => requestPasswordReset({ email }, csrf))
@@ -93,7 +93,7 @@ export function AuthScreen({ onLogin }: { onLogin: (member: MemberView) => void 
         setChallenge('')
         clearSession()
         setMode('login')
-        setMessage('비밀번호를 변경했어요. 다시 로그인해 주세요.')
+        setMessage('Password changed. Please sign in again.')
       }
     } catch (error) {
       setMessage(errorMessage(error, mode === 'login'))
@@ -123,25 +123,27 @@ export function AuthScreen({ onLogin }: { onLogin: (member: MemberView) => void 
     }
   }
   const title = {
-    login: '다시 만나요',
-    register: '애프터부스 시작하기',
-    verify: '이메일 인증',
-    forgot: '비밀번호 재설정',
-    reset: '새 비밀번호 설정',
+    login: 'Welcome back',
+    register: 'Get started with AfterBooth',
+    verify: 'Verify email',
+    forgot: 'Reset password',
+    reset: 'Set a new password',
   }[mode]
   return (
     <main className="mx-auto max-w-xl px-5 py-10 text-slate-900">
       <header className="page-intro">
-        <p className="section-kicker">물품의 다음 무대를 함께</p>
+        <p className="section-kicker">Give equipment its next stage</p>
         <h1 className="mt-3 text-3xl font-bold">{title}</h1>
-        <p className="mt-3 text-slate-600">행사가 끝난 물품을 필요한 곳으로 연결해요.</p>
+        <p className="mt-3 text-slate-600">
+          Connect leftover event equipment with people who need it.
+        </p>
       </header>
       <form
         onSubmit={(event) => void submit(event)}
         className="mt-6 space-y-5 rounded-2xl border border-stone-200 bg-white p-6"
       >
         <label className="block font-semibold">
-          이메일
+          Email
           <input
             className={input}
             type="email"
@@ -154,7 +156,7 @@ export function AuthScreen({ onLogin }: { onLogin: (member: MemberView) => void 
         </label>
         {(mode === 'verify' || mode === 'reset') && (
           <label className="block font-semibold">
-            이메일 인증번호
+            Email verification code
             <input
               className={input}
               inputMode="numeric"
@@ -168,7 +170,7 @@ export function AuthScreen({ onLogin }: { onLogin: (member: MemberView) => void 
         )}
         {mode !== 'forgot' && (
           <label className="block font-semibold">
-            {mode === 'reset' ? '새 비밀번호' : '비밀번호'}
+            {mode === 'reset' ? 'New password' : 'Password'}
             <input
               className={input}
               type="password"
@@ -183,8 +185,7 @@ export function AuthScreen({ onLogin }: { onLogin: (member: MemberView) => void 
         )}
         {mode === 'register' && (
           <p className="text-sm text-slate-600">
-            비밀번호는 12자 이상 128자 이하여야 해요. 인증을 완료하지 않으면 가입 신청은 24시간 후
-            만료돼요.
+            Use 12–128 characters. Unverified registrations expire after 24 hours.
           </p>
         )}
         {message && (
@@ -199,27 +200,27 @@ export function AuthScreen({ onLogin }: { onLogin: (member: MemberView) => void 
             className="min-h-12 font-semibold text-emerald-800 underline"
             onClick={() => void resendVerification()}
           >
-            인증번호 다시 받기
+            Resend verification code
           </button>
         )}
         <button disabled={busy} className={button}>
           {busy
-            ? '처리 중이에요…'
+            ? 'Processing…'
             : {
-                login: '로그인',
-                register: '인증 메일 요청',
-                verify: '가입 완료',
-                forgot: '재설정 메일 요청',
-                reset: '비밀번호 변경',
+                login: 'Sign in',
+                register: 'Request verification email',
+                verify: 'Complete signup',
+                forgot: 'Request reset email',
+                reset: 'Change password',
               }[mode]}
         </button>
       </form>
       <div className="mt-5 flex flex-wrap gap-4 text-sm font-semibold text-emerald-800">
-        {mode !== 'login' && <button onClick={() => switchMode('login')}>로그인</button>}
+        {mode !== 'login' && <button onClick={() => switchMode('login')}>Sign in</button>}
         {mode === 'login' && (
           <>
-            <button onClick={() => switchMode('register')}>회원가입</button>
-            <button onClick={() => switchMode('forgot')}>비밀번호를 잊으셨나요?</button>
+            <button onClick={() => switchMode('register')}>Create account</button>
+            <button onClick={() => switchMode('forgot')}>Forgot password?</button>
           </>
         )}
       </div>
@@ -236,7 +237,9 @@ export function AccountScreen({ member }: { member: MemberView }) {
     if (busy) return
     if (
       action === 'withdraw' &&
-      !window.confirm('정말 탈퇴하시겠어요? 탈퇴 후 계정과 이전 내역은 복구할 수 없어요.')
+      !window.confirm(
+        'Withdraw your account? Your account and previous history cannot be restored.',
+      )
     )
       return
     setBusy(true)
@@ -269,20 +272,20 @@ export function AccountScreen({ member }: { member: MemberView }) {
   return (
     <main className="mx-auto max-w-xl space-y-6 px-5 py-10 text-slate-900">
       <header className="page-intro">
-        <p className="section-kicker">내 계정</p>
-        <h1 className="mt-3 text-3xl font-bold">계정 관리</h1>
+        <p className="section-kicker">My account</p>
+        <h1 className="mt-3 text-3xl font-bold">Account settings</h1>
       </header>
       <section className="space-y-2 rounded-2xl border border-stone-200 bg-white p-6">
-        <h2 className="font-bold">계정 정보</h2>
-        <p>이메일: {member.email}</p>
-        <p>회원 번호: {member.id}</p>
-        <p>상태: {member.state}</p>
-        <p>단체 번호: {member.organizationId}</p>
+        <h2 className="font-bold">Account details</h2>
+        <p>Email: {member.email}</p>
+        <p>Member ID: {member.id}</p>
+        <p>Status: {member.state}</p>
+        <p>Organization ID: {member.organizationId}</p>
       </section>
       <section className="space-y-4 rounded-2xl border border-stone-200 bg-white p-6">
-        <h2 className="font-bold">비밀번호 변경 및 탈퇴</h2>
+        <h2 className="font-bold">Password and withdrawal</h2>
         <label className="block">
-          현재 비밀번호
+          Current password
           <input
             type="password"
             autoComplete="current-password"
@@ -292,7 +295,7 @@ export function AccountScreen({ member }: { member: MemberView }) {
           />
         </label>
         <label className="block">
-          새 비밀번호
+          New password
           <input
             type="password"
             autoComplete="new-password"
@@ -306,18 +309,18 @@ export function AccountScreen({ member }: { member: MemberView }) {
           disabled={busy || !current || next.length < 12 || next.length > 128}
           onClick={() => void run('change')}
         >
-          비밀번호 변경
+          Change password
         </button>
         <p className="text-sm text-slate-600">
-          임시 확보 또는 확정된 거래가 있으면 탈퇴할 수 없어요. 탈퇴 후 같은 이메일은 30일 뒤 다시
-          가입할 수 있으며 이전 내역은 복구되지 않아요.
+          You cannot withdraw while you have held or confirmed transactions. You can register with
+          the same email after 30 days; previous history will not be restored.
         </p>
         <button
           className="min-h-12 text-red-700 underline disabled:opacity-50"
           disabled={busy || !current}
           onClick={() => void run('withdraw')}
         >
-          회원 탈퇴
+          Withdraw account
         </button>
         {message && (
           <p role="alert" className="text-red-700">
@@ -330,7 +333,7 @@ export function AccountScreen({ member }: { member: MemberView }) {
         disabled={busy}
         onClick={() => void run('logout')}
       >
-        로그아웃
+        Sign out
       </button>
     </main>
   )

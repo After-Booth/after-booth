@@ -54,7 +54,7 @@ export function useAllocation(request: PickupRequest) {
         }
       } catch {
         if (!cancelled && started === revision.current) {
-          setPollMessage('예약 현황을 불러오지 못했어요. 잠시 후 다시 확인해 주세요.')
+          setPollMessage('Unable to load reservations. Please try again shortly.')
           setLoading(false)
         }
       } finally {
@@ -101,7 +101,7 @@ export function useAllocation(request: PickupRequest) {
         }
       } catch {
         if (!controller.signal.aborted) {
-          setStockMessage('추가로 선택할 재고를 불러오지 못했어요. 잠시 후 다시 확인해 주세요.')
+          setStockMessage('Unable to load additional stock. Please try again shortly.')
           setStockLoading(false)
         }
       } finally {
@@ -199,7 +199,7 @@ export function useAllocation(request: PickupRequest) {
         setMessage(
           error instanceof ApiError
             ? error.message
-            : '배정 결과를 확인하지 못했어요. 같은 작업을 다시 시도해 주세요.',
+            : 'Unable to check the allocation result. Retry the same action.',
         )
         if (error instanceof ApiError && error.code === 'REQUEST_ALREADY_HELD') {
           const response = await listReservations({ requestId: request.id }).catch(() => undefined)
@@ -247,7 +247,7 @@ export function useAllocation(request: PickupRequest) {
         setMessage(
           error instanceof ApiError
             ? error.message
-            : '예약 확정 결과를 확인하지 못했어요. 다시 시도해 주세요.',
+            : 'Unable to check the reservation update. Please try again.',
         )
         if (error instanceof ApiError && error.code === 'HOLD_EXPIRED') {
           const response = await listReservations({ requestId: request.id }).catch(() => undefined)

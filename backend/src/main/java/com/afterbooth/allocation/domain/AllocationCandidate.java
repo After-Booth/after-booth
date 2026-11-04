@@ -19,9 +19,10 @@ public final class AllocationCandidate {
   }
 
   private static String reason(Item item, String code, String dimension) {
-    if (code.equals("CATEGORY_MISMATCH")) return "요청한 종류의 물품만 자동 배정할 수 있어요.";
+    if (code.equals("CATEGORY_MISMATCH"))
+      return "Only items in the requested category can be allocated automatically.";
     if (!code.equals("VEHICLE_TOO_SMALL")) return ErrorCode.valueOf(code).message();
-    if (dimension == null) return "제공자가 지정한 최소 차량 조건에 맞지 않아요.";
+    if (dimension == null) return "Your vehicle does not meet the giver's minimum requirement.";
     int cm =
         switch (dimension) {
           case "width" -> item.dimensions().widthCm();
@@ -31,19 +32,25 @@ public final class AllocationCandidate {
         };
     String axis =
         switch (dimension) {
-          case "width" -> "너비";
-          case "depth" -> "깊이";
-          default -> "높이";
+          case "width" -> "width";
+          case "depth" -> "depth";
+          default -> "height";
         };
-    return axis + " " + cm + "cm인 물품이라 선택한 차량에 실을 수 없어요.";
+    return "The item does not fit your vehicle: " + axis + " is " + cm + " cm.";
   }
 
   public static String explanation(int requested, int held, String modelExplanation) {
     if (modelExplanation != null
         && modelExplanation.length() <= 2000
-        && modelExplanation.matches("(?s).*[가-힣].*")) return modelExplanation;
+        && !modelExplanation.isBlank()
+        && modelExplanation.matches("(?s).*[A-Za-z].*")
+        && !modelExplanation.matches("(?s).*[가-힣].*")) return modelExplanation;
     return held > 0
-        ? "요청한 " + requested + "개 중 " + held + "개를 임시 확보했어요. 예약 현황을 확인하고 직접 확정해 주세요."
-        : "요청한 물품을 자동 배정하지 못했어요. 거절 사유와 직접 선택할 수 있는 대안을 확인해 주세요.";
+        ? "Held "
+            + held
+            + " of "
+            + requested
+            + " requested items. Review and confirm your reservations."
+        : "No items could be allocated automatically. Review the reasons and select an alternative.";
   }
 }
